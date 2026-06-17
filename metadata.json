@@ -1,0 +1,6 @@
+{
+  "name": "Registre des Habitants",
+  "description": "Système de gestion des habitants pour administration locale (Fokontany, Madagascar) permettant le suivi de l'état civil, des familles (ménages) et la génération de certificats administratifs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
