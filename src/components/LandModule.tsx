@@ -11,7 +11,7 @@ interface LandModuleProps {
   onAddLog: (action: 'Foncier' | 'Succession', details: string, habitantId?: string) => void;
 }
 
-const initialLands: LotFoncier[] = [
+const initialLands: LotFoncier[] = []; const _unused = [
   {
     id: 'lot-1',
     numeroLot: 'LOT 24 Bis',
@@ -94,23 +94,14 @@ const initialLands: LotFoncier[] = [
 ];
 
 export default function LandModule({ allResidents, onAddLog }: LandModuleProps) {
-  // Local persistent state for lands
-  const [lands, setLands] = useState<LotFoncier[]>(() => {
-    const saved = localStorage.getItem('fokontany_lands');
-    return saved ? JSON.parse(saved) : initialLands;
-  });
+  const [lands, setLands] = useState<LotFoncier[]>([]);
 
   const saveLands = (updated: LotFoncier[]) => {
     setLands(updated);
-    localStorage.setItem('fokontany_lands', JSON.stringify(updated));
   };
 
   // Selection states
-  const [selectedLandId, setSelectedLandId] = useState<string | null>(() => {
-    const saved = localStorage.getItem('fokontany_lands');
-    const parsed = saved ? JSON.parse(saved) : initialLands;
-    return parsed.length > 0 ? parsed[0].id : null;
-  });
+  const [selectedLandId, setSelectedLandId] = useState<string | null>(null);
 
   const selectedLand = lands.find(l => l.id === selectedLandId);
 
