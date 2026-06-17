@@ -46,35 +46,10 @@ export default function MaterialsModule({
   const [formResponsable, setFormResponsable] = useState('Secrétaire Fokontany');
   const [formStockage, setFormStockage] = useState('Grande salle du Fokontany');
 
-  // Loans tracker mock persistent state inside component local storage
-  const [loans, setLoans] = useState<LoanRecord[]>(() => {
-    const saved = localStorage.getItem('fokontany_loans');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'loan-001',
-        materielId: 'mat-001', // Chaises en plastique
-        borrowerName: 'RABE (Ménage MEN-001)',
-        dateEmprunt: '2026-06-12',
-        dateRetourPrevue: '2026-06-18',
-        quantite: 10,
-        statut: 'En cours'
-      },
-      {
-        id: 'loan-002',
-        materielId: 'mat-003', // Megaphone
-        borrowerName: 'RAKOTO (Comité Quartier)',
-        dateEmprunt: '2026-06-14',
-        dateRetourPrevue: '2026-06-16',
-        quantite: 1,
-        statut: 'Retourné'
-      }
-    ];
-  });
+  const [loans, setLoans] = useState<LoanRecord[]>([]);
 
   const syncLoans = (updated: LoanRecord[]) => {
     setLoans(updated);
-    localStorage.setItem('fokontany_loans', JSON.stringify(updated));
   };
 
   // Loan Form State
