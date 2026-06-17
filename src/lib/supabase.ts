@@ -21,7 +21,7 @@ export async function dbGet<T>(key: string): Promise<T | null> {
     .from('app_store')
     .select('value')
     .eq('key', key)
-    .single();
+    .maybeSingle();
   if (error || !data) return null;
   return data.value as T;
 }
