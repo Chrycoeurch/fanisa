@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Membre, RelationChef, Foyer } from '../types';
+import { supabase } from '../lib/supabase';
 import { SECTEUR_LIST, COMPETENCES_LIST, LANGUES_LIST, COMPULSORY_VACCINATIONS } from '../seedData';
-import { X, User, GraduationCap, Briefcase, HeartPulse, ShieldAlert, Loader2 } from 'lucide-react';
+import { X, User, GraduationCap, HeartPulse, ShieldAlert, Loader2, Upload, Camera } from 'lucide-react';
 
 interface Props {
   foyer: Foyer;
   membre?: Membre;
-  membres: Membre[]; // autres membres du foyer pour les liens famille
+  membres: Membre[];
   onClose: () => void;
   onSave: (m: Partial<Membre>) => Promise<void>;
 }
@@ -16,11 +17,11 @@ const GROUPES_SANG = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Inconnu
 const NIVEAUX_ETUDE = ['Non scolarisé', 'Primaire', 'Secondaire', 'Universitaire'];
 const VULNERABILITE_CATS = ['Grand âge', 'Handicap', 'Pauvreté extrême', 'Famille monoparentale', 'Maladie chronique', 'Déscolarisation', 'Malnutrition'];
 const AIDES = ['Vivres', 'Aide financière', 'Soins gratuits', 'Bourse', 'Logement social'];
-
 type Tab = 'identite' | 'famille' | 'education' | 'sante' | 'vulnerabilite';
 
 export default function MembreForm({ foyer, membre, membres, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [tab, setTab] = useState<Tab>('identite');
 
   // Identité
@@ -35,7 +36,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const [email, setEmail] = useState(membre?.email || '');
   const [statut, setStatut] = useState<Membre['statut']>(membre?.statut || 'Actif');
   const [relation_chef, setRelationChef] = useState<RelationChef>(membre?.relation_chef || 'Autre');
-  const isChef = relation_chef === 'Chef';
+  const [photo_url, setPhotoUrl] = useState(membre?.photo_url || '');
 
   // Famille
   const [conjoint_id, setConjointId] = useState(membre?.conjoint_id || '');
@@ -72,13 +73,67 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const [aides_obtenues, setAides] = useState<string[]>(membre?.aides_obtenues || []);
 
   const toggleArr = <T,>(arr: T[], val: T) => arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
-
-  // Calcul âge pour afficher poids/taille
   const age = date_naissance ? Math.abs(new Date(Date.now() - new Date(date_naissance).getTime()).getUTCFullYear() - 1970) : 99;
   const isMineur = age < 18;
-
-  // Autres membres disponibles pour les liens famille
   const autresMembres = membres.filter(m => m.id !== membre?.id);
+  const chef = membres.find(m => m.is_chef);
+  const conjointChef = chef ? membres.find(m => m.id === chef.conjoint_id) : undefined;
+
+  // ── Logique auto famille selon relation ──────────────────────
+  useEffect(() => {
+    if (membre) return; // pas d'auto sur modification
+    if (!chef) return;
+
+    if (relation_chef === 'Épouse/Époux') {
+      // Conjoint = chef automatiquement
+      setConjointId(chef.id);
+      setPereId(''); setMereId(''); setPereNom(''); setMereNom('');
+    } else if (relation_chef === 'Fils' || relation_chef === 'Fille') {
+      // Père = chef (si homme) ou conjoint du chef (si femme)
+      // Mère = chef (si femme) ou conjoint du chef (si homme)
+      if (chef.sexe === 'M') {
+        setPereId(chef.id);
+        if (conjointChef) setMereId(conjointChef.id);
+      } else {
+        setMereId(chef.id);
+        if (conjointChef) setPereId(conjointChef.id);
+      }
+      setConjointId('');
+    } else if (relation_chef === 'Frère' || relation_chef === 'Sœur') {
+      // Mêmes parents que le chef
+      setPereId(chef.pere_id || '');
+      setMereId(chef.mere_id || '');
+      setPereNom(chef.pere_nom || '');
+      setMereNom(chef.mere_nom || '');
+      setConjointId('');
+    } else if (relation_chef === 'Petit-fils' || relation_chef === 'Petite-fille') {
+      // Parents = enfants du chef (ceux qui sont fils/fille dans les membres)
+      const enfants = membres.filter(m => m.pere_id === chef.id || m.mere_id === chef.id);
+      const enfantM = enfants.find(e => e.sexe === 'M');
+      const enfantF = enfants.find(e => e.sexe === 'F');
+      if (enfantM) setPereId(enfantM.id);
+      if (enfantF) setMereId(enfantF.id);
+      setConjointId('');
+    } else {
+      // Réinitialiser
+      setConjointId(''); setPereId(''); setMereId(''); setPereNom(''); setMereNom('');
+    }
+  }, [relation_chef]);
+
+  // ── Upload photo membre ──────────────────────────────────────
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Image trop grande (max 5 Mo)'); return; }
+    setUploadingPhoto(true);
+    const ext = file.name.split('.').pop();
+    const path = `membres/${foyer.code_menage}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('Photos').upload(path, file, { upsert: true });
+    if (error) { alert('Erreur upload : ' + error.message); setUploadingPhoto(false); return; }
+    const { data: urlData } = supabase.storage.from('Photos').getPublicUrl(path);
+    setPhotoUrl(urlData.publicUrl);
+    setUploadingPhoto(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,9 +150,10 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
       date_cin: date_cin || undefined,
       telephone: telephone || undefined,
       email: email || undefined,
+      photo_url: photo_url || undefined,
       statut,
       relation_chef,
-      is_chef: isChef,
+      is_chef: relation_chef === 'Chef',
       conjoint_id: conjoint_id || undefined,
       pere_id: pere_id || undefined,
       mere_id: mere_id || undefined,
@@ -138,10 +194,24 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-600 p-2 rounded-xl"><User className="h-5 w-5 text-white" /></div>
+            {/* Photo preview dans le header */}
+            <div className="relative">
+              {photo_url ? (
+                <img src={photo_url} alt="Photo" className="w-12 h-12 rounded-full object-cover border-2 border-emerald-300" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <User className="h-6 w-6 text-emerald-600" />
+                </div>
+              )}
+              <label className="absolute -bottom-1 -right-1 bg-emerald-600 rounded-full p-1 cursor-pointer hover:bg-emerald-700 transition">
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
+                {uploadingPhoto ? <Loader2 className="h-2.5 w-2.5 text-white animate-spin" /> : <Camera className="h-2.5 w-2.5 text-white" />}
+              </label>
+            </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">{membre ? 'Modifier le membre' : 'Nouveau membre'}</h2>
               <p className="text-xs text-slate-500">Foyer <span className="font-mono font-bold text-indigo-600">{foyer.code_menage}</span> · {foyer.fokontany}</p>
@@ -151,7 +221,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-200 overflow-x-auto">
+        <div className="flex border-b border-slate-200 overflow-x-auto shrink-0">
           {TABS.map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setTab(key as Tab)} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition ${tab === key ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
               <Icon className="h-3.5 w-3.5" />{label}
@@ -166,17 +236,22 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
             {/* ── IDENTITÉ ── */}
             {tab === 'identite' && (
               <div className="space-y-4">
-                {/* Relation au chef */}
+                {/* Relation */}
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Relation au chef de foyer <span className="text-red-500">*</span></label>
                   <div className="grid grid-cols-3 gap-2">
                     {RELATIONS.map(r => (
                       <label key={r} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${relation_chef === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                        <input type="radio" className="hidden" checked={relation_chef === r} onChange={() => setRelationChef(r)} />
-                        {r}
+                        <input type="radio" className="hidden" checked={relation_chef === r} onChange={() => setRelationChef(r)} />{r}
                       </label>
                     ))}
                   </div>
+                  {/* Indication auto */}
+                  {!membre && chef && ['Fils', 'Fille', 'Frère', 'Sœur', 'Épouse/Époux'].includes(relation_chef) && (
+                    <p className="text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5 mt-2">
+                      ✓ Liens familiaux pré-remplis automatiquement — vérifiez dans l'onglet <strong>Famille</strong>
+                    </p>
+                  )}
                 </div>
 
                 {/* Nom & Prénom */}
@@ -242,7 +317,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
                 {/* Statut */}
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Statut administratif</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Statut</label>
                   <div className="flex gap-3">
                     {(['Actif', 'Décédé', 'Déménagé'] as const).map(s => (
                       <label key={s} className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${statut === s ? (s === 'Actif' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-600 text-white border-slate-600') : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
@@ -257,41 +332,40 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
             {/* ── FAMILLE ── */}
             {tab === 'famille' && (
               <div className="space-y-4">
-                <p className="text-xs text-slate-500 bg-blue-50 border border-blue-100 rounded-lg p-3">Les liens familiaux permettent de naviguer entre les membres du foyer. Si le parent n'est pas dans le registre, saisissez son nom en texte libre.</p>
-
+                <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg p-3">
+                  Les liens sont pré-remplis automatiquement selon la relation choisie. Vous pouvez les modifier.
+                </p>
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Conjoint(e) (membre du foyer)</label>
                   <select value={conjoint_id} onChange={e => setConjointId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
                     <option value="">— Aucun —</option>
-                    {autresMembres.map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom}</option>)}
+                    {autresMembres.map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom} ({m.relation_chef})</option>)}
                   </select>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Père (membre du registre)</label>
-                    <select value={pere_id} onChange={e => setPereId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Père (dans le registre)</label>
+                    <select value={pere_id} onChange={e => { setPereId(e.target.value); if (e.target.value) setPereNom(''); }} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
                       <option value="">— Aucun —</option>
-                      {autresMembres.filter(m => m.sexe === 'M').map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom}</option>)}
+                      {autresMembres.filter(m => m.sexe === 'M').map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom} ({m.relation_chef})</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Père (nom libre)</label>
-                    <input value={pere_nom} onChange={e => setPereNom(e.target.value)} placeholder="Si hors registre" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" disabled={!!pere_id} />
+                    <input value={pere_nom} onChange={e => setPereNom(e.target.value)} placeholder="Si hors registre" disabled={!!pere_id} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none disabled:bg-slate-50 disabled:text-slate-400" />
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Mère (membre du registre)</label>
-                    <select value={mere_id} onChange={e => setMereId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Mère (dans le registre)</label>
+                    <select value={mere_id} onChange={e => { setMereId(e.target.value); if (e.target.value) setMereNom(''); }} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
                       <option value="">— Aucune —</option>
-                      {autresMembres.filter(m => m.sexe === 'F').map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom}</option>)}
+                      {autresMembres.filter(m => m.sexe === 'F').map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom} ({m.relation_chef})</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Mère (nom libre)</label>
-                    <input value={mere_nom} onChange={e => setMereNom(e.target.value)} placeholder="Si hors registre" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" disabled={!!mere_id} />
+                    <input value={mere_nom} onChange={e => setMereNom(e.target.value)} placeholder="Si hors registre" disabled={!!mere_id} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none disabled:bg-slate-50 disabled:text-slate-400" />
                   </div>
                 </div>
               </div>
@@ -346,7 +420,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Compétences & Métiers</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Compétences</label>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {competences.map(c => (
                       <span key={c} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
@@ -359,7 +433,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                       <option value="">Ajouter une compétence...</option>
                       {COMPETENCES_LIST.filter(c => !competences.includes(c)).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <button type="button" onClick={() => { if (newCompetence) { setCompetences(prev => [...prev, newCompetence]); setNewCompetence(''); }}} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition">+</button>
+                    <button type="button" onClick={() => { if (newCompetence) { setCompetences(prev => [...prev, newCompetence]); setNewCompetence(''); }}} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">+</button>
                   </div>
                 </div>
               </div>
@@ -381,10 +455,9 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                     <input value={handicap} onChange={e => setHandicap(e.target.value)} placeholder="Ex: Non-voyant, Moteur" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
                   </div>
                 </div>
-
                 {(['hypertension', 'diabete'] as const).map(field => (
                   <div key={field}>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-2">{field === 'hypertension' ? 'Hypertension artérielle' : 'Diabète & Glycémie'}</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-2">{field === 'hypertension' ? 'Hypertension artérielle' : 'Diabète'}</label>
                     <div className="flex gap-3">
                       {(['Normal', 'Surveillance', 'Prioritaire'] as const).map(v => (
                         <label key={v} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${(field === 'hypertension' ? hypertension : diabete) === v ? (v === 'Prioritaire' ? 'bg-red-600 text-white border-red-600' : v === 'Surveillance' ? 'bg-amber-500 text-white border-amber-500' : 'bg-emerald-600 text-white border-emerald-600') : 'bg-white text-slate-600 border-slate-200'}`}>
@@ -394,7 +467,6 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                     </div>
                   </div>
                 ))}
-
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Vaccinations</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -405,7 +477,6 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                     ))}
                   </div>
                 </div>
-
                 {isMineur && (
                   <div className="grid grid-cols-2 gap-3 bg-blue-50 border border-blue-100 rounded-lg p-3">
                     <p className="col-span-2 text-xs text-blue-700 font-semibold">Données anthropométriques (mineur)</p>
@@ -429,7 +500,6 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   <input type="checkbox" checked={est_vulnerable} onChange={e => setEstVulnerable(e.target.checked)} className="h-4 w-4 rounded" />
                   <span className="font-semibold text-sm text-slate-800">Ce membre est en situation de vulnérabilité</span>
                 </label>
-
                 {est_vulnerable && (
                   <>
                     <div>
@@ -463,7 +533,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-rose-700 uppercase block mb-1">Observations de l'enquêteur</label>
+                      <label className="text-xs font-bold text-rose-700 uppercase block mb-1">Observations</label>
                       <textarea value={vulnerabilite_description} onChange={e => setVulnDesc(e.target.value)} rows={3} placeholder="Situation précaire, besoins spécifiques..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none resize-none" />
                     </div>
                   </>
@@ -472,7 +542,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
             )}
           </div>
 
-          {/* Footer actions */}
+          {/* Footer */}
           <div className="flex gap-3 p-5 border-t border-slate-100 sticky bottom-0 bg-white">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Annuler</button>
             <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm font-semibold text-white transition flex items-center justify-center gap-2">
