@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Foyer } from '../types';
 import { supabase } from '../lib/supabase';
-import { X, Home, MapPin, Image, Loader2 } from 'lucide-react';
+import { X, Home, MapPin, Image, Loader2, Upload } from 'lucide-react';
 
 interface Props {
   foyer?: Foyer;
@@ -10,21 +10,16 @@ interface Props {
 }
 
 async function genCodeMenage(): Promise<string> {
-  const { data } = await supabase
-    .from('foyers')
-    .select('code_menage')
-    .order('created_at', { ascending: false });
+  const { data } = await supabase.from('foyers').select('code_menage').order('created_at', { ascending: false });
   if (!data || data.length === 0) return 'MEN-001';
-  // Trouver le numéro max
-  const nums = data
-    .map(f => parseInt((f.code_menage || '').replace('MEN-', '')) || 0)
-    .filter(n => !isNaN(n));
+  const nums = data.map(f => parseInt((f.code_menage || '').replace('MEN-', '')) || 0).filter(n => !isNaN(n));
   const max = nums.length > 0 ? Math.max(...nums) : 0;
   return `MEN-${String(max + 1).padStart(3, '0')}`;
 }
 
 export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [code_menage, setCodeMenage] = useState(foyer?.code_menage || '');
   const [loadingCode, setLoadingCode] = useState(!foyer);
   const [statut, setStatut] = useState<Foyer['statut']>(foyer?.statut || 'Actif');
@@ -42,20 +37,30 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
 
   useEffect(() => {
     if (!foyer) {
-      genCodeMenage().then(code => {
-        setCodeMenage(code);
-        setLoadingCode(false);
-      });
+      genCodeMenage().then(code => { setCodeMenage(code); setLoadingCode(false); });
     }
   }, [foyer]);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Image trop grande (max 5 Mo)'); return; }
+    setUploadingPhoto(true);
+    const ext = file.name.split('.').pop();
+    const path = `maisons/${code_menage}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('photos').upload(path, file, { upsert: true });
+    if (error) { alert('Erreur upload : ' + error.message); setUploadingPhoto(false); return; }
+    const { data: urlData } = supabase.storage.from('photos').getPublicUrl(path);
+    setPhotoMaisonUrl(urlData.publicUrl);
+    setUploadingPhoto(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fokontany.trim()) return;
     setSaving(true);
     await onSave({
-      code_menage,
-      statut,
+      code_menage, statut,
       adresse: adresse || undefined,
       fokontany,
       commune: commune || undefined,
@@ -81,11 +86,7 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
             <div className="bg-indigo-600 p-2 rounded-xl"><Home className="h-5 w-5 text-white" /></div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">{foyer ? 'Modifier le foyer' : 'Nouveau foyer'}</h2>
-              <p className="text-xs text-slate-500">
-                Code : {loadingCode
-                  ? <span className="text-slate-400 italic">génération…</span>
-                  : <span className="font-mono font-bold text-indigo-600">{code_menage}</span>}
-              </p>
+              <p className="text-xs text-slate-500">Code : {loadingCode ? <span className="text-slate-400 italic">génération…</span> : <span className="font-mono font-bold text-indigo-600">{code_menage}</span>}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>
@@ -107,9 +108,7 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
 
           {/* Localisation */}
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <MapPin className="h-3.5 w-3.5" />Localisation
-            </h3>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><MapPin className="h-3.5 w-3.5" />Localisation</h3>
             <div>
               <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Adresse physique</label>
               <input value={adresse} onChange={e => setAdresse(e.target.value)} placeholder="Ex: Lot III G 12, Rue de l'Église" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
@@ -162,24 +161,30 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
 
           {/* Photo maison */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <Image className="h-3.5 w-3.5" />Photo de la maison
-            </h3>
-            <div>
-              <label className="text-xs font-bold text-slate-600 uppercase block mb-1">URL de la photo</label>
-              <input value={photo_maison_url} onChange={e => setPhotoMaisonUrl(e.target.value)} placeholder="https://... ou laisser vide" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-            </div>
-            {photo_maison_url && (
-              <div className="rounded-xl overflow-hidden border border-slate-200 h-40">
-                <img src={photo_maison_url} alt="Photo maison" className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Image className="h-3.5 w-3.5" />Photo de la maison</h3>
+
+            {photo_maison_url ? (
+              <div className="relative rounded-xl overflow-hidden border border-slate-200 h-48">
+                <img src={photo_maison_url} alt="Photo maison" className="w-full h-full object-cover" />
+                <button type="button" onClick={() => setPhotoMaisonUrl('')} className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 hover:bg-red-700 transition shadow-md">
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
+            ) : (
+              <label className={`flex flex-col items-center justify-center h-36 border-2 border-dashed rounded-xl cursor-pointer transition ${uploadingPhoto ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}>
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
+                {uploadingPhoto
+                  ? <><Loader2 className="h-7 w-7 text-indigo-600 animate-spin mb-2" /><p className="text-xs text-indigo-600 font-semibold">Téléversement en cours…</p></>
+                  : <><Upload className="h-7 w-7 text-slate-300 mb-2" /><p className="text-xs font-semibold text-slate-500">Cliquer pour téléverser une photo</p><p className="text-[10px] text-slate-400 mt-1">JPG, PNG, WEBP — max 5 Mo</p></>
+                }
+              </label>
             )}
           </div>
 
           {/* Actions */}
           <div className="flex gap-3 pt-2 border-t border-slate-100">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Annuler</button>
-            <button type="submit" disabled={saving || loadingCode} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 rounded-lg text-sm font-semibold text-white transition flex items-center justify-center gap-2">
+            <button type="submit" disabled={saving || loadingCode || uploadingPhoto} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 rounded-lg text-sm font-semibold text-white transition flex items-center justify-center gap-2">
               {saving ? <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement…</> : foyer ? 'Modifier' : 'Créer le foyer'}
             </button>
           </div>
