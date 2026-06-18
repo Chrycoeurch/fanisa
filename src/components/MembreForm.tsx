@@ -335,38 +335,64 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                 <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg p-3">
                   Les liens sont pré-remplis automatiquement selon la relation choisie. Vous pouvez les modifier.
                 </p>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Conjoint(e) (membre du foyer)</label>
+                {/* Père */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase block">Père</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Dans le registre</p>
+                      <select value={pere_id} onChange={e => { setPereId(e.target.value); if (e.target.value) setPereNom(''); }} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                        <option value="">— Aucun —</option>
+                        {autresMembres.filter(m => m.sexe === 'M').map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom} ({m.relation_chef})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Nom libre (hors registre)</p>
+                      <input value={pere_nom} onChange={e => setPereNom(e.target.value)} placeholder="Nom complet du père" disabled={!!pere_id} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none disabled:bg-slate-50 disabled:text-slate-400" />
+                    </div>
+                  </div>
+                  {pere_id && (
+                    <p className="text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded px-2.5 py-1">
+                      ↳ <strong>{autresMembres.find(m => m.id === pere_id)?.prenom}</strong> sera reconnu comme père de <strong>{prenom || '…'}</strong>
+                    </p>
+                  )}
+                </div>
+
+                {/* Mère */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase block">Mère</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Dans le registre</p>
+                      <select value={mere_id} onChange={e => { setMereId(e.target.value); if (e.target.value) setMereNom(''); }} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                        <option value="">— Aucune —</option>
+                        {autresMembres.filter(m => m.sexe === 'F').map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom} ({m.relation_chef})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 mb-1">Nom libre (hors registre)</p>
+                      <input value={mere_nom} onChange={e => setMereNom(e.target.value)} placeholder="Nom complet de la mère" disabled={!!mere_id} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none disabled:bg-slate-50 disabled:text-slate-400" />
+                    </div>
+                  </div>
+                  {mere_id && (
+                    <p className="text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded px-2.5 py-1">
+                      ↳ <strong>{autresMembres.find(m => m.id === mere_id)?.prenom}</strong> sera reconnue comme mère de <strong>{prenom || '…'}</strong>
+                    </p>
+                  )}
+                </div>
+
+                {/* Conjoint */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase block">Conjoint(e)</label>
                   <select value={conjoint_id} onChange={e => setConjointId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
                     <option value="">— Aucun —</option>
                     {autresMembres.map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom} ({m.relation_chef})</option>)}
                   </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Père (dans le registre)</label>
-                    <select value={pere_id} onChange={e => { setPereId(e.target.value); if (e.target.value) setPereNom(''); }} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
-                      <option value="">— Aucun —</option>
-                      {autresMembres.filter(m => m.sexe === 'M').map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom} ({m.relation_chef})</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Père (nom libre)</label>
-                    <input value={pere_nom} onChange={e => setPereNom(e.target.value)} placeholder="Si hors registre" disabled={!!pere_id} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none disabled:bg-slate-50 disabled:text-slate-400" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Mère (dans le registre)</label>
-                    <select value={mere_id} onChange={e => { setMereId(e.target.value); if (e.target.value) setMereNom(''); }} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
-                      <option value="">— Aucune —</option>
-                      {autresMembres.filter(m => m.sexe === 'F').map(m => <option key={m.id} value={m.id}>{m.nom} {m.prenom} ({m.relation_chef})</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Mère (nom libre)</label>
-                    <input value={mere_nom} onChange={e => setMereNom(e.target.value)} placeholder="Si hors registre" disabled={!!mere_id} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none disabled:bg-slate-50 disabled:text-slate-400" />
-                  </div>
+                  {conjoint_id && (
+                    <p className="text-[11px] text-pink-600 bg-pink-50 border border-pink-100 rounded px-2.5 py-1">
+                      ↳ <strong>{autresMembres.find(m => m.id === conjoint_id)?.prenom}</strong> et <strong>{prenom || '…'}</strong> sont époux/épouse
+                    </p>
+                  )}
                 </div>
               </div>
             )}
