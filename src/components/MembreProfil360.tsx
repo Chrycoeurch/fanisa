@@ -66,7 +66,7 @@ function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, fil
 }
 
 function drawText(page: PDFPage, text: string, x: number, y: number, font: PDFFont, size: number, color: ReturnType<typeof rgb>) {
-  page.drawText(text || '-', { x, y, size, font, color });
+  page.drawText(clean(text), { x, y, size, font, color });
 }
 
 function badge(page: PDFPage, text: string, x: number, y: number, bg: ReturnType<typeof rgb>, fg: ReturnType<typeof rgb>, font: PDFFont) {
