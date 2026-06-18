@@ -48,9 +48,9 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
     setUploadingPhoto(true);
     const ext = file.name.split('.').pop();
     const path = `maisons/${code_menage}-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('photos').upload(path, file, { upsert: true });
+    const { error } = await supabase.storage.from('Photos').upload(path, file, { upsert: true });
     if (error) { alert('Erreur upload : ' + error.message); setUploadingPhoto(false); return; }
-    const { data: urlData } = supabase.storage.from('photos').getPublicUrl(path);
+    const { data: urlData } = supabase.storage.from('Photos').getPublicUrl(path);
     setPhotoMaisonUrl(urlData.publicUrl);
     setUploadingPhoto(false);
   };
