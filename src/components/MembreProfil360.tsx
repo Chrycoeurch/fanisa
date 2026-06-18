@@ -28,7 +28,7 @@ const C = {
 };
 
 function wrap(text: string, maxChars: number): string[] {
-  if (!text) return ['—'];
+  if (!text) return ['-'];
   const words = text.split(' ');
   const lines: string[] = [];
   let cur = '';
@@ -37,7 +37,7 @@ function wrap(text: string, maxChars: number): string[] {
     else cur = (cur + ' ' + w).trim();
   }
   if (cur) lines.push(cur);
-  return lines.length ? lines : ['—'];
+  return lines.length ? lines : ['-'];
 }
 
 function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, fill: ReturnType<typeof rgb>, radius = 0) {
@@ -45,7 +45,7 @@ function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, fil
 }
 
 function drawText(page: PDFPage, text: string, x: number, y: number, font: PDFFont, size: number, color: ReturnType<typeof rgb>) {
-  page.drawText(text || '—', { x, y, size, font, color });
+  page.drawText(text || '-', { x, y, size, font, color });
 }
 
 function badge(page: PDFPage, text: string, x: number, y: number, bg: ReturnType<typeof rgb>, fg: ReturnType<typeof rgb>, font: PDFFont) {
@@ -57,7 +57,7 @@ function badge(page: PDFPage, text: string, x: number, y: number, bg: ReturnType
 
 function field(page: PDFPage, label: string, value: string, x: number, y: number, bold: PDFFont, reg: PDFFont, maxW = 160) {
   drawText(page, label.toUpperCase(), x, y, reg, 6.5, C.light);
-  const lines = wrap(value || '—', Math.floor(maxW / 5.5));
+  const lines = wrap(value || '-', Math.floor(maxW / 5.5));
   lines.forEach((l, i) => drawText(page, l, x, y - 12 - i * 10, bold, 8.5, C.dark));
   return 12 + lines.length * 10;
 }
@@ -69,7 +69,7 @@ function sectionTitle(page: PDFPage, title: string, y: number, bold: PDFFont, W:
   return 24;
 }
 
-// ── Générateur PDF ───────────────────────────────────────────────
+// ── Generateur PDF ───────────────────────────────────────────────
 async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
   const pdfDoc = await PDFDocument.create();
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -94,8 +94,8 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
   drawText(page, `${membre.prenom?.charAt(0) || ''}${membre.nom?.charAt(0) || ''}`, margin + 14, y - 35, bold, 22, C.white);
   // Nom
   drawText(page, `${membre.nom} ${membre.prenom}`, margin + 62, y - 18, bold, 18, C.white);
-  drawText(page, `${membre.sexe === 'M' ? 'Masculin' : 'Féminin'} · ${age !== null ? age + ' ans' : 'Âge inconnu'} · ${membre.relation_chef}`, margin + 62, y - 32, reg, 9, rgb(0.8, 0.8, 1.0));
-  drawText(page, `Foyer ${foyer.code_menage} · ${foyer.fokontany || ''}`, margin + 62, y - 44, reg, 8.5, rgb(0.7, 0.7, 0.95));
+  drawText(page, `${membre.sexe === 'M' ? 'Masculin' : 'Feminin'} - ${age !== null ? age + ' ans' : 'Âge inconnu'} - ${membre.relation_chef}`, margin + 62, y - 32, reg, 9, rgb(0.8, 0.8, 1.0));
+  drawText(page, `Foyer ${foyer.code_menage} - ${foyer.fokontany || ''}`, margin + 62, y - 44, reg, 8.5, rgb(0.7, 0.7, 0.95));
   // Statut badge
   const statColor = membre.statut === 'Actif' ? C.green : C.amber;
   drawRect(page, margin + 62, y - 58, 52, 11, rgb(1,1,1,), 3);
@@ -103,22 +103,22 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
   // Logo
   drawText(page, 'FOKONTANY LOCAL LEDGER', W - margin - 130, y - 20, bold, 7, rgb(0.8, 0.8, 1));
   drawText(page, 'REPUBLIQUE DE MADAGASCAR', W - margin - 130, y - 30, reg, 6.5, rgb(0.7, 0.7, 0.9));
-  drawText(page, `Imprimé le ${new Date().toLocaleDateString('fr-FR')}`, W - margin - 130, y - 40, reg, 6.5, rgb(0.7, 0.7, 0.9));
+  drawText(page, `Imprime le ${new Date().toLocaleDateString('fr-FR')}`, W - margin - 130, y - 40, reg, 6.5, rgb(0.7, 0.7, 0.9));
   y -= 82;
 
-  // ── IDENTITÉ ────────────────────────────────────────────────
+  // ── IDENTITE ────────────────────────────────────────────────
   y -= 8;
-  y -= sectionTitle(page, '1. Identité civile', y, bold, W, margin);
+  y -= sectionTitle(page, '1. Identite civile', y, bold, W, margin);
 
   // Grid 3 colonnes
   const col = (W - margin * 2) / 3;
   const fields1 = [
-    ['Date de naissance', membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '—'],
-    ['Lieu de naissance', membre.lieu_naissance || '—'],
-    ['Numéro CIN', membre.cin || '—'],
-    ['Date CIN', membre.date_cin ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '—'],
-    ['Téléphone', membre.telephone || '—'],
-    ['Email', membre.email || '—'],
+    ['Date de naissance', membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '-'],
+    ['Lieu de naissance', membre.lieu_naissance || '-'],
+    ['Numero CIN', membre.cin || '-'],
+    ['Date CIN', membre.date_cin ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '-'],
+    ['Telephone', membre.telephone || '-'],
+    ['Email', membre.email || '-'],
   ];
   for (let i = 0; i < fields1.length; i += 3) {
     const rowH = Math.max(
@@ -133,19 +133,19 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
 
   // ── FOYER ───────────────────────────────────────────────────
   y -= 4;
-  y -= sectionTitle(page, '2. Foyer & Adresse', y, bold, W, margin);
+  y -= sectionTitle(page, '2. Foyer et Adresse', y, bold, W, margin);
   drawRect(page, margin, y - 28, W - margin * 2, 32, C.bg, 4);
-  field(page, 'Code ménage',  foyer.code_menage, margin + 8, y - 6, bold, reg, 100);
-  field(page, 'Adresse',      foyer.adresse || '—', margin + 115, y - 6, bold, reg, 160);
-  field(page, 'Fokontany',    foyer.fokontany || '—', margin + 295, y - 6, bold, reg, 100);
-  field(page, 'Commune',      foyer.commune || '—', margin + 405, y - 6, bold, reg, 100);
+  field(page, 'Code menage',  foyer.code_menage, margin + 8, y - 6, bold, reg, 100);
+  field(page, 'Adresse',      foyer.adresse || '-', margin + 115, y - 6, bold, reg, 160);
+  field(page, 'Fokontany',    foyer.fokontany || '-', margin + 295, y - 6, bold, reg, 100);
+  field(page, 'Commune',      foyer.commune || '-', margin + 405, y - 6, bold, reg, 100);
   y -= 44;
 
   // ── FAMILLE ─────────────────────────────────────────────────
   const familles = [
     conjoint && { emoji: 'Conjoint(e)', nom: `${conjoint.nom} ${conjoint.prenom}` },
-    (pere || membre.pere_nom) && { emoji: 'Père', nom: pere ? `${pere.nom} ${pere.prenom}` : `${membre.pere_nom} (hors registre)` },
-    (mere || membre.mere_nom) && { emoji: 'Mère', nom: mere ? `${mere.nom} ${mere.prenom}` : `${membre.mere_nom} (hors registre)` },
+    (pere || membre.pere_nom) && { emoji: 'Pere', nom: pere ? `${pere.nom} ${pere.prenom}` : `${membre.pere_nom} (hors registre)` },
+    (mere || membre.mere_nom) && { emoji: 'Mere', nom: mere ? `${mere.nom} ${mere.prenom}` : `${membre.mere_nom} (hors registre)` },
     ...enfants.map(e => ({ emoji: e.sexe === 'M' ? 'Fils' : 'Fille', nom: `${e.nom} ${e.prenom}` })),
   ].filter(Boolean) as { emoji: string; nom: string }[];
 
@@ -164,16 +164,16 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
     y -= 28;
   }
 
-  // ── ÉDUCATION & ÉCONOMIE ────────────────────────────────────
+  // ── EDUCATION & ECONOMIE ────────────────────────────────────
   y -= 4;
-  y -= sectionTitle(page, '4. Éducation & Situation économique', y, bold, W, margin);
+  y -= sectionTitle(page, '4. Education & Situation economique', y, bold, W, margin);
   const fields2 = [
-    ["Niveau d'instruction", membre.niveau_etude || '—'],
-    ['Diplôme', membre.diplome || '—'],
-    ['Profession', membre.profession || '—'],
-    ['Secteur', membre.secteur || '—'],
-    ['Employeur', membre.employeur || '—'],
-    ['Revenu estimé', membre.revenu_estime ? `${membre.revenu_estime.toLocaleString('fr-FR')} Ar` : '—'],
+    ["Niveau d instruction", membre.niveau_etude || '-'],
+    ['Diplome', membre.diplome || '-'],
+    ['Profession', membre.profession || '-'],
+    ['Secteur', membre.secteur || '-'],
+    ['Employeur', membre.employeur || '-'],
+    ['Revenu estime', membre.revenu_estime ? `${membre.revenu_estime.toLocaleString('fr-FR')} Ar` : '-'],
   ];
   for (let i = 0; i < fields2.length; i += 3) {
     if (fields2[i])     field(page, fields2[i][0],   fields2[i][1],   margin,           y, bold, reg, col - 8);
@@ -192,9 +192,9 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
     y -= 16;
   }
 
-  // ── SANTÉ ───────────────────────────────────────────────────
+  // ── SANTE ───────────────────────────────────────────────────
   y -= 4;
-  y -= sectionTitle(page, '5. Santé', y, bold, W, margin);
+  y -= sectionTitle(page, '5. Sante', y, bold, W, margin);
   const hta  = membre.hypertension;
   const diab = membre.diabete;
   const htaC  = hta  === 'Prioritaire' ? C.red   : hta  === 'Surveillance' ? C.amber : C.green;
@@ -206,7 +206,7 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
   // HTA badge
   drawRect(page, margin + 100, y - 3, 80, 13, htaBg, 3);
   drawText(page, `HTA: ${hta}`, margin + 104, y, bold, 7.5, htaC);
-  // Diabète badge
+  // Diabete badge
   drawRect(page, margin + 190, y - 3, 80, 13, diabBg, 3);
   drawText(page, `Diabete: ${diab}`, margin + 194, y, bold, 7.5, diabC);
   if (membre.handicap) field(page, 'Handicap', membre.handicap, margin + 285, y, bold, reg, 100);
@@ -219,16 +219,16 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
       const w = v.length * 4.5 + 16;
       if (vx + w > W - margin) { vx = margin; y -= 14; }
       drawRect(page, vx, y - 3, w, 11, C.greenBg, 2);
-      drawText(page, `✓ ${v}`, vx + 4, y, reg, 7, C.green); vx += w + 4;
+      drawText(page, v, vx + 4, y, reg, 7, C.green); vx += w + 4;
     }
     y -= 16;
   }
 
-  // ── VULNÉRABILITÉ ───────────────────────────────────────────
+  // ── VULNERABILITE ───────────────────────────────────────────
   if (membre.est_vulnerable) {
     y -= 8;
     drawRect(page, margin, y - 6, W - margin * 2, 14, C.redBg, 3);
-    drawText(page, `⚠ VULNÉRABILITÉ · Priorité : ${membre.niveau_priorite}`, margin + 8, y - 1, bold, 8, C.red);
+    drawText(page, `VULNERABILITE - Priorite : ${membre.niveau_priorite}`, margin + 8, y - 1, bold, 8, C.red);
     y -= 18;
     if (membre.vulnerabilite_categories?.length) {
       let vx = margin;
@@ -253,12 +253,12 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[]) {
   for (let i = 0; i < 3; i++) {
     const sx = margin + i * (sigW + 10);
     page.drawLine({ start: { x: sx, y }, end: { x: sx + sigW, y }, thickness: 0.5, color: C.border });
-    const labels = ['Le déclarant', 'Chef Fokontany', 'Cachet officiel'];
+    const labels = ['Le declarant', 'Chef Fokontany', 'Cachet officiel'];
     drawText(page, labels[i], sx + sigW / 2 - labels[i].length * 2, y - 10, reg, 7, C.light);
   }
 
   // ── PIED DE PAGE ────────────────────────────────────────────
-  drawText(page, `Fokontany Local Ledger v2.0 · Document officiel · ${new Date().toLocaleDateString('fr-FR')}`,
+  drawText(page, `Fokontany Local Ledger v2.0 - Document officiel - ${new Date().toLocaleDateString('fr-FR')}`,
     margin, 20, reg, 7, C.light);
   drawText(page, `Page 1/1`, W - margin - 30, 20, reg, 7, C.light);
 
@@ -281,7 +281,7 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert('Erreur génération PDF : ' + e);
+      alert('Erreur generation PDF : ' + e);
     }
     setLoading(false);
   };
@@ -299,13 +299,13 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
             <div className="bg-purple-600 p-2 rounded-xl"><FileText className="h-5 w-5 text-white" /></div>
             <div>
               <h2 className="text-base font-bold text-slate-900">Profil 360°</h2>
-              <p className="text-xs text-slate-500">{membre.nom} {membre.prenom} · {foyer.code_menage}</p>
+              <p className="text-xs text-slate-500">{membre.nom} {membre.prenom} - {foyer.code_menage}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>
         </div>
 
-        {/* Aperçu contenu */}
+        {/* Apercu contenu */}
         <div className="p-5 space-y-3">
           <div className="flex items-center gap-4 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
             {membre.photo_url
@@ -314,20 +314,20 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
             }
             <div>
               <p className="font-bold text-slate-900">{membre.nom} {membre.prenom}</p>
-              <p className="text-xs text-slate-500">{membre.relation_chef} · {age !== null ? `${age} ans` : ''}</p>
+              <p className="text-xs text-slate-500">{membre.relation_chef} - {age !== null ? `${age} ans` : ''}</p>
               <div className="flex gap-1.5 mt-1">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${membre.statut === 'Actif' ? 'bg-emerald-100 text-emerald-700' : membre.statut === 'Décédé' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'}`}>{membre.statut}</span>
-                {membre.est_vulnerable && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">⚠ Vulnérable</span>}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${membre.statut === 'Actif' ? 'bg-emerald-100 text-emerald-700' : membre.statut === 'Decede' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'}`}>{membre.statut}</span>
+                {membre.est_vulnerable && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Vulnerable</span>}
               </div>
             </div>
           </div>
 
           <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3 border border-slate-100">
-            Le PDF contiendra : identité civile, adresse du foyer, liens familiaux, éducation & économie, santé, vulnérabilité et zones de signature.
+            Le PDF contiendra : identite civile, adresse du foyer, liens familiaux, education & economie, sante, vulnerabilite et zones de signature.
           </p>
 
           <button onClick={handleDownload} disabled={loading} className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition">
-            {loading ? <><Loader2 className="h-5 w-5 animate-spin" />Génération en cours…</> : <><Download className="h-5 w-5" />Télécharger le PDF</>}
+            {loading ? <><Loader2 className="h-5 w-5 animate-spin" />Generation en cours…</> : <><Download className="h-5 w-5" />Telecharger le PDF</>}
           </button>
         </div>
       </div>
