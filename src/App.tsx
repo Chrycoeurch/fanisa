@@ -181,17 +181,25 @@ export default function App() {
     <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
 
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm py-4 px-6 sticky top-0 z-30">
+      <header className="bg-white border-b border-slate-200 shadow-sm py-3 px-6 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-600 p-2.5 rounded-xl text-white relative">
-              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-red-600 rounded-l-xl"></div>
-              <FolderLock className="h-6 w-6 ml-1" />
-            </div>
+            {/* Logo SVG FANISA */}
+            <svg width="44" height="44" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+              <path d="M60,6 L104,30 L104,90 L60,114 L16,90 L16,30 Z" fill="#4f46e5"/>
+              <path d="M60,16 L96,36 L96,84 L60,104 L24,84 L24,36 Z" fill="#4338ca" opacity="0.4"/>
+              <polygon points="60,28 92,54 28,54" fill="#a5b4fc"/>
+              <polygon points="34,54 34,86 86,86 86,54" fill="white" opacity="0.95"/>
+              <rect x="50" y="66" width="20" height="20" rx="10" fill="#4338ca"/>
+              <rect x="38" y="60" width="10" height="10" rx="2" fill="#c7d2fe"/>
+              <rect x="72" y="60" width="10" height="10" rx="2" fill="#c7d2fe"/>
+              <circle cx="96" cy="26" r="10" fill="#10b981"/>
+              <circle cx="96" cy="26" r="5" fill="white"/>
+            </svg>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] bg-red-50 text-red-600 border border-red-100 rounded px-1.5 py-0.5 font-bold uppercase tracking-wider">Fokontany local ledger</span>
-                <span className="text-[9px] bg-emerald-50 text-emerald-800 border border-emerald-100 rounded px-1.5 py-0.5 font-semibold">Toamasina, MG</span>
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 rounded px-1.5 py-0.5 font-bold uppercase tracking-wider">FANISA Web Pro</span>
+                <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-100 rounded px-1.5 py-0.5 font-semibold">Toamasina, MG</span>
               </div>
               <h1 className="text-lg font-extrabold text-slate-900 uppercase flex items-center gap-1.5">
                 Registre des Habitants <ShieldCheck className="h-4 w-4 text-indigo-600" />
