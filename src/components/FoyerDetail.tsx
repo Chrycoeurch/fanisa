@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Foyer, Membre } from '../types';
-import { X, Home, MapPin, Users, UserCheck, PlusCircle, Edit2, Trash2, AlertTriangle, Phone, Mail, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Home, MapPin, Users, UserCheck, PlusCircle, Edit2, Trash2, AlertTriangle, Phone, Mail, CreditCard, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import MembreProfil360 from './MembreProfil360';
 
 interface Props {
   foyer: Foyer;
@@ -39,10 +40,11 @@ function LienFamilial({ emoji, lien, nom, prenom }: { emoji: string; lien: strin
   );
 }
 
-function MembreRow({ membre, allMembres, onEdit, onDelete }: {
-  membre: Membre; allMembres: Membre[]; onEdit: () => void; onDelete: () => void;
+function MembreRow({ membre, allMembres, foyer, onEdit, onDelete }: {
+  membre: Membre; allMembres: Membre[]; foyer: Foyer; onEdit: () => void; onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showProfil, setShowProfil] = useState(false);
   const conjoint = allMembres.find(m => m.id === membre.conjoint_id);
   const pere = allMembres.find(m => m.id === membre.pere_id);
   const mere = allMembres.find(m => m.id === membre.mere_id);
@@ -54,6 +56,7 @@ function MembreRow({ membre, allMembres, onEdit, onDelete }: {
   const hasAlert = membre.hypertension !== 'Normal' || membre.diabete !== 'Normal';
 
   return (
+  <>
     <div className={`border rounded-xl overflow-hidden transition ${membre.est_vulnerable ? 'border-rose-200' : 'border-slate-200'}`}>
 
       {/* Ligne principale */}
@@ -73,7 +76,7 @@ function MembreRow({ membre, allMembres, onEdit, onDelete }: {
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${RELATION_COLOR[membre.relation_chef] || 'bg-slate-100 text-slate-600'}`}>
               {membre.is_chef && <UserCheck className="h-2.5 w-2.5 inline mr-0.5" />}{membre.relation_chef}
             </span>
-            {membre.statut !== 'Actif' && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">{membre.statut}</span>}
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${membre.statut === 'Actif' ? 'bg-emerald-100 text-emerald-700' : membre.statut === 'Décédé' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'}`}>{membre.statut}</span>
             {hasAlert && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">⚕ Alerte</span>}
             {membre.est_vulnerable && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">⚠ Vulnérable</span>}
           </div>
@@ -88,6 +91,7 @@ function MembreRow({ membre, allMembres, onEdit, onDelete }: {
           <button onClick={() => setExpanded(!expanded)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
+          <button onClick={() => setShowProfil(true)} title="Profil 360°" className="p-1.5 hover:bg-purple-50 rounded-lg text-slate-400 hover:text-purple-600"><FileText className="h-4 w-4" /></button>
           <button onClick={onEdit} className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600"><Edit2 className="h-4 w-4" /></button>
           {!membre.is_chef && <button onClick={onDelete} className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}
         </div>
@@ -234,6 +238,10 @@ function MembreRow({ membre, allMembres, onEdit, onDelete }: {
         </div>
       )}
     </div>
+    {showProfil && (
+      <MembreProfil360 membre={membre} foyer={foyer} allMembres={allMembres} onClose={() => setShowProfil(false)} />
+    )}
+  </>
   );
 }
 
@@ -307,6 +315,7 @@ export default function FoyerDetail({ foyer, membres, onClose, onEditFoyer, onDe
                 key={m.id}
                 membre={m}
                 allMembres={membres}
+                foyer={foyer}
                 onEdit={() => onEditMembre(m)}
                 onDelete={() => onDeleteMembre(m.id)}
               />

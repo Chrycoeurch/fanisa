@@ -35,6 +35,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const [telephone, setTelephone] = useState(membre?.telephone || '');
   const [email, setEmail] = useState(membre?.email || '');
   const [statut, setStatut] = useState<Membre['statut']>(membre?.statut || 'Actif');
+  const [autre_relation_label, setAutreRelationLabel] = useState(membre?.relation_chef && !["Chef","Épouse/Époux","Fils","Fille","Père","Mère","Frère","Sœur","Grand-père","Grand-mère","Petit-fils","Petite-fille","Oncle","Tante","Neveu","Nièce"].includes(membre.relation_chef) ? membre.relation_chef : "");
   const [relation_chef, setRelationChef] = useState<RelationChef>(membre?.relation_chef || 'Autre');
   const [photo_url, setPhotoUrl] = useState(membre?.photo_url || '');
 
@@ -246,6 +247,12 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                       </label>
                     ))}
                   </div>
+                  {relation_chef === 'Autre' && (
+                    <div className="mt-3">
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Préciser la relation <span className="text-red-500">*</span></label>
+                      <input value={autre_relation_label} onChange={e => setAutreRelationLabel(e.target.value)} placeholder="Ex: Beau-frère, Tuteur, Cousin..." className="w-full border border-indigo-300 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-indigo-50" required />
+                    </div>
+                  )}
                   {/* Indication auto */}
                   {!membre && chef && ['Fils', 'Fille', 'Frère', 'Sœur', 'Épouse/Époux'].includes(relation_chef) && (
                     <p className="text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5 mt-2">
