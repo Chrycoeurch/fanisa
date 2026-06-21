@@ -22,6 +22,20 @@ export interface Foyer {
   superficie_maison?: number;
   photo_maison_url?: string;
   nombre_membres: number;
+  // Logement
+  type_logement?: string;
+  a_etage?: boolean;
+  nombre_etages?: number;
+  materiau_toiture?: string;
+  materiau_mur?: string;
+  materiau_plancher?: string;
+  // Occupation
+  statut_occupant?: string;
+  proprietaire_nom?: string;
+  proprietaire_prenom?: string;
+  proprietaire_cin?: string;
+  proprietaire_telephone?: string;
+  proprietaire_adresse?: string;
   created_at?: string;
   updated_at?: string;
 }
