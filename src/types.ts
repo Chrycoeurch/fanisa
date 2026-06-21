@@ -107,11 +107,43 @@ export interface Membre {
   // Santé
   groupe_sanguin?: string;
   handicap?: string;
+  handicap_oui?: boolean;
+  handicap_types?: string[];
+  handicap_precision?: string;
+  handicap_autonomie?: string;
+  handicap_carte?: boolean;
   hypertension: StatutSante;
   diabete: StatutSante;
+  maladies_chroniques?: string[];
+  maladie_autre?: string;
+  traitement_regulier?: boolean;
+  suivi_medical?: boolean;
+  priorite_sanitaire?: string;
+  // Grossesse (sexe F)
+  grossesse_cours?: boolean;
+  grossesse_mois?: number;
+  grossesse_date_accouchement?: string;
+  grossesse_cpn?: number;
+  grossesse_risque?: boolean;
+  grossesse_suivie?: boolean;
+  grossesse_centre_sante?: string;
+  // Allergies
+  allergies?: string[];
+  allergies_precision?: string;
+  // Vaccination
   vaccination: string[];
+  statut_vaccinal?: string;
+  // Anthropométrie
   poids?: number;
   taille?: number;
+  // Contact urgence
+  contact_urgence_nom?: string;
+  contact_urgence_telephone?: string;
+  contact_urgence_lien?: string;
+  // Documents sanitaires
+  photo_carnet_vaccination?: string;
+  photo_carte_handicap?: string;
+  photo_document_medical?: string;
   // Vulnérabilité
   est_vulnerable: boolean;
   vulnerabilite_categories: string[];

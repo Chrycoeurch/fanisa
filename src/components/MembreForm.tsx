@@ -20,6 +20,61 @@ const ACTIVITES_PRINCIPALES = [
   'Construction', 'Administration', 'Enseignement', 'Santé', 'Services',
   'Retraité', 'Sans emploi', 'Étudiant', 'Femme au foyer', 'Autre',
 ];
+
+// Module Sante etendu
+const HANDICAP_TYPES = ['Moteur', 'Visuel', 'Auditif', 'Mental / Intellectuel', 'Psychique', 'Trouble de la parole', 'Handicap multiple', 'Autre'];
+const AUTONOMIE_NIVEAUX = ['Autonome', 'Assistance partielle', 'Dependance totale'];
+const MALADIES_CHRONIQUES = ['Hypertension arterielle', 'Diabete', 'Asthme', 'Epilepsie', 'Maladie cardiaque', 'Insuffisance renale', 'Tuberculose', 'Cancer', 'VIH/SIDA', 'Drepanocytose', 'Arthrose severe', 'Maladie respiratoire chronique', 'Autre'];
+const ALLERGIES_LIST = ['Aucune', 'Medicaments', 'Alimentaires', "Piqures d'insectes", 'Produits chimiques', 'Autres'];
+const VACCINS_LIST = ['BCG (Tuberculose)', 'Polio', 'DTC (Diphterie, Tetanos, Coqueluche)', 'Hepatite B', 'Rougeole', 'Fievre Jaune', 'COVID-19', 'HPV', 'Tetanos', 'Autre'];
+const STATUT_VACCINAL = ['A jour', 'Partiellement vaccine', 'Non vaccine', 'Inconnu'];
+const LIENS_PARENTE = ['Pere', 'Mere', 'Epoux / Epouse', 'Fils / Fille', 'Frere / Soeur', 'Grand-parent', 'Tuteur', 'Voisin', 'Autre'];
+
+function YesNo({ label, value, onChange }: { label: string; value: boolean | undefined; onChange: (v: boolean) => void }) {
+  return (
+    <div>
+      <label className="text-xs font-bold text-slate-500 uppercase block mb-2">{label}</label>
+      <div className="flex gap-3">
+        {[{ v: true, l: 'Oui' }, { v: false, l: 'Non' }].map(({ v, l }) => (
+          <label key={l} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg border cursor-pointer text-sm font-semibold transition ${value === v ? (v ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-500 text-white border-slate-500') : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+            <input type="radio" className="hidden" checked={value === v} onChange={() => onChange(v)} />{l}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CheckGroup({ label, options, values, onToggle, cols = 2 }: { label: string; options: string[]; values: string[]; onToggle: (v: string) => void; cols?: number }) {
+  return (
+    <div>
+      <label className="text-xs font-bold text-slate-500 uppercase block mb-2">{label}</label>
+      <div className={cols === 2 ? 'grid grid-cols-2 gap-2' : 'flex flex-wrap gap-2'}>
+        {options.map(opt => (
+          <label key={opt} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition ${values.includes(opt) ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-semibold' : 'bg-white border-slate-200 text-slate-600'}`}>
+            <input type="checkbox" checked={values.includes(opt)} onChange={() => onToggle(opt)} className="rounded" />{opt}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PriorityButtons({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="text-xs font-bold text-slate-500 uppercase block mb-2">{label}</label>
+      <div className="flex gap-3">
+        {(['Normal', 'Surveillance', 'Prioritaire']).map(v => (
+          <label key={v} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${value === v ? (v === 'Prioritaire' ? 'bg-red-600 text-white border-red-600' : v === 'Surveillance' ? 'bg-amber-500 text-white border-amber-500' : 'bg-emerald-600 text-white border-emerald-600') : 'bg-white text-slate-600 border-slate-200'}`}>
+            <input type="radio" className="hidden" checked={value === v} onChange={() => onChange(v)} />{v}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const VULNERABILITE_CATS = ['Grand âge', 'Handicap', 'Pauvreté extrême', 'Famille monoparentale', 'Maladie chronique', 'Déscolarisation', 'Malnutrition'];
 const AIDES = ['Vivres', 'Aide financière', 'Soins gratuits', 'Bourse', 'Logement social'];
 type Tab = 'identite' | 'famille' | 'education' | 'sante' | 'vulnerabilite';
@@ -66,11 +121,43 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   // Santé
   const [groupe_sanguin, setGroupeSanguin] = useState(membre?.groupe_sanguin || '');
   const [handicap, setHandicap] = useState(membre?.handicap || '');
+  const [handicap_oui, setHandicapOui] = useState<boolean>(membre?.handicap_oui || false);
+  const [handicap_types, setHandicapTypes] = useState<string[]>(membre?.handicap_types || []);
+  const [handicap_precision, setHandicapPrecision] = useState(membre?.handicap_precision || '');
+  const [handicap_autonomie, setHandicapAutonomie] = useState(membre?.handicap_autonomie || '');
+  const [handicap_carte, setHandicapCarte] = useState<boolean | undefined>(membre?.handicap_carte);
   const [hypertension, setHypertension] = useState<Membre['hypertension']>(membre?.hypertension || 'Normal');
   const [diabete, setDiabete] = useState<Membre['diabete']>(membre?.diabete || 'Normal');
+  const [maladies_chroniques, setMaladiesChroniques] = useState<string[]>(membre?.maladies_chroniques || []);
+  const [maladie_autre, setMaladieAutre] = useState(membre?.maladie_autre || '');
+  const [traitement_regulier, setTraitementRegulier] = useState<boolean | undefined>(membre?.traitement_regulier);
+  const [suivi_medical, setSuiviMedical] = useState<boolean | undefined>(membre?.suivi_medical);
+  const [priorite_sanitaire, setPrioriteSanitaire] = useState(membre?.priorite_sanitaire || 'Normal');
+  // Grossesse
+  const [grossesse_cours, setGrossesseCours] = useState<boolean | undefined>(membre?.grossesse_cours);
+  const [grossesse_mois, setGrossesseMois] = useState(membre?.grossesse_mois?.toString() || '');
+  const [grossesse_date_accouchement, setGrossesseDateAccouchement] = useState(membre?.grossesse_date_accouchement || '');
+  const [grossesse_cpn, setGrossesseCpn] = useState(membre?.grossesse_cpn?.toString() || '');
+  const [grossesse_risque, setGrossesseRisque] = useState<boolean | undefined>(membre?.grossesse_risque);
+  const [grossesse_suivie, setGrossesseSuivie] = useState<boolean | undefined>(membre?.grossesse_suivie);
+  const [grossesse_centre_sante, setGrossesseCentreSante] = useState(membre?.grossesse_centre_sante || '');
+  // Allergies
+  const [allergies, setAllergies] = useState<string[]>(membre?.allergies || []);
+  const [allergies_precision, setAllergiesPrecision] = useState(membre?.allergies_precision || '');
+  // Vaccination
   const [vaccination, setVaccination] = useState<string[]>(membre?.vaccination || []);
+  const [statut_vaccinal, setStatutVaccinal] = useState(membre?.statut_vaccinal || '');
   const [poids, setPoids] = useState(membre?.poids?.toString() || '');
   const [taille, setTaille] = useState(membre?.taille?.toString() || '');
+  // Contact urgence
+  const [contact_urgence_nom, setContactUrgenceNom] = useState(membre?.contact_urgence_nom || '');
+  const [contact_urgence_telephone, setContactUrgenceTelephone] = useState(membre?.contact_urgence_telephone || '');
+  const [contact_urgence_lien, setContactUrgenceLien] = useState(membre?.contact_urgence_lien || '');
+  // Documents sanitaires
+  const [photo_carnet_vaccination, setPhotoCarnetVaccination] = useState(membre?.photo_carnet_vaccination || '');
+  const [photo_carte_handicap, setPhotoCarteHandicap] = useState(membre?.photo_carte_handicap || '');
+  const [photo_document_medical, setPhotoDocumentMedical] = useState(membre?.photo_document_medical || '');
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
   // Vulnérabilité
   const [est_vulnerable, setEstVulnerable] = useState(membre?.est_vulnerable || false);
@@ -142,6 +229,22 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
     setUploadingPhoto(false);
   };
 
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'carnet' | 'handicap' | 'medical') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Fichier trop grand (max 5 Mo)'); return; }
+    setUploadingDoc(type);
+    const ext = file.name.split('.').pop();
+    const path = `documents/${foyer.code_menage}-${type}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('Photos').upload(path, file, { upsert: true });
+    if (error) { alert('Erreur upload : ' + error.message); setUploadingDoc(null); return; }
+    const { data: urlData } = supabase.storage.from('Photos').getPublicUrl(path);
+    if (type === 'carnet') setPhotoCarnetVaccination(urlData.publicUrl);
+    if (type === 'handicap') setPhotoCarteHandicap(urlData.publicUrl);
+    if (type === 'medical') setPhotoDocumentMedical(urlData.publicUrl);
+    setUploadingDoc(null);
+  };
+
   const TAB_ORDER: Tab[] = ['identite', 'famille', 'education', 'sante', 'vulnerabilite'];
   const isLastTab = tab === TAB_ORDER[TAB_ORDER.length - 1];
 
@@ -189,11 +292,37 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
       competences,
       groupe_sanguin: groupe_sanguin || undefined,
       handicap: handicap || undefined,
+      handicap_oui,
+      handicap_types,
+      handicap_precision: handicap_precision || undefined,
+      handicap_autonomie: handicap_autonomie || undefined,
+      handicap_carte,
       hypertension,
       diabete,
+      maladies_chroniques,
+      maladie_autre: maladie_autre || undefined,
+      traitement_regulier,
+      suivi_medical,
+      priorite_sanitaire,
+      grossesse_cours: sexe === 'F' ? grossesse_cours : undefined,
+      grossesse_mois: grossesse_mois ? parseInt(grossesse_mois) : undefined,
+      grossesse_date_accouchement: grossesse_date_accouchement || undefined,
+      grossesse_cpn: grossesse_cpn ? parseInt(grossesse_cpn) : undefined,
+      grossesse_risque,
+      grossesse_suivie,
+      grossesse_centre_sante: grossesse_centre_sante || undefined,
+      allergies,
+      allergies_precision: allergies_precision || undefined,
       vaccination,
+      statut_vaccinal: statut_vaccinal || undefined,
       poids: poids ? parseFloat(poids) : undefined,
       taille: taille ? parseFloat(taille) : undefined,
+      contact_urgence_nom: contact_urgence_nom || undefined,
+      contact_urgence_telephone: contact_urgence_telephone || undefined,
+      contact_urgence_lien: contact_urgence_lien || undefined,
+      photo_carnet_vaccination: photo_carnet_vaccination || undefined,
+      photo_carte_handicap: photo_carte_handicap || undefined,
+      photo_document_medical: photo_document_medical || undefined,
       est_vulnerable,
       vulnerabilite_categories,
       vulnerabilite_description: vulnerabilite_description || undefined,
@@ -541,41 +670,163 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
             {/* ── SANTÉ ── */}
             {tab === 'sante' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Groupe sanguin</label>
-                    <select value={groupe_sanguin} onChange={e => setGroupeSanguin(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
-                      <option value="">Inconnu</option>
-                      {GROUPES_SANG.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Handicap</label>
-                    <input value={handicap} onChange={e => setHandicap(e.target.value)} placeholder="Ex: Non-voyant, Moteur" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                  </div>
-                </div>
-                {(['hypertension', 'diabete'] as const).map(field => (
-                  <div key={field}>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-2">{field === 'hypertension' ? 'Hypertension artérielle' : 'Diabète'}</label>
-                    <div className="flex gap-3">
-                      {(['Normal', 'Surveillance', 'Prioritaire'] as const).map(v => (
-                        <label key={v} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${(field === 'hypertension' ? hypertension : diabete) === v ? (v === 'Prioritaire' ? 'bg-red-600 text-white border-red-600' : v === 'Surveillance' ? 'bg-amber-500 text-white border-amber-500' : 'bg-emerald-600 text-white border-emerald-600') : 'bg-white text-slate-600 border-slate-200'}`}>
-                          <input type="radio" className="hidden" checked={(field === 'hypertension' ? hypertension : diabete) === v} onChange={() => field === 'hypertension' ? setHypertension(v) : setDiabete(v)} />{v}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-5">
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">1. Groupe sanguin</h3>
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Vaccinations</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {COMPULSORY_VACCINATIONS.map(v => (
-                      <label key={v} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition ${vaccination.includes(v) ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-semibold' : 'bg-white border-slate-200 text-slate-600'}`}>
-                        <input type="checkbox" checked={vaccination.includes(v)} onChange={() => setVaccination(prev => toggleArr(prev, v))} className="rounded" />{v}
+                  <select value={groupe_sanguin} onChange={e => setGroupeSanguin(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                    <option value="">Inconnu</option>
+                    {GROUPES_SANG.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">2. Handicap</h3>
+                <YesNo label="La personne est-elle en situation de handicap ?" value={handicap_oui} onChange={setHandicapOui} />
+                {handicap_oui && (
+                  <>
+                    <CheckGroup label="Type de handicap" options={HANDICAP_TYPES} values={handicap_types} onToggle={v => setHandicapTypes(prev => toggleArr(prev, v))} />
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Précision du handicap</label>
+                      <input value={handicap_precision} onChange={e => setHandicapPrecision(e.target.value)} placeholder="Préciser..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Niveau d'autonomie</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {AUTONOMIE_NIVEAUX.map(n => (
+                          <label key={n} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${handicap_autonomie === n ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
+                            <input type="radio" className="hidden" checked={handicap_autonomie === n} onChange={() => setHandicapAutonomie(n)} />{n}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <YesNo label="Possède une carte de handicap" value={handicap_carte} onChange={setHandicapCarte} />
+                  </>
+                )}
+
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">3. Hypertension artérielle</h3>
+                <PriorityButtons label="Situation" value={hypertension} onChange={v => setHypertension(v as Membre['hypertension'])} />
+
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">4. Diabète</h3>
+                <PriorityButtons label="Situation" value={diabete} onChange={v => setDiabete(v as Membre['diabete'])} />
+
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">5. Maladies chroniques</h3>
+                <CheckGroup label="Maladies diagnostiquées" options={MALADIES_CHRONIQUES} values={maladies_chroniques} onToggle={v => setMaladiesChroniques(prev => toggleArr(prev, v))} />
+                {maladies_chroniques.includes('Autre') && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Autre maladie chronique</label>
+                    <input value={maladie_autre} onChange={e => setMaladieAutre(e.target.value)} placeholder="Préciser..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                )}
+                <YesNo label="Traitement médical régulier ?" value={traitement_regulier} onChange={setTraitementRegulier} />
+                <YesNo label="Suivi médical régulier ?" value={suivi_medical} onChange={setSuiviMedical} />
+                <PriorityButtons label="Niveau de priorité sanitaire" value={priorite_sanitaire} onChange={setPrioriteSanitaire} />
+
+                {sexe === 'F' && (
+                  <>
+                    <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">6. Grossesse</h3>
+                    <YesNo label="Grossesse en cours ?" value={grossesse_cours} onChange={setGrossesseCours} />
+                    {grossesse_cours && (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Nombre de mois de grossesse</label>
+                            <input type="number" min="0" max="9" value={grossesse_mois} onChange={e => setGrossesseMois(e.target.value)} placeholder="Ex: 5" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Date probable d'accouchement</label>
+                            <input type="date" value={grossesse_date_accouchement} onChange={e => setGrossesseDateAccouchement(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Nombre de consultations prénatales (CPN)</label>
+                          <input type="number" min="0" value={grossesse_cpn} onChange={e => setGrossesseCpn(e.target.value)} placeholder="Ex: 3" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                        </div>
+                        <YesNo label="Grossesse à risque ?" value={grossesse_risque} onChange={setGrossesseRisque} />
+                        <YesNo label="Suivie dans un centre de santé ?" value={grossesse_suivie} onChange={setGrossesseSuivie} />
+                        {grossesse_suivie && (
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Nom du centre de santé</label>
+                            <input value={grossesse_centre_sante} onChange={e => setGrossesseCentreSante(e.target.value)} placeholder="Nom du centre" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">7. Allergies</h3>
+                <CheckGroup label="Allergies connues" options={ALLERGIES_LIST} values={allergies} onToggle={v => setAllergies(prev => toggleArr(prev, v))} cols={1} />
+                {allergies.length > 0 && !allergies.includes('Aucune') && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Précision des allergies</label>
+                    <input value={allergies_precision} onChange={e => setAllergiesPrecision(e.target.value)} placeholder="Préciser..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                )}
+
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">8. Vaccinations</h3>
+                <CheckGroup label="Vaccins reçus" options={VACCINS_LIST} values={vaccination} onToggle={v => setVaccination(prev => toggleArr(prev, v))} />
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Statut vaccinal</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {STATUT_VACCINAL.map(s => (
+                      <label key={s} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${statut_vaccinal === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
+                        <input type="radio" className="hidden" checked={statut_vaccinal === s} onChange={() => setStatutVaccinal(s)} />{s}
                       </label>
                     ))}
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Poids (kg)</label>
+                    <input type="number" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 65" step="0.1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Taille (cm)</label>
+                    <input type="number" value={taille} onChange={e => setTaille(e.target.value)} placeholder="Ex: 170" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                </div>
+
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">9. Contact d'urgence</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Nom du contact</label>
+                    <input value={contact_urgence_nom} onChange={e => setContactUrgenceNom(e.target.value)} placeholder="Nom complet" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Téléphone</label>
+                    <input value={contact_urgence_telephone} onChange={e => setContactUrgenceTelephone(e.target.value)} placeholder="+261 34..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Lien de parenté</label>
+                  <select value={contact_urgence_lien} onChange={e => setContactUrgenceLien(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                    <option value="">Choisir...</option>
+                    {LIENS_PARENTE.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
+
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">10. Documents sanitaires</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { key: 'carnet' as const, label: 'Carnet de vaccination', url: photo_carnet_vaccination, set: setPhotoCarnetVaccination },
+                    { key: 'handicap' as const, label: 'Carte de handicap', url: photo_carte_handicap, set: setPhotoCarteHandicap },
+                    { key: 'medical' as const, label: 'Document médical', url: photo_document_medical, set: setPhotoDocumentMedical },
+                  ].map(({ key, label, url, set }) => (
+                    <div key={key}>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">{label}</label>
+                      {url ? (
+                        <div className="relative h-20 rounded-lg overflow-hidden border border-slate-200">
+                          <img src={url} alt={label} className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => set('')} className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5"><X className="h-3 w-3" /></button>
+                        </div>
+                      ) : (
+                        <label className={`flex flex-col items-center justify-center h-20 border-2 border-dashed rounded-lg cursor-pointer transition ${uploadingDoc === key ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300'}`}>
+                          <input type="file" accept="image/*" className="hidden" onChange={e => handleDocUpload(e, key)} disabled={!!uploadingDoc} />
+                          {uploadingDoc === key ? <Loader2 className="h-4 w-4 text-indigo-600 animate-spin" /> : <Upload className="h-4 w-4 text-slate-300" />}
+                        </label>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
