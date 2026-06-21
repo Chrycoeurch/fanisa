@@ -379,8 +379,9 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
             const curIdx = TAB_ORDER.indexOf(tab);
             const isDone = idx < curIdx;
             const isActive = tab === key;
+            const isLocked = !membre && idx > curIdx;
             return (
-              <button key={key} type="button" onClick={() => { if (idx <= curIdx) setTab(key as Tab); }} disabled={idx > curIdx} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition shrink-0 ${isActive ? 'border-indigo-600 text-indigo-700' : isDone ? 'border-transparent text-emerald-600' : 'border-transparent text-slate-300 cursor-not-allowed'}`}>
+              <button key={key} type="button" onClick={() => { if (!isLocked) setTab(key as Tab); }} disabled={isLocked} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition shrink-0 ${isActive ? 'border-indigo-600 text-indigo-700' : isLocked ? 'border-transparent text-slate-300 cursor-not-allowed' : isDone ? 'border-transparent text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
                 <Icon className="h-3.5 w-3.5" />{label}{isDone && ' ✓'}
               </button>
             );
