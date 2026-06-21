@@ -36,6 +36,36 @@ export interface Foyer {
   proprietaire_cin?: string;
   proprietaire_telephone?: string;
   proprietaire_adresse?: string;
+  // Eau
+  eau_source?: string;
+  eau_potable?: boolean;
+  eau_disponibilite?: string;
+  eau_temps_acces?: string;
+  // Assainissement
+  toilette_type?: string;
+  lavage_mains?: boolean;
+  savon_disponible?: boolean;
+  evacuation_eaux_usees?: string;
+  // Électricité & énergie
+  eclairage_source?: string;
+  a_electricite?: boolean;
+  cuisson_source?: string;
+  // Déchets
+  dechets_mode?: string;
+  dechets_tri?: boolean;
+  // Connectivité
+  reseau_mobile?: string;
+  acces_internet?: boolean;
+  internet_moyens?: string[];
+  // Risques
+  risque_naturel?: boolean;
+  risques_types?: string[];
+  catastrophe_subie?: boolean;
+  catastrophe_types?: string[];
+  // Vulnérabilité ménage
+  difficulte_eau?: boolean;
+  difficulte_electricite?: boolean;
+  conditions_vie?: string;
   created_at?: string;
   updated_at?: string;
 }

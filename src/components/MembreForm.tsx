@@ -245,11 +245,17 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
         {/* Tabs */}
         <div className="flex border-b border-slate-200 overflow-x-auto shrink-0">
-          {TABS.map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setTab(key as Tab)} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition ${tab === key ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-              <Icon className="h-3.5 w-3.5" />{label}
-            </button>
-          ))}
+          {TABS.map(({ key, label, icon: Icon }) => {
+            const idx = TAB_ORDER.indexOf(key as Tab);
+            const curIdx = TAB_ORDER.indexOf(tab);
+            const isDone = idx < curIdx;
+            const isActive = tab === key;
+            return (
+              <button key={key} type="button" onClick={() => { if (idx <= curIdx) setTab(key as Tab); }} disabled={idx > curIdx} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition shrink-0 ${isActive ? 'border-indigo-600 text-indigo-700' : isDone ? 'border-transparent text-emerald-600' : 'border-transparent text-slate-300 cursor-not-allowed'}`}>
+                <Icon className="h-3.5 w-3.5" />{label}{isDone && ' ✓'}
+              </button>
+            );
+          })}
         </div>
 
         {/* Form */}
