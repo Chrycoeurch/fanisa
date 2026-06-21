@@ -293,6 +293,7 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[], s
 
 export default function MembreProfil360({ membre, foyer, allMembres, onClose }: Props) {
   const [loading, setLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [selected, setSelected] = useState<Set<SectionKey>>(new Set(SECTIONS.filter(s => s.defaultOn).map(s => s.key)));
 
   const toggle = (key: SectionKey) => {
@@ -322,6 +323,128 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
   };
 
   const age = membre.date_naissance ? Math.abs(new Date(Date.now() - new Date(membre.date_naissance).getTime()).getUTCFullYear() - 1970) : null;
+  const conjoint = allMembres.find(m => m.id === membre.conjoint_id);
+  const pere = allMembres.find(m => m.id === membre.pere_id);
+  const mere = allMembres.find(m => m.id === membre.mere_id);
+  const enfants = allMembres.filter(m => m.pere_id === membre.id || m.mere_id === membre.id);
+
+  // ── Vue Aperçu ────────────────────────────────────────────
+  if (showPreview) {
+    return (
+      <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between p-5 border-b border-slate-200 shrink-0">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Aperçu de la fiche</h2>
+              <p className="text-xs text-slate-500">{selected.size} section{selected.size > 1 ? 's' : ''} sélectionnée{selected.size > 1 ? 's' : ''}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowPreview(false)} className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">← Modifier les sections</button>
+              <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 bg-slate-100">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden max-w-xl mx-auto">
+              {/* Header fiche */}
+              <div className="bg-indigo-600 p-5 flex items-center gap-4">
+                {membre.photo_url
+                  ? <img src={membre.photo_url} alt="" className="w-16 h-20 rounded-lg object-cover border-2 border-white/30 shrink-0" />
+                  : <div className="w-16 h-20 rounded-lg bg-white/20 flex items-center justify-center text-2xl font-bold text-white shrink-0">{membre.prenom?.charAt(0)}{membre.nom?.charAt(0)}</div>
+                }
+                <div className="flex-1 text-white">
+                  <p className="text-lg font-bold">{membre.nom} {membre.prenom}</p>
+                  <p className="text-xs text-indigo-100">{membre.sexe === 'M' ? 'Masculin' : 'Féminin'} · {age !== null ? `${age} ans` : ''} · {membre.relation_chef}</p>
+                  <p className="text-xs text-indigo-200 mt-0.5">Foyer {foyer.code_menage}</p>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-1 rounded-full bg-white ${membre.statut === 'Actif' ? 'text-emerald-700' : 'text-amber-700'}`}>{membre.statut}</span>
+              </div>
+
+              <div className="p-5 space-y-4 text-sm">
+                {selected.has('identite') && (
+                  <div className="border-b border-slate-100 pb-3">
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Identité civile</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400">Naissance:</span> <span className="font-medium text-slate-700">{membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '—'}</span></div>
+                      <div><span className="text-slate-400">Lieu:</span> <span className="font-medium text-slate-700">{membre.lieu_naissance || '—'}</span></div>
+                      <div><span className="text-slate-400">CIN:</span> <span className="font-medium text-slate-700 font-mono">{membre.cin || '—'}</span></div>
+                      <div><span className="text-slate-400">Tél:</span> <span className="font-medium text-slate-700">{membre.telephone || '—'}</span></div>
+                    </div>
+                  </div>
+                )}
+                {selected.has('foyer') && (
+                  <div className="border-b border-slate-100 pb-3">
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Foyer & Adresse</p>
+                    <p className="text-xs text-slate-700">{[foyer.adresse, foyer.fokontany, foyer.commune].filter(Boolean).join(' · ') || '—'}</p>
+                  </div>
+                )}
+                {selected.has('famille') && (conjoint || pere || mere || enfants.length > 0) && (
+                  <div className="border-b border-slate-100 pb-3">
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Liens familiaux</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {conjoint && <span className="bg-pink-50 text-pink-700 px-2 py-0.5 rounded-full text-[11px] font-medium">💑 {conjoint.prenom} {conjoint.nom}</span>}
+                      {pere && <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full text-[11px] font-medium">👨 {pere.prenom} {pere.nom}</span>}
+                      {mere && <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full text-[11px] font-medium">👩 {mere.prenom} {mere.nom}</span>}
+                      {enfants.map(e => <span key={e.id} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-[11px] font-medium">{e.sexe === 'M' ? '👦' : '👧'} {e.prenom}</span>)}
+                    </div>
+                  </div>
+                )}
+                {selected.has('education') && (
+                  <div className="border-b border-slate-100 pb-3">
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Éducation & Économie</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400">Niveau:</span> <span className="font-medium text-slate-700">{membre.niveau_etude || '—'}</span></div>
+                      <div><span className="text-slate-400">Activité:</span> <span className="font-medium text-slate-700">{membre.profession || '—'}</span></div>
+                      <div><span className="text-slate-400">Statut pro:</span> <span className="font-medium text-slate-700">{membre.statut_professionnel || '—'}</span></div>
+                      <div><span className="text-slate-400">Revenu:</span> <span className="font-medium text-slate-700">{membre.revenu_fourchette || '—'}</span></div>
+                    </div>
+                  </div>
+                )}
+                {selected.has('sante') && (
+                  <div className="border-b border-slate-100 pb-3">
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Santé</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-[11px] font-medium">🩸 {membre.groupe_sanguin || 'Inconnu'}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${membre.hypertension === 'Prioritaire' ? 'bg-red-100 text-red-700' : membre.hypertension === 'Surveillance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>HTA: {membre.hypertension}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${membre.diabete === 'Prioritaire' ? 'bg-red-100 text-red-700' : membre.diabete === 'Surveillance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>Diabète: {membre.diabete}</span>
+                    </div>
+                  </div>
+                )}
+                {selected.has('vulnerabilite') && membre.est_vulnerable && (
+                  <div className="border-b border-slate-100 pb-3">
+                    <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider mb-2">⚠ Vulnérabilité</p>
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold text-white ${membre.niveau_priorite === 'Critique' ? 'bg-red-600' : 'bg-amber-500'}`}>{membre.niveau_priorite}</span>
+                  </div>
+                )}
+                {selected.has('foncier') && (
+                  <div>
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Foncier & Logement</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400">Type:</span> <span className="font-medium text-slate-700">{foyer.type_logement || '—'}</span></div>
+                      <div><span className="text-slate-400">Statut:</span> <span className="font-medium text-slate-700">{foyer.statut_occupant || '—'}</span></div>
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-3 pt-2 text-center text-[10px] text-slate-300">
+                  <div className="border-t border-slate-200 pt-1">Le déclarant</div>
+                  <div className="border-t border-slate-200 pt-1">Chef Fokontany</div>
+                  <div className="border-t border-slate-200 pt-1">Cachet officiel</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 border-t border-slate-100 shrink-0">
+            <button onClick={handleDownload} disabled={loading} className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition">
+              {loading ? <><Loader2 className="h-5 w-5 animate-spin" />Génération en cours…</> : <><Download className="h-5 w-5" />Télécharger le PDF</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Vue Sélection de sections ────────────────────────────
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
@@ -386,8 +509,8 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
 
         {/* Footer */}
         <div className="p-5 border-t border-slate-100 shrink-0">
-          <button onClick={handleDownload} disabled={loading} className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition">
-            {loading ? <><Loader2 className="h-5 w-5 animate-spin" />Génération en cours…</> : <><Download className="h-5 w-5" />Télécharger le PDF ({selected.size} section{selected.size > 1 ? 's' : ''})</>}
+          <button onClick={() => { if (selected.size === 0) { alert('Sélectionnez au moins une section.'); return; } setShowPreview(true); }} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition">
+            <FileText className="h-5 w-5" />Aperçu de la fiche ({selected.size} section{selected.size > 1 ? 's' : ''})
           </button>
         </div>
       </div>
