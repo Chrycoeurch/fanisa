@@ -136,6 +136,19 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
     setUploadingPhoto(false);
   };
 
+  const TAB_ORDER: Tab[] = ['identite', 'famille', 'education', 'sante', 'vulnerabilite'];
+  const isLastTab = tab === TAB_ORDER[TAB_ORDER.length - 1];
+
+  const handleNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (tab === 'identite' && (!nom.trim() || !prenom.trim())) {
+      alert('Le nom et le prénom sont obligatoires.');
+      return;
+    }
+    const idx = TAB_ORDER.indexOf(tab);
+    if (idx < TAB_ORDER.length - 1) setTab(TAB_ORDER[idx + 1]);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nom.trim() || !prenom.trim()) return;
@@ -215,7 +228,10 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">{membre ? 'Modifier le membre' : 'Nouveau membre'}</h2>
-              <p className="text-xs text-slate-500">Foyer <span className="font-mono font-bold text-indigo-600">{foyer.code_menage}</span> · {foyer.fokontany}</p>
+              <p className="text-xs text-slate-500">Foyer <span className="font-mono font-bold text-indigo-600">{foyer.code_menage}</span></p>
+              <p className="text-xs text-slate-600 font-medium mt-0.5">
+                {[foyer.adresse, foyer.carreau && `Carreau ${foyer.num_carreau || foyer.carreau}`, foyer.fokontany && `FKT ${foyer.fokontany}`].filter(Boolean).join(' · ')}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>
@@ -231,7 +247,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+        <form onSubmit={isLastTab ? handleSubmit : handleNext} className="flex-1 overflow-y-auto">
           <div className="p-5 space-y-4">
 
             {/* ── IDENTITÉ ── */}
@@ -239,7 +255,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
               <div className="space-y-4">
                 {/* Relation */}
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Relation au chef de foyer <span className="text-red-500">*</span></label>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Lien avec le chef de foyer <span className="text-red-500">*</span></label>
                   <div className="grid grid-cols-3 gap-2">
                     {RELATIONS.map(r => (
                       <label key={r} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${relation_chef === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
@@ -319,6 +335,18 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Email</label>
                     <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="nom@exemple.mg" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                </div>
+
+                {/* Poids & Taille */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Poids (kg)</label>
+                    <input type="number" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 65" step="0.1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Taille (cm)</label>
+                    <input type="number" value={taille} onChange={e => setTaille(e.target.value)} placeholder="Ex: 170" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
                   </div>
                 </div>
 
@@ -510,19 +538,6 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                     ))}
                   </div>
                 </div>
-                {isMineur && (
-                  <div className="grid grid-cols-2 gap-3 bg-blue-50 border border-blue-100 rounded-lg p-3">
-                    <p className="col-span-2 text-xs text-blue-700 font-semibold">Données anthropométriques (mineur)</p>
-                    <div>
-                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Poids (kg)</label>
-                      <input type="number" value={poids} onChange={e => setPoids(e.target.value)} placeholder="42.5" step="0.1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Taille (cm)</label>
-                      <input type="number" value={taille} onChange={e => setTaille(e.target.value)} placeholder="138" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -577,9 +592,18 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
           {/* Footer */}
           <div className="flex gap-3 p-5 border-t border-slate-100 sticky bottom-0 bg-white">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Annuler</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm font-semibold text-white transition flex items-center justify-center gap-2">
-              {saving ? <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement…</> : membre ? 'Modifier' : 'Ajouter le membre'}
+            {tab === 'identite' ? (
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Annuler</button>
+            ) : (
+              <button type="button" onClick={() => { const idx = TAB_ORDER.indexOf(tab); if (idx > 0) setTab(TAB_ORDER[idx - 1]); }} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">← Précédent</button>
+            )}
+            <button type="submit" disabled={saving} className={`flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition flex items-center justify-center gap-2 ${isLastTab ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+              {saving
+                ? <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement…</>
+                : isLastTab
+                  ? (membre ? 'Enregistrer les modifications' : 'Enregistrer')
+                  : 'Valider →'
+              }
             </button>
           </div>
         </form>
