@@ -135,9 +135,11 @@ export interface Membre {
   langues: string[];
   // Économie
   profession?: string;
+  statut_professionnel?: string;
   secteur?: string;
   employeur?: string;
   revenu_estime?: number;
+  revenu_fourchette?: string;
   // Santé
   groupe_sanguin?: string;
   handicap?: string;

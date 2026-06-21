@@ -20,6 +20,8 @@ const ACTIVITES_PRINCIPALES = [
   'Construction', 'Administration', 'Enseignement', 'Santé', 'Services',
   'Retraité', 'Sans emploi', 'Étudiant', 'Femme au foyer', 'Autre',
 ];
+const STATUTS_PROFESSIONNELS = ['Salarié', 'Indépendant', 'Employeur', 'Sans emploi', 'Aide familiale'];
+const FOURCHETTES_REVENU = ['Moins de 100 000 Ar', '100 000 - 300 000 Ar', '300 000 - 500 000 Ar', '500 000 - 1 000 000 Ar', 'Plus de 1 000 000 Ar', 'Aucun revenu'];
 
 // Module Sante etendu
 const HANDICAP_TYPES = ['Moteur', 'Visuel', 'Auditif', 'Mental / Intellectuel', 'Psychique', 'Trouble de la parole', 'Handicap multiple', 'Autre'];
@@ -111,6 +113,8 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const [diplome, setDiplome] = useState(membre?.diplome || '');
   const [profession, setProfession] = useState(membre?.profession || '');
   const [detail_activite, setDetailActivite] = useState(membre?.employeur || '');
+  const [statut_professionnel, setStatutProfessionnel] = useState(membre?.statut_professionnel || '');
+  const [revenu_fourchette, setRevenuFourchette] = useState(membre?.revenu_fourchette || '');
   const [secteur, setSecteur] = useState(membre?.secteur || '');
   const [employeur, setEmployeur] = useState(membre?.employeur || '');
   const [revenu_estime, setRevenu] = useState(membre?.revenu_estime?.toString() || '');
@@ -288,6 +292,8 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
       secteur: secteur || undefined,
       employeur: (employeur || detail_activite) || undefined,
       revenu_estime: revenu_estime ? parseFloat(revenu_estime) : undefined,
+      statut_professionnel: statut_professionnel || undefined,
+      revenu_fourchette: revenu_fourchette || undefined,
       langues,
       competences,
       groupe_sanguin: groupe_sanguin || undefined,
@@ -639,14 +645,28 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   </div>
                 )}
 
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Statut professionnel</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {STATUTS_PROFESSIONNELS.map(s => (
+                      <label key={s} className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition ${statut_professionnel === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <input type="radio" className="hidden" checked={statut_professionnel === s} onChange={() => setStatutProfessionnel(s)} />{s}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Employeur</label>
                     <input value={employeur} onChange={e => setEmployeur(e.target.value)} placeholder="Ex: Société, Ministère" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Revenu estimé (Ar)</label>
-                    <input type="number" value={revenu_estime} onChange={e => setRevenu(e.target.value)} placeholder="500000" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Revenu mensuel</label>
+                    <select value={revenu_fourchette} onChange={e => setRevenuFourchette(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                      <option value="">Choisir...</option>
+                      {FOURCHETTES_REVENU.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
                   </div>
                 </div>
                 <div>
