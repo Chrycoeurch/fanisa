@@ -290,7 +290,7 @@ export default function App() {
         )}
 
         {activeTab === 'documents' && <DocumentGenerator habitants={habitants} onLoggedAction={(a, d) => addLog(a, d)} />}
-        {activeTab === 'statistics' && <StatsView habitants={habitants} foyers={foyers} />}
+        {activeTab === 'statistics' && <StatsView habitants={habitants} foyers={foyers} membres={membres} />}
         {activeTab === 'finances' && (
           <FinanceModule transactions={transactions} habitants={habitants} cotisations={cotisations}
             onAddTransaction={async (t) => setTransactions(p => [{ id: `tx-${Date.now()}`, ...t }, ...p])}

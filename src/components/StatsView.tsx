@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Habitant, Foyer } from '../types';
+import { Habitant, Foyer, Membre } from '../types';
 import { SECTEUR_LIST, FOKONTANY_LIST } from '../seedData';
-import { Users, Heart, GraduationCap, Briefcase, ChevronRight, TrendingUp, Droplets, Zap, Sun, Flame, Wifi, AlertTriangle, ShieldAlert, Gauge } from 'lucide-react';
+import { Users, Heart, GraduationCap, Briefcase, ChevronRight, TrendingUp, Droplets, Zap, Sun, Flame, Wifi, AlertTriangle, ShieldAlert, Gauge, UserX, Home, Hammer, Construction, Baby, Accessibility, Activity, Syringe, ClipboardList } from 'lucide-react';
 
 interface StatsViewProps {
   habitants: Habitant[];
   foyers?: Foyer[];
+  membres?: Membre[];
 }
 
-export default function StatsView({ habitants, foyers = [] }: StatsViewProps) {
+export default function StatsView({ habitants, foyers = [], membres = [] }: StatsViewProps) {
   const activeHabitants = habitants.filter(h => h.statut === 'Actif');
   const totalCount = activeHabitants.length;
   
@@ -62,6 +63,36 @@ export default function StatsView({ habitants, foyers = [] }: StatsViewProps) {
   const nbInondation = activeFoyers.filter(f => (f.risques_types || []).includes('Inondation')).length;
   const nbVulnerables = activeFoyers.filter(f => f.est_vulnerable === true).length;
 
+  // ── Indicateurs niveau ménage (nouveaux, sans doublon) ────────
+  const activeMembres = membres.filter(m => m.statut === 'Actif');
+  // Personne âgée vivant seule = foyer avec 1 seul membre actif, âgé de 60+
+  const nbPersonnesAgeesIsolees = activeFoyers.filter(f => {
+    const membresFoyer = activeMembres.filter(m => m.foyer_id === f.id);
+    if (membresFoyer.length !== 1) return false;
+    const m = membresFoyer[0];
+    if (!m.date_naissance) return false;
+    const age = Math.abs(new Date(Date.now() - new Date(m.date_naissance).getTime()).getUTCFullYear() - 1970);
+    return age >= 60;
+  }).length;
+  const nbMenagesHandicap = activeFoyers.filter(f => (f.nb_personnes_handicapees || 0) > 0).length;
+  const nbInsecuriteAlim = activeFoyers.filter(f => f.difficulte_alimentaire === true).length;
+  const nbToucheCatastrophe = activeFoyers.filter(f => f.affecte_catastrophe === true).length;
+  const nbRenovation = activeFoyers.filter(f => (f.travaux_types || []).some(t => t.includes('Renovation') || t.includes('Rénovation'))).length;
+  const nbReconstruction = activeFoyers.filter(f => (f.travaux_types || []).includes('Reconstruction complete') || (f.travaux_types || []).includes('Reconstruction complète')).length;
+  const menagesPrioritaires = activeFoyers.filter(f => f.niveau_vulnerabilite_global === 'Critique' || f.travaux_urgence === 'Critique');
+
+  // ── Indicateurs niveau individu (santé) ───────────────────────
+  const nbFemmesEnceintes = activeMembres.filter(m => m.grossesse_cours === true).length;
+  const nbPersonnesHandicapees = activeMembres.filter(m => m.handicap_oui === true).length;
+  const nbHypertendus = activeMembres.filter(m => m.hypertension && m.hypertension !== 'Normal').length;
+  const nbDiabetiques = activeMembres.filter(m => m.diabete && m.diabete !== 'Normal').length;
+  const nbMaladiesChroniques = activeMembres.filter(m => (m.maladies_chroniques || []).length > 0).length;
+  const nbPersonnesPrioritaires = activeMembres.filter(m => m.priorite_sanitaire === 'Prioritaire').length;
+  const nbVaccines = activeMembres.filter(m => m.statut_vaccinal === 'A jour' || m.statut_vaccinal === 'À jour').length;
+  const nbNonVaccines = activeMembres.filter(m => m.statut_vaccinal === 'Non vaccine' || m.statut_vaccinal === 'Non vacciné').length;
+  const nbSuiviMedical = activeMembres.filter(m => m.suivi_medical === true).length;
+
+
   // Taux d'accès global aux services de base : moyenne (eau potable + électricité + toilette correcte + internet)
   const nbServiceBase = activeFoyers.filter(f =>
     f.eau_potable === true && f.a_electricite === true && f.toilette_type !== 'Aucune toilette'
@@ -79,6 +110,27 @@ export default function StatsView({ habitants, foyers = [] }: StatsViewProps) {
     { label: 'Ménages vulnérables', value: nbVulnerables, icon: ShieldAlert, color: 'rose' },
   ];
 
+  const INDICATEURS_MENAGE = [
+    { label: 'Personnes âgées isolées', value: nbPersonnesAgeesIsolees, icon: UserX, color: 'amber' },
+    { label: 'Ménages avec handicapé(s)', value: nbMenagesHandicap, icon: Accessibility, color: 'indigo' },
+    { label: 'Insécurité alimentaire', value: nbInsecuriteAlim, icon: AlertTriangle, color: 'red' },
+    { label: 'Touchés par catastrophe', value: nbToucheCatastrophe, icon: AlertTriangle, color: 'orange' },
+    { label: 'Maisons à rénover', value: nbRenovation, icon: Hammer, color: 'amber' },
+    { label: 'Maisons à reconstruire', value: nbReconstruction, icon: Construction, color: 'red' },
+  ];
+
+  const INDICATEURS_SANTE = [
+    { label: 'Femmes enceintes', value: nbFemmesEnceintes, icon: Baby, color: 'pink' },
+    { label: 'Personnes handicapées', value: nbPersonnesHandicapees, icon: Accessibility, color: 'indigo' },
+    { label: 'Hypertendus', value: nbHypertendus, icon: Activity, color: 'red' },
+    { label: 'Diabétiques', value: nbDiabetiques, icon: Activity, color: 'orange' },
+    { label: 'Maladies chroniques', value: nbMaladiesChroniques, icon: Heart, color: 'rose' },
+    { label: 'Personnes prioritaires', value: nbPersonnesPrioritaires, icon: AlertTriangle, color: 'red' },
+    { label: 'Vaccinés à jour', value: nbVaccines, icon: Syringe, color: 'green' },
+    { label: 'Non vaccinés', value: nbNonVaccines, icon: Syringe, color: 'amber' },
+    { label: 'Suivi médical requis', value: nbSuiviMedical, icon: ClipboardList, color: 'blue' },
+  ];
+
   const COLOR_MAP: Record<string, { bg: string; text: string; iconBg: string }> = {
     blue: { bg: 'bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-100' },
     red: { bg: 'bg-red-50', text: 'text-red-700', iconBg: 'bg-red-100' },
@@ -88,6 +140,8 @@ export default function StatsView({ habitants, foyers = [] }: StatsViewProps) {
     indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-100' },
     cyan: { bg: 'bg-cyan-50', text: 'text-cyan-700', iconBg: 'bg-cyan-100' },
     rose: { bg: 'bg-rose-50', text: 'text-rose-700', iconBg: 'bg-rose-100' },
+    pink: { bg: 'bg-pink-50', text: 'text-pink-700', iconBg: 'bg-pink-100' },
+    green: { bg: 'bg-emerald-50', text: 'text-emerald-700', iconBg: 'bg-emerald-100' },
   };
 
   // SVG Donut calculation for Gender
@@ -402,6 +456,60 @@ export default function StatsView({ habitants, foyers = [] }: StatsViewProps) {
                     <p className="text-2xl font-bold text-slate-900">{value}</p>
                     <p className={`text-[11px] font-medium ${c.text} mt-0.5`}>{label}</p>
                     <p className="text-[10px] text-slate-400 mt-1">{pct(value)}% des foyers</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Indicateurs niveau ménage */}
+            <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-6 mb-3">Vulnérabilité & Habitat</h5>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {INDICATEURS_MENAGE.map(({ label, value, icon: Icon, color }) => {
+                const c = COLOR_MAP[color];
+                return (
+                  <div key={label} className={`${c.bg} rounded-xl p-4 border border-slate-100`}>
+                    <div className={`${c.iconBg} w-8 h-8 rounded-lg flex items-center justify-center mb-2`}>
+                      <Icon className={`h-4 w-4 ${c.text}`} />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900">{value}</p>
+                    <p className={`text-[11px] font-medium ${c.text} mt-0.5`}>{label}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Liste ménages prioritaires */}
+            {menagesPrioritaires.length > 0 && (
+              <div className="mt-6 bg-red-50 border border-red-100 rounded-xl p-4">
+                <h5 className="text-xs font-bold text-red-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4" />Ménages prioritaires pour intervention ({menagesPrioritaires.length})
+                </h5>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {menagesPrioritaires.map(f => (
+                    <div key={f.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-xs border border-red-100">
+                      <span className="font-mono font-bold text-slate-700">{f.code_menage}</span>
+                      <span className="text-slate-500">{[f.adresse, f.fokontany].filter(Boolean).join(' · ')}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white">Critique</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Indicateurs santé individuelle */}
+            <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-6 mb-3">Santé de la population ({activeMembres.length} personnes)</h5>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {INDICATEURS_SANTE.map(({ label, value, icon: Icon, color }) => {
+                const c = COLOR_MAP[color];
+                const pctMembres = activeMembres.length > 0 ? Math.round((value / activeMembres.length) * 100) : 0;
+                return (
+                  <div key={label} className={`${c.bg} rounded-xl p-4 border border-slate-100`}>
+                    <div className={`${c.iconBg} w-8 h-8 rounded-lg flex items-center justify-center mb-2`}>
+                      <Icon className={`h-4 w-4 ${c.text}`} />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900">{value}</p>
+                    <p className={`text-[11px] font-medium ${c.text} mt-0.5`}>{label}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">{pctMembres}% de la population</p>
                   </div>
                 );
               })}
