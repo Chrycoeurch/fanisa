@@ -14,7 +14,12 @@ interface Props {
 
 const RELATIONS: RelationChef[] = ['Chef', 'Épouse/Époux', 'Fils', 'Fille', 'Père', 'Mère', 'Frère', 'Sœur', 'Grand-père', 'Grand-mère', 'Petit-fils', 'Petite-fille', 'Oncle', 'Tante', 'Neveu', 'Nièce', 'Autre'];
 const GROUPES_SANG = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Inconnu'];
-const NIVEAUX_ETUDE = ['Non scolarisé', 'Primaire', 'Secondaire', 'Universitaire'];
+const NIVEAUX_ETUDE = ['Non scolarisé', 'Primaire', 'Secondaire', 'Universitaire', 'Formation professionnelle'];
+const ACTIVITES_PRINCIPALES = [
+  'Agriculture', 'Élevage', 'Pêche', 'Artisanat', 'Commerce', 'Transport',
+  'Construction', 'Administration', 'Enseignement', 'Santé', 'Services',
+  'Retraité', 'Sans emploi', 'Étudiant', 'Femme au foyer', 'Autre',
+];
 const VULNERABILITE_CATS = ['Grand âge', 'Handicap', 'Pauvreté extrême', 'Famille monoparentale', 'Maladie chronique', 'Déscolarisation', 'Malnutrition'];
 const AIDES = ['Vivres', 'Aide financière', 'Soins gratuits', 'Bourse', 'Logement social'];
 type Tab = 'identite' | 'famille' | 'education' | 'sante' | 'vulnerabilite';
@@ -50,6 +55,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const [niveau_etude, setNiveauEtude] = useState(membre?.niveau_etude || 'Secondaire');
   const [diplome, setDiplome] = useState(membre?.diplome || '');
   const [profession, setProfession] = useState(membre?.profession || '');
+  const [detail_activite, setDetailActivite] = useState(membre?.employeur || '');
   const [secteur, setSecteur] = useState(membre?.secteur || '');
   const [employeur, setEmployeur] = useState(membre?.employeur || '');
   const [revenu_estime, setRevenu] = useState(membre?.revenu_estime?.toString() || '');
@@ -177,7 +183,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
       diplome: diplome || undefined,
       profession: profession || undefined,
       secteur: secteur || undefined,
-      employeur: employeur || undefined,
+      employeur: (employeur || detail_activite) || undefined,
       revenu_estime: revenu_estime ? parseFloat(revenu_estime) : undefined,
       langues,
       competences,
@@ -460,16 +466,43 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Profession</label>
-                  <input value={profession} onChange={e => setProfession(e.target.value)} placeholder="Ex: Agriculteur, Enseignant" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Activité principale <span className="text-red-500">*</span></label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ACTIVITES_PRINCIPALES.map(a => (
+                      <label key={a} className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition ${profession === a ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <input type="radio" className="hidden" checked={profession === a} onChange={() => setProfession(a)} />{a}
+                      </label>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Secteur économique</label>
-                  <select value={secteur} onChange={e => setSecteur(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
-                    <option value="">Choisir...</option>
-                    {SECTEUR_LIST.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
+
+                {profession && !['Retraité', 'Sans emploi', 'Étudiant', 'Femme au foyer'].includes(profession) && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
+                      Précision sur l'activité <span className="text-slate-400 normal-case font-normal">({profession.toLowerCase()})</span>
+                    </label>
+                    <input
+                      value={detail_activite}
+                      onChange={e => setDetailActivite(e.target.value)}
+                      placeholder={
+                        profession === 'Agriculture' ? 'Ex: Riziculture, maraîchage...' :
+                        profession === 'Élevage' ? 'Ex: Bovins, volailles, porcins...' :
+                        profession === 'Pêche' ? 'Ex: Pêche côtière, aquaculture...' :
+                        profession === 'Artisanat' ? 'Ex: Menuiserie, couture, poterie...' :
+                        profession === 'Commerce' ? 'Ex: Épicerie, vente ambulante...' :
+                        profession === 'Transport' ? 'Ex: Taxi-brousse, livraison...' :
+                        profession === 'Construction' ? 'Ex: Maçonnerie, électricité...' :
+                        profession === 'Administration' ? 'Ex: Fonctionnaire, agent communal...' :
+                        profession === 'Enseignement' ? 'Ex: Instituteur, professeur...' :
+                        profession === 'Santé' ? 'Ex: Infirmier, sage-femme...' :
+                        profession === 'Services' ? 'Ex: Coiffure, restauration...' :
+                        'Préciser...'
+                      }
+                      className="w-full border border-indigo-200 bg-indigo-50/40 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Employeur</label>
