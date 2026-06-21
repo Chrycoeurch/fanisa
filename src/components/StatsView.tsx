@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Habitant } from '../types';
+import { Habitant, Foyer } from '../types';
 import { SECTEUR_LIST, FOKONTANY_LIST } from '../seedData';
-import { Users, Heart, GraduationCap, Briefcase, ChevronRight, TrendingUp } from 'lucide-react';
+import { Users, Heart, GraduationCap, Briefcase, ChevronRight, TrendingUp, Droplets, Zap, Sun, Flame, Wifi, AlertTriangle, ShieldAlert, Gauge } from 'lucide-react';
 
 interface StatsViewProps {
   habitants: Habitant[];
+  foyers?: Foyer[];
 }
 
-export default function StatsView({ habitants }: StatsViewProps) {
+export default function StatsView({ habitants, foyers = [] }: StatsViewProps) {
   const activeHabitants = habitants.filter(h => h.statut === 'Actif');
   const totalCount = activeHabitants.length;
   
@@ -46,6 +47,48 @@ export default function StatsView({ habitants }: StatsViewProps) {
     acc[current] = activeHabitants.filter(h => h.residence.fokontany === current).length;
     return acc;
   }, {} as Record<string, number>);
+
+  // ── Indicateurs automatiques (basés sur les foyers) ──────────
+  const activeFoyers = foyers.filter(f => f.statut === 'Actif');
+  const totalFoyers = activeFoyers.length;
+  const pct = (n: number) => totalFoyers > 0 ? Math.round((n / totalFoyers) * 100) : 0;
+
+  const nbEauPotable = activeFoyers.filter(f => f.eau_potable === true).length;
+  const nbSansToilette = activeFoyers.filter(f => f.toilette_type === 'Aucune toilette').length;
+  const nbElectrifies = activeFoyers.filter(f => f.a_electricite === true).length;
+  const nbSolaire = activeFoyers.filter(f => f.eclairage_source === 'Panneaux solaires').length;
+  const nbCharbonBois = activeFoyers.filter(f => f.cuisson_source === 'Charbon' || f.cuisson_source === 'Bois de chauffe').length;
+  const nbInternet = activeFoyers.filter(f => f.acces_internet === true).length;
+  const nbInondation = activeFoyers.filter(f => (f.risques_types || []).includes('Inondation')).length;
+  const nbVulnerables = activeFoyers.filter(f => f.est_vulnerable === true).length;
+
+  // Taux d'accès global aux services de base : moyenne (eau potable + électricité + toilette correcte + internet)
+  const nbServiceBase = activeFoyers.filter(f =>
+    f.eau_potable === true && f.a_electricite === true && f.toilette_type !== 'Aucune toilette'
+  ).length;
+  const tauxAccesServices = pct(nbServiceBase);
+
+  const INDICATEURS = [
+    { label: 'Accès à l\'eau potable', value: nbEauPotable, icon: Droplets, color: 'blue' },
+    { label: 'Sans toilette', value: nbSansToilette, icon: AlertTriangle, color: 'red' },
+    { label: 'Ménages électrifiés', value: nbElectrifies, icon: Zap, color: 'amber' },
+    { label: 'Utilisant le solaire', value: nbSolaire, icon: Sun, color: 'yellow' },
+    { label: 'Charbon / Bois (cuisson)', value: nbCharbonBois, icon: Flame, color: 'orange' },
+    { label: 'Accès à Internet', value: nbInternet, icon: Wifi, color: 'indigo' },
+    { label: 'Exposés aux inondations', value: nbInondation, icon: AlertTriangle, color: 'cyan' },
+    { label: 'Ménages vulnérables', value: nbVulnerables, icon: ShieldAlert, color: 'rose' },
+  ];
+
+  const COLOR_MAP: Record<string, { bg: string; text: string; iconBg: string }> = {
+    blue: { bg: 'bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-100' },
+    red: { bg: 'bg-red-50', text: 'text-red-700', iconBg: 'bg-red-100' },
+    amber: { bg: 'bg-amber-50', text: 'text-amber-700', iconBg: 'bg-amber-100' },
+    yellow: { bg: 'bg-yellow-50', text: 'text-yellow-700', iconBg: 'bg-yellow-100' },
+    orange: { bg: 'bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-100' },
+    indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-100' },
+    cyan: { bg: 'bg-cyan-50', text: 'text-cyan-700', iconBg: 'bg-cyan-100' },
+    rose: { bg: 'bg-rose-50', text: 'text-rose-700', iconBg: 'bg-rose-100' },
+  };
 
   // SVG Donut calculation for Gender
   const menPercentage = totalCount > 0 ? (menCount / totalCount) * 100 : 0;
@@ -319,6 +362,52 @@ export default function StatsView({ habitants }: StatsViewProps) {
           </div>
         </div>
 
+      </div>
+
+      {/* Indicateurs automatiques du Fokontany */}
+      <div id="auto-indicators" className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Gauge className="h-4 w-4 text-indigo-600" />Indicateurs automatiques</h4>
+          <span className="text-xs text-slate-400">{totalFoyers} foyer{totalFoyers > 1 ? 's' : ''} actif{totalFoyers > 1 ? 's' : ''}</span>
+        </div>
+
+        {totalFoyers === 0 ? (
+          <p className="text-xs text-slate-400 italic py-8 text-center">Aucun foyer enregistré pour le moment.</p>
+        ) : (
+          <>
+            {/* Taux d'accès global */}
+            <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-xl p-5 mb-5 text-white flex items-center justify-between">
+              <div>
+                <p className="text-xs text-indigo-200 uppercase tracking-wider font-semibold">Taux d'accès aux services de base</p>
+                <p className="text-3xl font-bold mt-1">{tauxAccesServices}%</p>
+                <p className="text-[11px] text-indigo-200 mt-0.5">{nbServiceBase} / {totalFoyers} foyers avec eau potable + électricité + toilette</p>
+              </div>
+              <div className="w-20 h-20 relative shrink-0">
+                <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="8" />
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="white" strokeWidth="8" strokeDasharray={`${2 * Math.PI * 34}`} strokeDashoffset={`${2 * Math.PI * 34 * (1 - tauxAccesServices / 100)}`} strokeLinecap="round" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Grille indicateurs */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {INDICATEURS.map(({ label, value, icon: Icon, color }) => {
+                const c = COLOR_MAP[color];
+                return (
+                  <div key={label} className={`${c.bg} rounded-xl p-4 border border-slate-100`}>
+                    <div className={`${c.iconBg} w-8 h-8 rounded-lg flex items-center justify-center mb-2`}>
+                      <Icon className={`h-4 w-4 ${c.text}`} />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-900">{value}</p>
+                    <p className={`text-[11px] font-medium ${c.text} mt-0.5`}>{label}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">{pct(value)}% des foyers</p>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Fokontany demographics ledger */}
