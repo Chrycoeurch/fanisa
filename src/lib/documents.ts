@@ -687,3 +687,652 @@ export const DOCUMENTS_ADMIN = [
   { code: 'FAS', nom: 'Attestation de Travail', description: 'Fanamarinana Asa', icon: '💼', niveau: 'membre' },
   { code: 'PCG', nom: 'Prise en Charge et Garde', description: 'Atteste la garde d\'une personne', icon: '🤝', niveau: 'membre' },
 ] as const;
+
+// ═══════════════════════════════════════════════════════════
+// DOCUMENTS FONCIERS — Phase 2
+// ═══════════════════════════════════════════════════════════
+
+import type { Parcelle, Batiment, TitulaireFoncier, Detenteur, MiseEnValeur } from '../types';
+
+// COT — Certificat d'Occupation de Terrain
+export async function genererCOT(
+  parcelle: Parcelle, detenteur: Detenteur, config: ConfigFokontany,
+  anciennete?: string
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 842;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('COT', config);
+
+  drawHeader(page, config, bold, reg, W, 'COT', 'Certificat d\'Occupation de Terrain', reference);
+  let y = 730;
+
+  const intro = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)} certifie que la personne designee ci-dessous occupe le terrain dont les caracteristiques sont mentionnees dans le present certificat.`;
+  wrap(intro, 95).forEach(l => { dt(page, l, 36, y, reg, 9, C.dark); y -= 13; });
+  y -= 10;
+
+  // Terrain
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'CARACTERISTIQUES DU TERRAIN', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  const col = (W - 80) / 3;
+  const tBoxes = [
+    { l: 'Numero de lot', v: parcelle.numero_lot },
+    { l: 'Superficie', v: parcelle.superficie_m2 ? `${parcelle.superficie_m2} m2` : '-' },
+    { l: 'Usage', v: parcelle.usage || '-' },
+    { l: 'Adresse', v: parcelle.adresse || '-' },
+    { l: 'Fokontany', v: parcelle.fokontany || config.nom_fokontany },
+    { l: 'GPS', v: parcelle.gps_lat ? `${parcelle.gps_lat?.toFixed(4)}, ${parcelle.gps_lng?.toFixed(4)}` : '-' },
+  ];
+  page.drawRectangle({ x: 36, y: y - 75, width: W - 72, height: 80, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  tBoxes.forEach((b, i) => {
+    drawBox(page, b.l, b.v, 36 + (i % 3) * col + 4, y - Math.floor(i / 3) * 32 - 8, col - 8, reg, bold);
+  });
+  y -= 90;
+
+  // Occupant
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'OCCUPANT RECONNU', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  const oBoxes = [
+    { l: 'Nom', v: detenteur.nom || '-' }, { l: 'Prenom', v: detenteur.prenom || '-' },
+    { l: 'CIN', v: detenteur.cin || '-' }, { l: 'Telephone', v: detenteur.telephone || '-' },
+    { l: 'Type de detention', v: detenteur.type_detention },
+    { l: 'Anciennete', v: anciennete || (detenteur.date_debut_occupation ? `Depuis ${new Date(detenteur.date_debut_occupation).toLocaleDateString('fr-FR')}` : '-') },
+  ];
+  page.drawRectangle({ x: 36, y: y - 75, width: W - 72, height: 80, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  oBoxes.forEach((b, i) => {
+    drawBox(page, b.l, b.v, 36 + (i % 3) * col + 4, y - Math.floor(i / 3) * 32 - 8, col - 8, reg, bold);
+  });
+  y -= 90;
+
+  dt(page, 'En foi de quoi, le present certificat est delivre pour servir et valoir ce que de droit.', 36, y - 10, reg, 9, C.dark);
+  drawSignatures(page, config, reg, bold, W, y - 40);
+  await enregistrerDocument('COT', reference, numero, undefined, undefined, { lot: parcelle.numero_lot });
+  return await pdf.save();
+}
+
+// JOR — JOROLAVA
+export async function genererJOR(
+  parcelle: Parcelle, detenteur: Detenteur, config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 842;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('JOR', config);
+
+  drawHeader(page, config, bold, reg, W, 'JOR', 'JOROLAVA - Reconnaissance Locale d\'Occupation', reference);
+  let y = 720;
+
+  // Bandeau officiel JOROLAVA
+  page.drawRectangle({ x: 36, y: y - 20, width: W - 72, height: 24, color: rgb(0.95, 0.90, 0.75), borderColor: rgb(0.7, 0.5, 0.1), borderWidth: 1, borderRadius: 3 });
+  dt(page, 'JOROLAVA - Document de reconnaissance locale d\'occupation et de detention fonciere', 46, y - 4, bold, 8, rgb(0.5, 0.3, 0.0));
+  dt(page, 'Ce document ne constitue pas un titre de propriete mais une reconnaissance locale.', 46, y - 14, reg, 7, rgb(0.6, 0.4, 0.1));
+  y -= 34;
+
+  const intro = `Nous, Chef du Fokontany ${clean(config.nom_fokontany)}, reconnaissons par le present document que la personne ci-dessous est reconnue localement comme detenteur du terrain identifie dans le present acte.`;
+  wrap(intro, 95).forEach(l => { dt(page, l, 36, y, reg, 9, C.dark); y -= 13; });
+  y -= 10;
+
+  const col = (W - 80) / 2;
+
+  // Terrain
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, '1. IDENTIFICATION DU TERRAIN', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 70, width: W - 72, height: 75, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  [
+    { l: 'Numero de lot', v: parcelle.numero_lot },
+    { l: 'Superficie', v: parcelle.superficie_m2 ? `${parcelle.superficie_m2} m2` : '-' },
+    { l: 'Adresse', v: parcelle.adresse || '-' },
+    { l: 'Usage', v: parcelle.usage || '-' },
+  ].forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 2) * col + 4, y - Math.floor(i / 2) * 32 - 8, col - 8, reg, bold));
+  y -= 85;
+
+  // Détenteur
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, '2. DETENTEUR RECONNU', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 100, width: W - 72, height: 105, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  [
+    { l: 'Nom', v: detenteur.nom || '-' }, { l: 'Prenom', v: detenteur.prenom || '-' },
+    { l: 'CIN', v: detenteur.cin || '-' }, { l: 'Telephone', v: detenteur.telephone || '-' },
+    { l: 'Type de detention', v: detenteur.type_detention },
+    { l: 'Document detenu', v: detenteur.document_detenu || '-' },
+  ].forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 2) * col + 4, y - Math.floor(i / 2) * 32 - 8, col - 8, reg, bold));
+  y -= 115;
+
+  // Ancienneté
+  if (detenteur.date_debut_occupation) {
+    page.drawRectangle({ x: 36, y: y - 28, width: W - 72, height: 32, color: rgb(0.95, 0.90, 0.75), borderColor: rgb(0.7, 0.5, 0.1), borderWidth: 0.5, borderRadius: 4 });
+    dt(page, 'ANCIENNETE D\'OCCUPATION :', 46, y - 8, bold, 8.5, rgb(0.5, 0.3, 0.0));
+    dt(page, `Depuis le ${new Date(detenteur.date_debut_occupation).toLocaleDateString('fr-FR')}`, 220, y - 8, bold, 10, C.dark);
+    y -= 42;
+  }
+
+  if (detenteur.notes) {
+    const noteLines = wrap(detenteur.notes, 90);
+    dt(page, 'Observations :', 36, y - 2, bold, 8, C.mid);
+    y -= 13;
+    noteLines.forEach(l => { dt(page, l, 36, y, reg, 8.5, C.dark); y -= 12; });
+    y -= 5;
+  }
+
+  dt(page, 'En foi de quoi, le present JOROLAVA est delivre pour servir et valoir ce que de droit.', 36, y - 10, reg, 9, C.dark);
+  y -= 20;
+  dt(page, 'Ce document est valable dans les limites du Fokontany et ne peut se substituer a un titre foncier officiel.', 36, y - 5, reg, 7.5, C.light);
+  drawSignatures(page, config, reg, bold, W, y - 35);
+  await enregistrerDocument('JOR', reference, numero, undefined, undefined, { lot: parcelle.numero_lot });
+  return await pdf.save();
+}
+
+// ADF — Attestation de Détention Foncière
+export async function genererADF(
+  parcelle: Parcelle, detenteur: Detenteur, config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 842;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('ADF', config);
+
+  drawHeader(page, config, bold, reg, W, 'ADF', 'Attestation de Detention Fonciere', reference);
+  let y = 730;
+  const col = (W - 80) / 2;
+
+  const intro = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)} atteste par le present document que la personne ci-dessous est reconnue comme detenteur du terrain identifie, en vertu des documents en sa possession et de la reconnaissance locale.`;
+  wrap(intro, 95).forEach(l => { dt(page, l, 36, y, reg, 9, C.dark); y -= 13; });
+  y -= 10;
+
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'TERRAIN CONCERNE', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 70, width: W - 72, height: 75, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  [
+    { l: 'Lot', v: parcelle.numero_lot }, { l: 'Superficie', v: parcelle.superficie_m2 ? `${parcelle.superficie_m2} m2` : '-' },
+    { l: 'Adresse', v: parcelle.adresse || '-' }, { l: 'Titre foncier', v: parcelle.titre_foncier || 'Non titre' },
+  ].forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 2) * col + 4, y - Math.floor(i / 2) * 32 - 8, col - 8, reg, bold));
+  y -= 85;
+
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'DETENTEUR RECONNU', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 100, width: W - 72, height: 105, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  [
+    { l: 'Nom', v: detenteur.nom || '-' }, { l: 'Prenom', v: detenteur.prenom || '-' },
+    { l: 'CIN', v: detenteur.cin || '-' }, { l: 'Telephone', v: detenteur.telephone || '-' },
+    { l: 'Qualite', v: detenteur.type_detention }, { l: 'Document detenu', v: detenteur.document_detenu || '-' },
+  ].forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 2) * col + 4, y - Math.floor(i / 2) * 32 - 8, col - 8, reg, bold));
+  y -= 115;
+
+  dt(page, 'En foi de quoi, la presente attestation est delivree pour servir et valoir ce que de droit.', 36, y - 10, reg, 9, C.dark);
+  drawSignatures(page, config, reg, bold, W, y - 40);
+  await enregistrerDocument('ADF', reference, numero);
+  return await pdf.save();
+}
+
+// APB — Attestation de Propriété de Bâtiment
+export async function genererAPB(
+  parcelle: Parcelle, batiment: Batiment, proprietaire: { nom?: string; prenom?: string; cin?: string; telephone?: string; lien?: string },
+  config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 842;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('APB', config);
+
+  drawHeader(page, config, bold, reg, W, 'APB', 'Attestation de Propriete de Batiment', reference);
+  let y = 730;
+  const col = (W - 80) / 2;
+
+  const intro = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)} atteste que la personne ci-dessous est reconnue comme proprietaire declare du batiment dont les caracteristiques sont mentionnees.`;
+  wrap(intro, 95).forEach(l => { dt(page, l, 36, y, reg, 9, C.dark); y -= 13; });
+  y -= 10;
+
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'BATIMENT CONCERNE', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 85, width: W - 72, height: 90, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  [
+    { l: 'Reference batiment', v: batiment.reference_batiment },
+    { l: 'Type', v: batiment.type_batiment },
+    { l: 'Etat', v: batiment.etat },
+    { l: 'Superficie', v: batiment.superficie_m2 ? `${batiment.superficie_m2} m2` : '-' },
+    { l: 'Lot parcelle', v: parcelle.numero_lot },
+    { l: 'Adresse', v: parcelle.adresse || '-' },
+  ].forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 2) * col + 4, y - Math.floor(i / 2) * 32 - 8, col - 8, reg, bold));
+  y -= 100;
+
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'PROPRIETAIRE DECLARE', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 85, width: W - 72, height: 90, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  [
+    { l: 'Nom', v: proprietaire.nom || '-' }, { l: 'Prenom', v: proprietaire.prenom || '-' },
+    { l: 'CIN', v: proprietaire.cin || '-' }, { l: 'Telephone', v: proprietaire.telephone || '-' },
+    { l: 'Lien avec parcelle', v: proprietaire.lien || '-' },
+  ].forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 2) * col + 4, y - Math.floor(i / 2) * 32 - 8, col - 8, reg, bold));
+  y -= 100;
+
+  page.drawRectangle({ x: 36, y: y - 22, width: W - 72, height: 26, color: rgb(0.97, 0.97, 0.75), borderColor: rgb(0.7, 0.7, 0.1), borderWidth: 0.5, borderRadius: 3 });
+  dt(page, 'Note : Ce document atteste la propriete declaree du batiment et non du terrain sous-jacent.', 46, y - 5, reg, 8, rgb(0.5, 0.5, 0.0));
+  dt(page, 'La propriete fonciere peut appartenir a une personne differente.', 46, y - 16, reg, 7.5, rgb(0.5, 0.5, 0.0));
+  y -= 32;
+
+  dt(page, 'En foi de quoi, la presente attestation est delivree pour servir et valoir ce que de droit.', 36, y - 10, reg, 9, C.dark);
+  drawSignatures(page, config, reg, bold, W, y - 40);
+  await enregistrerDocument('APB', reference, numero);
+  return await pdf.save();
+}
+
+// AMV — Attestation de Mise en Valeur
+export async function genererAMV(
+  parcelle: Parcelle, valeur: MiseEnValeur, detenteur: Detenteur, config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 842;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('AMV', config);
+
+  drawHeader(page, config, bold, reg, W, 'AMV', 'Attestation de Mise en Valeur - Taratasy Fanamaintisa-Momaly', reference);
+  let y = 710;
+
+  const intro = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)} atteste que le terrain identifie ci-dessous a fait l'objet d'investissements et de mises en valeur par son detenteur reconnu.`;
+  wrap(intro, 95).forEach(l => { dt(page, l, 36, y, reg, 9, C.dark); y -= 13; });
+  y -= 10;
+
+  // Parcelle
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'TERRAIN', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 40, width: W - 72, height: 45, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  drawBox(page, 'Lot', parcelle.numero_lot, 46, y - 8, 120, reg, bold);
+  drawBox(page, 'Superficie', parcelle.superficie_m2 ? `${parcelle.superficie_m2} m2` : '-', 200, y - 8, 120, reg, bold);
+  drawBox(page, 'Adresse', parcelle.adresse || '-', 350, y - 8, 195, reg, bold);
+  y -= 55;
+
+  // Détenteur
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'DETENTEUR / INVESTISSEUR', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 40, width: W - 72, height: 45, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  drawBox(page, 'Nom et Prenom', `${detenteur.nom || '-'} ${detenteur.prenom || ''}`, 46, y - 8, 220, reg, bold);
+  drawBox(page, 'CIN', detenteur.cin || '-', 300, y - 8, 140, reg, bold);
+  drawBox(page, 'Depuis', detenteur.date_debut_occupation ? new Date(detenteur.date_debut_occupation).toLocaleDateString('fr-FR') : '-', 470, y - 8, 80, reg, bold);
+  y -= 55;
+
+  // Investissements
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, 'ELEMENTS DE MISE EN VALEUR CONSTATES', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+
+  const elements = [
+    { k: 'maison', l: 'Maison / Batiment', icon: '🏠' },
+    { k: 'cloture', l: 'Cloture', icon: '🧱' },
+    { k: 'cultures', l: 'Cultures / Agriculture', icon: '🌾' },
+    { k: 'elevage', l: 'Elevage', icon: '🐄' },
+    { k: 'eau', l: 'Installation eau', icon: '💧' },
+    { k: 'electricite', l: 'Installation electrique', icon: '⚡' },
+    { k: 'commerce', l: 'Activite commerciale', icon: '🏪' },
+  ];
+
+  const eW = (W - 80) / 2;
+  elements.forEach((el, i) => {
+    const present = !!(valeur as any)[el.k];
+    const ex = 36 + (i % 2) * eW + 4;
+    const ey = y - Math.floor(i / 2) * 22 - 8;
+    page.drawRectangle({ x: ex, y: ey - 14, width: eW - 8, height: 16, color: present ? C.greenBg : rgb(0.97, 0.97, 0.97), borderColor: present ? C.green : C.border, borderWidth: 0.5, borderRadius: 2 });
+    dt(page, `${present ? '[OUI]' : '[NON]'}  ${el.l}`, ex + 6, ey - 4, present ? bold : reg, 8, present ? C.green : C.light);
+  });
+  y -= Math.ceil(elements.length / 2) * 22 + 12;
+
+  if (valeur.annee_debut) {
+    page.drawRectangle({ x: 36, y: y - 20, width: W - 72, height: 24, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 3 });
+    dt(page, `Debut des mises en valeur : ${valeur.annee_debut}`, 46, y - 6, bold, 9, C.dark);
+    y -= 30;
+  }
+  if (valeur.description) {
+    wrap(valeur.description, 95).forEach(l => { dt(page, l, 36, y, reg, 8.5, C.dark); y -= 12; });
+    y -= 5;
+  }
+
+  dt(page, 'En foi de quoi, la presente attestation est delivree pour servir et valoir ce que de droit.', 36, y - 10, reg, 9, C.dark);
+  drawSignatures(page, config, reg, bold, W, y - 40);
+  await enregistrerDocument('AMV', reference, numero);
+  return await pdf.save();
+}
+
+// FP — Fiche Parcellaire
+export async function genererFP(
+  parcelle: Parcelle, titulaire: TitulaireFoncier | null, detenteur: Detenteur | null,
+  batiments: Batiment[], valeur: MiseEnValeur | null, config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 842;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('FP', config);
+  const col = (W - 80) / 3;
+
+  drawHeader(page, config, bold, reg, W, 'FP', 'Fiche Parcellaire Complete', reference);
+  let y = 725;
+
+  // Parcelle
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, '1. IDENTIFICATION DE LA PARCELLE', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  const pBoxes = [
+    { l: 'Numero de lot', v: parcelle.numero_lot },
+    { l: 'Titre foncier', v: parcelle.titre_foncier || 'Non titre' },
+    { l: 'Cadastre', v: parcelle.cadastre_ref || '-' },
+    { l: 'Superficie', v: parcelle.superficie_m2 ? `${parcelle.superficie_m2} m2` : '-' },
+    { l: 'Usage', v: parcelle.usage || '-' },
+    { l: 'Fokontany', v: parcelle.fokontany || config.nom_fokontany },
+  ];
+  page.drawRectangle({ x: 36, y: y - 70, width: W - 72, height: 75, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  pBoxes.forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 3) * col + 4, y - Math.floor(i / 3) * 32 - 8, col - 8, reg, bold));
+  y -= 85;
+  if (parcelle.adresse) { dt(page, `Adresse : ${clean(parcelle.adresse)}`, 46, y, reg, 8.5, C.dark); y -= 15; }
+  if (parcelle.gps_lat) { dt(page, `GPS : ${parcelle.gps_lat?.toFixed(5)}, ${parcelle.gps_lng?.toFixed(5)}`, 46, y, reg, 8.5, C.mid); y -= 15; }
+
+  // Titulaire
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: rgb(0.6, 0.5, 0.1), borderRadius: 2 });
+  dt(page, '2. TITULAIRE FONCIER', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  if (titulaire) {
+    page.drawRectangle({ x: 36, y: y - 40, width: W - 72, height: 45, color: rgb(1, 0.98, 0.92), borderColor: rgb(0.8, 0.6, 0.1), borderWidth: 0.5, borderRadius: 4 });
+    drawBox(page, 'Type', titulaire.type_titulaire, 46, y - 8, 140, reg, bold);
+    drawBox(page, 'Nom', `${titulaire.nom || '-'} ${titulaire.prenom || ''}`, 210, y - 8, 180, reg, bold);
+    drawBox(page, 'CIN', titulaire.cin || '-', 415, y - 8, 140, reg, bold);
+  } else {
+    dt(page, 'Titulaire non renseigne', 46, y - 15, reg, 8.5, C.light);
+  }
+  y -= 55;
+
+  // Détenteur
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, '3. DETENTEUR JOROLAVA', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  if (detenteur) {
+    page.drawRectangle({ x: 36, y: y - 40, width: W - 72, height: 45, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+    drawBox(page, 'Qualite', detenteur.type_detention, 46, y - 8, 140, reg, bold);
+    drawBox(page, 'Nom', `${detenteur.nom || '-'} ${detenteur.prenom || ''}`, 210, y - 8, 180, reg, bold);
+    drawBox(page, 'CIN', detenteur.cin || '-', 415, y - 8, 140, reg, bold);
+  } else {
+    dt(page, 'Detenteur non renseigne', 46, y - 15, reg, 8.5, C.light);
+  }
+  y -= 55;
+
+  // Bâtiments
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, `4. BATIMENTS (${batiments.length})`, 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  if (batiments.length > 0) {
+    page.drawRectangle({ x: 36, y: y - 14, width: W - 72, height: 16, color: rgb(0.93, 0.96, 1) });
+    ['Reference', 'Type', 'Etat', 'Superficie', 'Niveaux', 'Construction'].forEach((h, i) => {
+      dt(page, h, [40, 105, 200, 270, 345, 415][i], y - 4, bold, 7, C.indigo);
+    });
+    y -= 16;
+    batiments.forEach((b, idx) => {
+      page.drawRectangle({ x: 36, y: y - 13, width: W - 72, height: 14, color: idx % 2 === 0 ? C.bg : C.white });
+      [b.reference_batiment, b.type_batiment, b.etat, b.superficie_m2 ? `${b.superficie_m2}m2` : '-', String(b.nombre_niveaux || 1), String(b.annee_construction || '-')]
+        .forEach((v, i) => dt(page, clean(v), [40, 105, 200, 270, 345, 415][i], y - 4, reg, 7.5, C.dark));
+      y -= 14;
+    });
+  } else { dt(page, 'Aucun batiment enregistre', 46, y - 12, reg, 8.5, C.light); }
+  y -= 15;
+
+  // Mise en valeur
+  if (valeur) {
+    page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+    dt(page, '5. MISE EN VALEUR', 46, y - 4, bold, 8, C.white);
+    y -= 22;
+    const elems = ['maison', 'cloture', 'cultures', 'elevage', 'eau', 'electricite', 'commerce'];
+    page.drawRectangle({ x: 36, y: y - 20, width: W - 72, height: 24, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+    let vx = 46;
+    elems.forEach(k => {
+      const ok = !!(valeur as any)[k];
+      dt(page, ok ? `[OK] ${k}` : `[-] ${k}`, vx, y - 6, ok ? bold : reg, 7.5, ok ? C.green : C.light);
+      vx += 70;
+    });
+    y -= 30;
+  }
+
+  drawSignatures(page, config, reg, bold, W, y - 15);
+  await enregistrerDocument('FP', reference, numero);
+  return await pdf.save();
+}
+
+// FB — Fiche Bâtiment
+export async function genererFB(
+  parcelle: Parcelle, batiment: Batiment, config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 842;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('FB', config);
+  const col = (W - 80) / 2;
+
+  drawHeader(page, config, bold, reg, W, 'FB', 'Fiche Batiment Complete', reference);
+  let y = 725;
+
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, '1. IDENTIFICATION DU BATIMENT', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 100, width: W - 72, height: 105, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  [
+    { l: 'Reference', v: batiment.reference_batiment }, { l: 'Type', v: batiment.type_batiment },
+    { l: 'Etat', v: batiment.etat }, { l: 'Superficie', v: batiment.superficie_m2 ? `${batiment.superficie_m2} m2` : '-' },
+    { l: 'Niveaux', v: String(batiment.nombre_niveaux || 1) }, { l: 'Annee construction', v: String(batiment.annee_construction || '-') },
+    { l: 'Materiaux mur', v: batiment.materiaux_mur || '-' }, { l: 'Materiaux toiture', v: batiment.materiaux_toiture || '-' },
+  ].forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 2) * col + 4, y - Math.floor(i / 2) * 26 - 8, col - 8, reg, bold));
+  y -= 115;
+
+  page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+  dt(page, '2. PARCELLE SUPPORT', 46, y - 4, bold, 8, C.white);
+  y -= 22;
+  page.drawRectangle({ x: 36, y: y - 40, width: W - 72, height: 45, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+  drawBox(page, 'Lot', parcelle.numero_lot, 46, y - 8, 140, reg, bold);
+  drawBox(page, 'Adresse', parcelle.adresse || '-', 210, y - 8, 200, reg, bold);
+  drawBox(page, 'Usage parcelle', parcelle.usage || '-', 440, y - 8, 110, reg, bold);
+  y -= 55;
+
+  if (batiment.notes) {
+    page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+    dt(page, '3. OBSERVATIONS', 46, y - 4, bold, 8, C.white);
+    y -= 22;
+    wrap(batiment.notes, 90).forEach(l => { dt(page, l, 36, y, reg, 8.5, C.dark); y -= 12; });
+    y -= 5;
+  }
+
+  // Zone photo bâtiment (placeholder)
+  page.drawRectangle({ x: W - 150, y: y - 90, width: 110, height: 80, color: C.bg, borderColor: C.border, borderWidth: 1 });
+  dt(page, 'PHOTO', W - 120, y - 45, reg, 8, C.light);
+  dt(page, 'DU BATIMENT', W - 125, y - 57, reg, 8, C.light);
+
+  drawSignatures(page, config, reg, bold, W, y - 100);
+  await enregistrerDocument('FB', reference, numero);
+  return await pdf.save();
+}
+
+// IFT — Ticket IFT (Impôt Foncier)
+export async function genererIFT(
+  parcelle: Parcelle, batiment: Batiment | null, titulaire: TitulaireFoncier | null,
+  detenteur: Detenteur | null, config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 420; // Format A5 paysage
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('IFT', config);
+
+  // Background
+  page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: C.white });
+  page.drawRectangle({ x: 0, y: H - 30, width: W, height: 30, color: C.indigo });
+  dt(page, `TICKET IFT - ${config.code_fokontany}-${config.code_quartier}-${config.code_carreau}  |  Ref: ${reference}  |  ${new Date().toLocaleDateString('fr-FR')}`, 20, H - 19, bold, 8, C.white);
+
+  // Ligne séparation verticale
+  page.drawLine({ start: { x: W / 2, y: 20 }, end: { x: W / 2, y: H - 35 }, thickness: 0.5, color: C.border });
+
+  let y = H - 45;
+
+  // Côté gauche — Terrain
+  dt(page, 'TERRAIN', 20, y, bold, 8, C.indigo);
+  y -= 14;
+  const tInfo = [
+    ['Lot', parcelle.numero_lot],
+    ['Superficie', parcelle.superficie_m2 ? `${parcelle.superficie_m2} m2` : '-'],
+    ['Adresse', parcelle.adresse || '-'],
+    ['Titre foncier', parcelle.titre_foncier || 'Non titre'],
+  ];
+  tInfo.forEach(([l, v]) => {
+    dt(page, `${l} :`, 20, y, reg, 7.5, C.mid);
+    dt(page, clean(v), 90, y, bold, 8, C.dark);
+    y -= 13;
+  });
+
+  y = H - 45;
+  // Côté droit — Propriétaire/Détenteur
+  dt(page, 'DETENTEUR / PROPRIETAIRE', W / 2 + 10, y, bold, 8, C.indigo);
+  y -= 14;
+  const dInfo = detenteur ? [
+    ['Nom', `${detenteur.nom || '-'} ${detenteur.prenom || ''}`],
+    ['CIN', detenteur.cin || '-'],
+    ['Qualite', detenteur.type_detention],
+  ] : titulaire ? [
+    ['Nom', `${titulaire.nom || '-'} ${titulaire.prenom || ''}`],
+    ['CIN', titulaire.cin || '-'],
+    ['Type', titulaire.type_titulaire],
+  ] : [['Non renseigne', '-']];
+  dInfo.forEach(([l, v]) => {
+    dt(page, `${l} :`, W / 2 + 10, y, reg, 7.5, C.mid);
+    dt(page, clean(v), W / 2 + 90, y, bold, 8, C.dark);
+    y -= 13;
+  });
+
+  // Bâtiment si présent
+  if (batiment) {
+    y -= 5;
+    dt(page, 'BATIMENT', W / 2 + 10, y, bold, 8, C.indigo);
+    y -= 13;
+    [['Ref.', batiment.reference_batiment], ['Type', batiment.type_batiment], ['Etat', batiment.etat]].forEach(([l, v]) => {
+      dt(page, `${l} :`, W / 2 + 10, y, reg, 7.5, C.mid);
+      dt(page, clean(v), W / 2 + 60, y, bold, 8, C.dark);
+      y -= 13;
+    });
+  }
+
+  // Statut JOROLAVA
+  const hasJOR = !!detenteur;
+  page.drawRectangle({ x: 20, y: 25, width: 150, height: 20, color: hasJOR ? C.greenBg : C.redBg, borderColor: hasJOR ? C.green : C.red, borderWidth: 0.5, borderRadius: 3 });
+  dt(page, hasJOR ? 'STATUT JOROLAVA : OUI' : 'STATUT JOROLAVA : NON', 28, 33, bold, 8, hasJOR ? C.green : C.red);
+
+  dt(page, `Fokontany Local Ledger v2.0 - ${config.nom_fokontany}`, 20, 8, reg, 6, C.light);
+  await enregistrerDocument('IFT', reference, numero);
+  return await pdf.save();
+}
+
+// DRF — Demande de Régularisation Foncière
+export async function genererDRF(
+  parcelle: Parcelle, detenteur: Detenteur | null, titulaire: TitulaireFoncier | null,
+  batiments: Batiment[], valeur: MiseEnValeur | null, config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const W = 595, H = 842;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('DRF', config);
+  const col = (W - 80) / 2;
+
+  drawHeader(page, config, bold, reg, W, 'DRF', 'Demande de Regularisation Fonciere', reference);
+  let y = 715;
+
+  const intro = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)} certifie l'exactitude des informations ci-dessous et appuie la demande de regularisation fonciere de la parcelle identifiee.`;
+  wrap(intro, 95).forEach(l => { dt(page, l, 36, y, reg, 9, C.dark); y -= 13; });
+  y -= 10;
+
+  // Résumé complet
+  const sections = [
+    { title: '1. PARCELLE', boxes: [
+      { l: 'Lot', v: parcelle.numero_lot }, { l: 'Superficie', v: parcelle.superficie_m2 ? `${parcelle.superficie_m2} m2` : '-' },
+      { l: 'GPS', v: parcelle.gps_lat ? `${parcelle.gps_lat?.toFixed(4)}, ${parcelle.gps_lng?.toFixed(4)}` : '-' },
+      { l: 'Adresse', v: parcelle.adresse || '-' },
+    ]},
+    { title: '2. TITULAIRE FONCIER', boxes: [
+      { l: 'Type', v: titulaire?.type_titulaire || 'Inconnu' }, { l: 'Nom', v: titulaire ? `${titulaire.nom || '-'} ${titulaire.prenom || ''}` : 'Non renseigne' },
+    ]},
+    { title: '3. DETENTEUR', boxes: [
+      { l: 'Nom', v: detenteur ? `${detenteur.nom || '-'} ${detenteur.prenom || ''}` : 'Non renseigne' },
+      { l: 'Qualite', v: detenteur?.type_detention || '-' },
+      { l: 'CIN', v: detenteur?.cin || '-' },
+      { l: 'Depuis', v: detenteur?.date_debut_occupation ? new Date(detenteur.date_debut_occupation).toLocaleDateString('fr-FR') : '-' },
+    ]},
+  ];
+
+  sections.forEach(s => {
+    page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+    dt(page, s.title, 46, y - 4, bold, 8, C.white);
+    y -= 22;
+    const h = Math.ceil(s.boxes.length / 2) * 32 + 10;
+    page.drawRectangle({ x: 36, y: y - h, width: W - 72, height: h + 5, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
+    s.boxes.forEach((b, i) => drawBox(page, b.l, b.v, 36 + (i % 2) * col + 4, y - Math.floor(i / 2) * 32 - 8, col - 8, reg, bold));
+    y -= h + 15;
+  });
+
+  // Bâtiments
+  if (batiments.length > 0) {
+    page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+    dt(page, `4. BATIMENTS (${batiments.length})`, 46, y - 4, bold, 8, C.white);
+    y -= 22;
+    batiments.slice(0, 3).forEach(b => {
+      page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.bg, borderColor: C.border, borderWidth: 0.3, borderRadius: 2 });
+      dt(page, `${b.reference_batiment} - ${b.type_batiment} - ${b.etat} ${b.superficie_m2 ? `- ${b.superficie_m2} m2` : ''}`, 46, y - 5, reg, 8, C.dark);
+      y -= 22;
+    });
+    y -= 5;
+  }
+
+  // Mise en valeur
+  if (valeur) {
+    const mvItems = ['maison', 'cloture', 'cultures', 'elevage', 'eau', 'electricite', 'commerce'].filter(k => !!(valeur as any)[k]);
+    if (mvItems.length > 0) {
+      page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 20, color: C.indigo, borderRadius: 2 });
+      dt(page, '5. MISE EN VALEUR', 46, y - 4, bold, 8, C.white);
+      y -= 22;
+      page.drawRectangle({ x: 36, y: y - 18, width: W - 72, height: 22, color: C.bg, borderColor: C.border, borderWidth: 0.3, borderRadius: 2 });
+      dt(page, mvItems.join(', ') + (valeur.annee_debut ? ` (depuis ${valeur.annee_debut})` : ''), 46, y - 6, reg, 8.5, C.dark);
+      y -= 28;
+    }
+  }
+
+  dt(page, 'Je soussigne certifie l\'exactitude des informations ci-dessus et appuie la presente demande de regularisation.', 36, y - 10, reg, 9, C.dark);
+  drawSignatures(page, config, reg, bold, W, y - 40);
+  await enregistrerDocument('DRF', reference, numero);
+  return await pdf.save();
+}
+
+export const DOCUMENTS_FONCIERS = [
+  { code: 'COT', nom: "Certificat d'Occupation de Terrain", description: "Atteste l'occupation d'un terrain", icon: '🌍', besoin: ['parcelle', 'detenteur'] },
+  { code: 'JOR', nom: 'JOROLAVA', description: "Reconnaissance locale d'occupation", icon: '📜', besoin: ['parcelle', 'detenteur'] },
+  { code: 'ADF', nom: 'Attestation de Détention Foncière', description: 'Identifie le détenteur reconnu', icon: '🤝', besoin: ['parcelle', 'detenteur'] },
+  { code: 'APB', nom: "Attestation de Propriété de Bâtiment", description: 'Propriétaire déclaré du bâtiment', icon: '🏗️', besoin: ['parcelle', 'batiment'] },
+  { code: 'AMV', nom: 'Attestation de Mise en Valeur', description: 'Justifie les investissements réalisés', icon: '🌿', besoin: ['parcelle', 'detenteur', 'valeur'] },
+  { code: 'FP', nom: 'Fiche Parcellaire', description: 'Fiche complète de la parcelle', icon: '📋', besoin: ['parcelle'] },
+  { code: 'FB', nom: 'Fiche Bâtiment', description: 'Fiche complète du bâtiment', icon: '🏠', besoin: ['parcelle', 'batiment'] },
+  { code: 'DRF', nom: 'Demande de Régularisation Foncière', description: 'Prépare le dossier de régularisation', icon: '📑', besoin: ['parcelle'] },
+  { code: 'IFT', nom: 'Ticket IFT', description: 'Prépare la fiscalité foncière', icon: '🏷️', besoin: ['parcelle'] },
+] as const;

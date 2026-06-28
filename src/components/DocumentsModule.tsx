@@ -5,8 +5,11 @@ import {
   getConfig, updateConfig, ConfigFokontany,
   genererCR, genererCVI, genererCVC, genererCEL, genererBC,
   genererCM, genererFM, genererFFD, genererFAS, genererPCG,
-  telechargerPDF, DOCUMENTS_ADMIN
+  telechargerPDF, DOCUMENTS_ADMIN,
+  genererCOT, genererJOR, genererADF, genererAPB, genererAMV,
+  genererFP, genererFB, genererDRF, genererIFT, DOCUMENTS_FONCIERS
 } from '../lib/documents';
+import { Parcelle, Batiment, Detenteur, TitulaireFoncier, MiseEnValeur } from '../types';
 import { FileText, Settings, Search, Download, Clock, CheckCircle, Loader2, X, ChevronDown, User, Home, AlertCircle } from 'lucide-react';
 
 interface Props {
@@ -28,6 +31,13 @@ export default function DocumentsModule({ foyers, membres }: Props) {
   const [showConfig, setShowConfig] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
   const [docHistory, setDocHistory] = useState<DocGenere[]>([]);
+  // Foncier
+  const [parcelles, setParcelles] = useState<Parcelle[]>([]);
+  const [selectedParcelle, setSelectedParcelle] = useState<Parcelle | null>(null);
+  const [parcelleDetails, setParcelleDetails] = useState<{ titulaire?: TitulaireFoncier; detenteur?: Detenteur; batiments?: Batiment[]; valeur?: MiseEnValeur } | null>(null);
+  const [selectedBatiment, setSelectedBatiment] = useState<Batiment | null>(null);
+  const [showParcelleSearch, setShowParcelleSearch] = useState(false);
+  const [searchParcelle, setSearchParcelle] = useState('');
   const [searchFoyer, setSearchFoyer] = useState('');
   const [selectedFoyer, setSelectedFoyer] = useState<Foyer | null>(null);
   const [selectedMembre, setSelectedMembre] = useState<Membre | null>(null);
@@ -43,11 +53,49 @@ export default function DocumentsModule({ foyers, membres }: Props) {
   useEffect(() => {
     getConfig().then(setConfig);
     loadHistory();
+    supabase.from('parcelles').select('*').order('created_at', { ascending: false })
+      .then(({ data }) => setParcelles((data || []) as Parcelle[]));
   }, []);
 
   const loadHistory = async () => {
     const { data } = await supabase.from('documents_generes').select('*').order('genere_le', { ascending: false }).limit(50);
     setDocHistory((data || []) as DocGenere[]);
+  };
+
+  const loadParcelleDetails = async (parcelle: Parcelle) => {
+    const [t, d, b, v] = await Promise.all([
+      supabase.from('titulaires_fonciers').select('*').eq('parcelle_id', parcelle.id).single(),
+      supabase.from('detenteurs').select('*').eq('parcelle_id', parcelle.id).single(),
+      supabase.from('batiments').select('*').eq('parcelle_id', parcelle.id),
+      supabase.from('mises_en_valeur').select('*').eq('parcelle_id', parcelle.id).single(),
+    ]);
+    setParcelleDetails({ titulaire: t.data || undefined, detenteur: d.data || undefined, batiments: b.data || [], valeur: v.data || undefined });
+    setSelectedBatiment(b.data?.[0] || null);
+  };
+
+  const handleGenererFoncier = async (code: string) => {
+    if (!config || !selectedParcelle || !parcelleDetails) return;
+    setGenerating(code);
+    try {
+      let bytes: Uint8Array;
+      const { titulaire, detenteur, batiments, valeur } = parcelleDetails;
+      const bat = selectedBatiment || batiments?.[0] || {} as Batiment;
+      switch (code) {
+        case 'COT': bytes = await genererCOT(selectedParcelle, detenteur!, config); break;
+        case 'JOR': bytes = await genererJOR(selectedParcelle, detenteur!, config); break;
+        case 'ADF': bytes = await genererADF(selectedParcelle, detenteur!, config); break;
+        case 'APB': bytes = await genererAPB(selectedParcelle, bat, {}, config); break;
+        case 'AMV': bytes = await genererAMV(selectedParcelle, valeur!, detenteur!, config); break;
+        case 'FP':  bytes = await genererFP(selectedParcelle, titulaire || null, detenteur || null, batiments || [], valeur || null, config); break;
+        case 'FB':  bytes = await genererFB(selectedParcelle, bat, config); break;
+        case 'DRF': bytes = await genererDRF(selectedParcelle, detenteur || null, titulaire || null, batiments || [], valeur || null, config); break;
+        case 'IFT': bytes = await genererIFT(selectedParcelle, bat || null, titulaire || null, detenteur || null, config); break;
+        default: throw new Error('Document non implémenté');
+      }
+      await telechargerPDF(bytes, `${code}_LOT${selectedParcelle.numero_lot}_${new Date().getFullYear()}.pdf`);
+      await loadHistory();
+    } catch (e) { alert('Erreur : ' + e); }
+    setGenerating(null);
   };
 
   const membresDuFoyer = selectedFoyer ? membres.filter(m => m.foyer_id === selectedFoyer.id) : [];
@@ -278,6 +326,73 @@ export default function DocumentsModule({ foyers, membres }: Props) {
               <p className="text-sm text-amber-700">Sélectionnez d'abord un <strong>foyer</strong>, puis un <strong>membre</strong> pour pouvoir générer les documents.</p>
             </div>
           )}
+
+          {/* Documents fonciers */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">🌍 Documents fonciers <span className="text-slate-400 font-normal normal-case">(nécessitent une parcelle sélectionnée)</span></h3>
+
+            {/* Sélection parcelle */}
+            <div className="mb-4">
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Parcelle / Lot</label>
+              <div className="relative">
+                <button onClick={() => setShowParcelleSearch(!showParcelleSearch)} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm transition ${selectedParcelle ? 'border-indigo-300 bg-indigo-50 text-indigo-800' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+                  <span className="flex items-center gap-2">🌍 {selectedParcelle ? `LOT ${selectedParcelle.numero_lot} · ${selectedParcelle.adresse || selectedParcelle.fokontany || ''}` : 'Sélectionner une parcelle...'}</span>
+                  {selectedParcelle && <button type="button" onClick={e => { e.stopPropagation(); setSelectedParcelle(null); setParcelleDetails(null); }} className="text-slate-400 hover:text-red-500 mr-1"><X className="h-3.5 w-3.5" /></button>}
+                </button>
+                {showParcelleSearch && (
+                  <div className="absolute top-full left-0 right-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl mt-1 max-h-52 overflow-y-auto">
+                    <div className="p-2 border-b sticky top-0 bg-white"><input autoFocus value={searchParcelle} onChange={e => setSearchParcelle(e.target.value)} placeholder="Rechercher lot..." className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg outline-none" /></div>
+                    {parcelles.filter(p => (p.numero_lot || '').toLowerCase().includes(searchParcelle.toLowerCase()) || (p.adresse || '').toLowerCase().includes(searchParcelle.toLowerCase())).map(p => (
+                      <button key={p.id} onClick={async () => { setSelectedParcelle(p); setShowParcelleSearch(false); await loadParcelleDetails(p); }} className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 text-xs border-b border-slate-50">
+                        <span className="font-mono font-bold text-indigo-600">LOT {p.numero_lot}</span>
+                        <span className="text-slate-500 ml-2">{p.adresse || p.fokontany}</span>
+                        <span className="text-slate-400 ml-2">{p.usage}</span>
+                      </button>
+                    ))}
+                    {parcelles.length === 0 && <p className="text-center text-slate-400 text-xs py-4">Aucune parcelle — créez-en dans le module Foncier</p>}
+                  </div>
+                )}
+              </div>
+              {selectedParcelle && parcelleDetails && (
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                  {parcelleDetails.titulaire && <span className="bg-amber-50 border border-amber-200 text-amber-700 px-2 py-0.5 rounded-full font-semibold">🏛 Titulaire : {parcelleDetails.titulaire.nom}</span>}
+                  {parcelleDetails.detenteur && <span className="bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-semibold">📜 Détenteur : {parcelleDetails.detenteur.nom}</span>}
+                  {parcelleDetails.batiments?.length ? <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">🏠 {parcelleDetails.batiments.length} bâtiment(s)</span> : null}
+                  {parcelleDetails.valeur && <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">🌿 Mise en valeur</span>}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {DOCUMENTS_FONCIERS.map(doc => {
+                const manque = doc.besoin.filter(b => {
+                  if (b === 'parcelle') return !selectedParcelle;
+                  if (b === 'detenteur') return !parcelleDetails?.detenteur;
+                  if (b === 'batiment') return !parcelleDetails?.batiments?.length;
+                  if (b === 'valeur') return !parcelleDetails?.valeur;
+                  return false;
+                });
+                const canGenerate = manque.length === 0;
+                return (
+                  <div key={doc.code} className={`flex items-center justify-between p-3.5 rounded-xl border transition ${canGenerate ? 'border-slate-200 hover:border-indigo-200' : 'border-slate-100 opacity-60'}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{doc.icon}</span>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">[{doc.code}] {doc.nom}</p>
+                        <p className="text-xs text-slate-400">{doc.description}</p>
+                        {!canGenerate && <p className="text-[10px] text-amber-600 mt-0.5">Manque : {manque.join(', ')}</p>}
+                      </div>
+                    </div>
+                    <button onClick={() => handleGenererFoncier(doc.code)} disabled={!canGenerate || generating === doc.code}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition shrink-0">
+                      {generating === doc.code ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                      {generating === doc.code ? '...' : 'Générer'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
