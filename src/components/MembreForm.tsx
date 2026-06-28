@@ -20,7 +20,15 @@ const ACTIVITES_PRINCIPALES = [
   'Construction', 'Administration', 'Enseignement', 'Santé', 'Services',
   'Retraité', 'Sans emploi', 'Étudiant', 'Femme au foyer', 'Autre',
 ];
+const ACTIVITES_SECONDAIRES = ['Agriculture', 'Élevage', 'Commerce', 'Pêche', 'Artisanat', 'Transport', 'Construction', 'Enseignement', 'Santé', 'Services', 'Retraité', 'Étudiant', 'Sans emploi', 'Aucune', 'Autre'];
 const STATUTS_PROFESSIONNELS = ['Salarié', 'Indépendant', 'Employeur', 'Sans emploi', 'Aide familiale'];
+const SITUATIONS_EMPLOI = ['Emploi permanent', 'Emploi temporaire', 'Emploi saisonnier', 'Travail journalier', 'Travail occasionnel', 'Sans emploi'];
+const SECTEURS_ACTIVITE = ['Public', 'Privé', 'ONG', 'Association', 'Coopérative', 'Entreprise individuelle', 'Auto-entrepreneur'];
+const ANCIENNETES = ['Moins de 1 an', '1 à 5 ans', '5 à 10 ans', 'Plus de 10 ans'];
+const CONTRIBUTIONS_REVENU = ['Principale source de revenu', 'Source secondaire', 'Aucun revenu'];
+const AGR_TYPES = ['Boutique', 'Épicerie', 'Gargote', 'Atelier', 'Taxi', 'Camion', 'Terrain agricole', 'Élevage', 'Location immobilière', 'Autre activité'];
+const COMPETENCES_PREDEFINIES = ['Maçon', 'Menuisier', 'Électricien', 'Soudeur', 'Chauffeur', 'Mécanicien', 'Informaticien', 'Comptable', 'Enseignant', 'Couturier', 'Agriculteur', 'Éleveur', 'Infirmier', 'Agent administratif', 'Commerçant'];
+const FORMATIONS_PRO = ['Aucune', 'Agriculture', 'Élevage', 'Informatique', 'Comptabilité', 'Maçonnerie', 'Électricité', 'Mécanique', 'Couture', 'Commerce', 'Gestion', 'Autre'];
 const FOURCHETTES_REVENU = ['Moins de 100 000 Ar', '100 000 - 300 000 Ar', '300 000 - 500 000 Ar', '500 000 - 1 000 000 Ar', 'Plus de 1 000 000 Ar', 'Aucun revenu'];
 
 // Module Sante etendu
@@ -126,6 +134,14 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const [detail_activite, setDetailActivite] = useState(membre?.employeur || '');
   const [statut_professionnel, setStatutProfessionnel] = useState(membre?.statut_professionnel || '');
   const [revenu_fourchette, setRevenuFourchette] = useState(membre?.revenu_fourchette || '');
+  const [activite_secondaire, setActiviteSecondaire] = useState(membre?.activite_secondaire || '');
+  const [situation_emploi, setSituationEmploi] = useState(membre?.situation_emploi || '');
+  const [secteur_activite, setSecteurActivite] = useState(membre?.secteur_activite || '');
+  const [anciennete_professionnelle, setAnciennete] = useState(membre?.anciennete_professionnelle || '');
+  const [contribution_revenu, setContributionRevenu] = useState(membre?.contribution_revenu || '');
+  const [agr_types, setAgrTypes] = useState<string[]>(membre?.agr_types || []);
+  const [formations_pro, setFormationsPro] = useState<string[]>(membre?.formations_pro || []);
+  const [competence_custom, setCompetenceCustom] = useState('');
   const [secteur, setSecteur] = useState(membre?.secteur || '');
   const [employeur, setEmployeur] = useState(membre?.employeur || '');
   const [revenu_estime, setRevenu] = useState(membre?.revenu_estime?.toString() || '');
@@ -310,6 +326,13 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
       revenu_estime: revenu_estime ? parseFloat(revenu_estime) : undefined,
       statut_professionnel: statut_professionnel || undefined,
       revenu_fourchette: revenu_fourchette || undefined,
+      activite_secondaire: activite_secondaire || undefined,
+      situation_emploi: situation_emploi || undefined,
+      secteur_activite: secteur_activite || undefined,
+      anciennete_professionnelle: anciennete_professionnelle || undefined,
+      contribution_revenu: contribution_revenu || undefined,
+      agr_types,
+      formations_pro,
       langues,
       competences,
       groupe_sanguin: groupe_sanguin || undefined,
@@ -605,130 +628,187 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
             {/* ── ÉDUCATION & ÉCONOMIE ── */}
             {tab === 'education' && (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {isTresPetit && date_naissance && (
                   <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg p-3">Enfant de moins de 6 ans — seul le niveau d'instruction est applicable.</p>
                 )}
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Niveau d'instruction</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {NIVEAUX_ETUDE.map(n => (
-                      <label key={n} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${niveau_etude === n ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                        <input type="radio" className="hidden" checked={niveau_etude === n} onChange={() => setNiveauEtude(n)} />{n}
-                      </label>
-                    ))}
-                  </div>
-                </div>
 
-                {!isTresPetit && (
-                  <>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Diplôme le plus élevé</label>
-                  <input value={diplome} onChange={e => setDiplome(e.target.value)} placeholder="Ex: BACC, Licence, Master" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                </div>
-                {(niveau_etude === 'Universitaire' || niveau_etude === 'Formation professionnelle') && (
+                {/* ── Section 1 : Éducation ── */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">1. Formation & Instruction</h3>
                   <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Filière / Spécialisation</label>
-                    <input value={filiere_etudes} onChange={e => setFiliereEtudes(e.target.value)} placeholder="Ex: Médecine, Génie civil, Informatique, Menuiserie..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Niveau d'instruction</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {NIVEAUX_ETUDE.map(n => (
+                        <label key={n} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${niveau_etude === n ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                          <input type="radio" className="hidden" checked={niveau_etude === n} onChange={() => setNiveauEtude(n)} />{n}
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                )}
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Langues</label>
-                  <div className="flex flex-wrap gap-2">
-                    {LANGUES_LIST.map(l => (
-                      <label key={l} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-xs font-semibold transition ${langues.includes(l) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
-                        <input type="checkbox" className="hidden" checked={langues.includes(l)} onChange={() => setLangues(prev => toggleArr(prev, l))} />{l}
-                      </label>
-                    ))}
-                  </div>
+                  {!isTresPetit && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Diplôme le plus élevé</label>
+                          <input value={diplome} onChange={e => setDiplome(e.target.value)} placeholder="Ex: BACC, Licence, Master" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                        </div>
+                        {(niveau_etude === 'Universitaire' || niveau_etude === 'Formation professionnelle') && (
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Filière / Spécialisation</label>
+                            <input value={filiere_etudes} onChange={e => setFiliereEtudes(e.target.value)} placeholder="Ex: Médecine, Informatique..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Formations professionnelles reçues</label>
+                        <div className="flex flex-wrap gap-2">
+                          {FORMATIONS_PRO.map(f => (
+                            <label key={f} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-xs font-semibold transition ${formations_pro.includes(f) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
+                              <input type="checkbox" className="hidden" checked={formations_pro.includes(f)} onChange={() => setFormationsPro(prev => toggleArr(prev, f))} />{f}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Langues parlées</label>
+                        <div className="flex flex-wrap gap-2">
+                          {LANGUES_LIST.map(l => (
+                            <label key={l} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-xs font-semibold transition ${langues.includes(l) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
+                              <input type="checkbox" className="hidden" checked={langues.includes(l)} onChange={() => setLangues(prev => toggleArr(prev, l))} />{l}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
-                </>
-                )}
 
-                {/* Économie — masqué pour les enfants */}
+                {/* ── Section 2 : Activités ── */}
                 {!isEnfant && (
-                  <>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Activité principale <span className="text-red-500">*</span></label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {ACTIVITES_PRINCIPALES.map(a => (
-                      <label key={a} className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition ${profession === a ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                        <input type="radio" className="hidden" checked={profession === a} onChange={() => setProfession(a)} />{a}
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                  <div className="space-y-4 border-t border-slate-100 pt-4">
+                    <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">2. Activités & Emploi</h3>
 
-                {profession && !['Retraité', 'Sans emploi', 'Étudiant', 'Femme au foyer'].includes(profession) && (
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
-                      Précision sur l'activité <span className="text-slate-400 normal-case font-normal">({profession.toLowerCase()})</span>
-                    </label>
-                    <input
-                      value={detail_activite}
-                      onChange={e => setDetailActivite(e.target.value)}
-                      placeholder={
-                        profession === 'Agriculture' ? 'Ex: Riziculture, maraîchage...' :
-                        profession === 'Élevage' ? 'Ex: Bovins, volailles, porcins...' :
-                        profession === 'Pêche' ? 'Ex: Pêche côtière, aquaculture...' :
-                        profession === 'Artisanat' ? 'Ex: Menuiserie, couture, poterie...' :
-                        profession === 'Commerce' ? 'Ex: Épicerie, vente ambulante...' :
-                        profession === 'Transport' ? 'Ex: Taxi-brousse, livraison...' :
-                        profession === 'Construction' ? 'Ex: Maçonnerie, électricité...' :
-                        profession === 'Administration' ? 'Ex: Fonctionnaire, agent communal...' :
-                        profession === 'Enseignement' ? 'Ex: Instituteur, professeur...' :
-                        profession === 'Santé' ? 'Ex: Infirmier, sage-femme...' :
-                        profession === 'Services' ? 'Ex: Coiffure, restauration...' :
-                        'Préciser...'
-                      }
-                      className="w-full border border-indigo-200 bg-indigo-50/40 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none"
-                    />
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Activité principale <span className="text-red-500">*</span></label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {ACTIVITES_PRINCIPALES.map(a => (
+                          <label key={a} className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition ${profession === a ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                            <input type="radio" className="hidden" checked={profession === a} onChange={() => setProfession(a)} />{a}
+                          </label>
+                        ))}
+                      </div>
+                      {profession && !['Retraité', 'Sans emploi', 'Étudiant', 'Femme au foyer'].includes(profession) && (
+                        <input value={detail_activite} onChange={e => setDetailActivite(e.target.value)}
+                          placeholder={profession === 'Agriculture' ? 'Ex: Riziculture, maraîchage...' : profession === 'Commerce' ? 'Ex: Épicerie, vente ambulante...' : 'Préciser...'}
+                          className="w-full mt-2 border border-indigo-200 bg-indigo-50/40 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Activité secondaire</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {ACTIVITES_SECONDAIRES.map(a => (
+                          <label key={a} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${activite_secondaire === a ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                            <input type="radio" className="hidden" checked={activite_secondaire === a} onChange={() => setActiviteSecondaire(a)} />{a}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Situation de l'emploi</label>
+                        <select value={situation_emploi} onChange={e => setSituationEmploi(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                          <option value="">Choisir...</option>
+                          {SITUATIONS_EMPLOI.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Statut professionnel</label>
+                        <select value={statut_professionnel} onChange={e => setStatutProfessionnel(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                          <option value="">Choisir...</option>
+                          {STATUTS_PROFESSIONNELS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Secteur d'activité</label>
+                        <select value={secteur_activite} onChange={e => setSecteurActivite(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                          <option value="">Choisir...</option>
+                          {SECTEURS_ACTIVITE.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Ancienneté professionnelle</label>
+                        <select value={anciennete_professionnelle} onChange={e => setAnciennete(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                          <option value="">Choisir...</option>
+                          {ANCIENNETES.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Employeur</label>
+                        <input value={employeur} onChange={e => setEmployeur(e.target.value)} placeholder="Ex: Société, Ministère..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Revenu mensuel</label>
+                        <select value={revenu_fourchette} onChange={e => setRevenuFourchette(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
+                          <option value="">Choisir...</option>
+                          {FOURCHETTES_REVENU.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Contribution au revenu du ménage</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {CONTRIBUTIONS_REVENU.map(c => (
+                          <label key={c} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${contribution_revenu === c ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-600 border-slate-200'}`}>
+                            <input type="radio" className="hidden" checked={contribution_revenu === c} onChange={() => setContributionRevenu(c)} />{c}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Statut professionnel</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {STATUTS_PROFESSIONNELS.map(s => (
-                      <label key={s} className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer text-xs font-semibold transition ${statut_professionnel === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                        <input type="radio" className="hidden" checked={statut_professionnel === s} onChange={() => setStatutProfessionnel(s)} />{s}
-                      </label>
-                    ))}
+                {/* ── Section 3 : AGR ── */}
+                {!isEnfant && (
+                  <div className="space-y-3 border-t border-slate-100 pt-4">
+                    <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">3. Activités génératrices de revenus (AGR)</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {AGR_TYPES.map(a => (
+                        <label key={a} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-xs font-semibold transition ${agr_types.includes(a) ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-slate-600 border-slate-200'}`}>
+                          <input type="checkbox" className="hidden" checked={agr_types.includes(a)} onChange={() => setAgrTypes(prev => toggleArr(prev, a))} />{a}
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Employeur</label>
-                    <input value={employeur} onChange={e => setEmployeur(e.target.value)} placeholder="Ex: Société, Ministère" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Revenu mensuel</label>
-                    <select value={revenu_fourchette} onChange={e => setRevenuFourchette(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-white">
-                      <option value="">Choisir...</option>
-                      {FOURCHETTES_REVENU.map(f => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Compétences</label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {competences.map(c => (
-                      <span key={c} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+                {/* ── Section 4 : Compétences ── */}
+                {!isEnfant && (
+                  <div className="space-y-3 border-t border-slate-100 pt-4">
+                    <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">4. Bibliothèque de compétences</h3>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {COMPETENCES_PREDEFINIES.map(c => (
+                        <label key={c} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-xs font-semibold transition ${competences.includes(c) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
+                          <input type="checkbox" className="hidden" checked={competences.includes(c)} onChange={() => setCompetences(prev => toggleArr(prev, c))} />{c}
+                        </label>
+                      ))}
+                    </div>
+                    {/* Compétences personnalisées */}
+                    {competences.filter(c => !COMPETENCES_PREDEFINIES.includes(c)).map(c => (
+                      <span key={c} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full text-xs font-semibold mr-1.5">
                         {c}<button type="button" onClick={() => setCompetences(prev => prev.filter(x => x !== c))} className="text-indigo-400 hover:text-indigo-700">×</button>
                       </span>
                     ))}
+                    <div className="flex gap-2">
+                      <input value={competence_custom} onChange={e => setCompetenceCustom(e.target.value)} placeholder="Ajouter une compétence personnalisée..." className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none" onKeyDown={e => { if (e.key === 'Enter' && competence_custom.trim()) { setCompetences(prev => [...prev, competence_custom.trim()]); setCompetenceCustom(''); e.preventDefault(); } }} />
+                      <button type="button" onClick={() => { if (competence_custom.trim()) { setCompetences(prev => [...prev, competence_custom.trim()]); setCompetenceCustom(''); }}} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">+</button>
+                    </div>
+                    <p className="text-[11px] text-slate-400">Appuyer sur Entrée ou + pour ajouter une compétence personnalisée</p>
                   </div>
-                  <div className="flex gap-2">
-                    <select value={newCompetence} onChange={e => setNewCompetence(e.target.value)} className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none bg-white">
-                      <option value="">Ajouter une compétence...</option>
-                      {COMPETENCES_LIST.filter(c => !competences.includes(c)).map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <button type="button" onClick={() => { if (newCompetence) { setCompetences(prev => [...prev, newCompetence]); setNewCompetence(''); }}} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">+</button>
-                  </div>
-                </div>
-                  </>
-                )} {/* fin !isEnfant */}
+                )}
               </div>
             )}
 

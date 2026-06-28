@@ -146,6 +146,13 @@ export interface Membre {
   employeur?: string;
   revenu_estime?: number;
   revenu_fourchette?: string;
+  activite_secondaire?: string;
+  situation_emploi?: string;
+  secteur_activite?: string;
+  anciennete_professionnelle?: string;
+  contribution_revenu?: string;
+  agr_types?: string[];
+  formations_pro?: string[];
   // Santé
   groupe_sanguin?: string;
   handicap?: string;
