@@ -7,7 +7,7 @@ import FoyerForm from './components/FoyerForm';
 import FoyerDetail from './components/FoyerDetail';
 import MembreForm from './components/MembreForm';
 import DocumentsModule from './components/DocumentsModule';
-import FinanceModule from './components/FinanceModule';
+import FinancesModule from './components/FinancesModule';
 import MaterialsModule from './components/MaterialsModule';
 import FoncierModule from './components/FoncierModule';
 import PatrimoineModule from './components/PatrimoineModule';
@@ -293,14 +293,7 @@ export default function App() {
 
         {activeTab === 'documents' && <DocumentsModule foyers={foyers} membres={membres} />}
         {activeTab === 'statistics' && <StatsView habitants={habitants} foyers={foyers} membres={membres} />}
-        {activeTab === 'finances' && (
-          <FinanceModule transactions={transactions} habitants={habitants} cotisations={cotisations}
-            onAddTransaction={async (t) => setTransactions(p => [{ id: `tx-${Date.now()}`, ...t }, ...p])}
-            onDeleteTransaction={async (id) => setTransactions(p => p.filter(x => x.id !== id))}
-            onAddCotisation={async (c) => setCotisations(p => [{ id: `cot-${Date.now()}`, ...c }, ...p])}
-            onDeleteCotisation={async (id) => setCotisations(p => p.filter(x => x.id !== id))}
-          />
-        )}
+        {activeTab === 'finances' && <FinancesModule foyers={foyers} membres={membres} />}
         {activeTab === 'materials' && (
           <MaterialsModule materiels={materiels}
             onAddMateriel={async (m) => setMateriels(p => [...p, { id: `mat-${Date.now()}`, ...m }])}
