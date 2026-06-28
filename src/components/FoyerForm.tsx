@@ -245,12 +245,14 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
     if (!foyer) genCodeMenage().then(code => { setCodeMenage(code); setLoadingCode(false); });
   }, [foyer]);
 
-  // Auto-remplir identification_logement depuis l'adresse (extrait le numéro de lot)
+  // Auto-remplir le LOT depuis l'adresse — toujours recalculé, non modifiable
   useEffect(() => {
-    if (!foyer && adresse && !identification_logement) {
-      // Extraire le numéro de lot depuis l'adresse (ex: "Lot 20/AA-146" → "20/AA-146")
-      const match = adresse.match(/(?:lot\s+)?(\d+\/[A-Z0-9\-]+)/i);
-      if (match) setIdentificationLogement(match[1]);
+    const match = adresse.match(/(?:lot\s+)?(\d+\/[A-Z0-9\-]+)/i);
+    if (match) {
+      setIdentificationLogement(match[1]);
+    } else if (adresse) {
+      // Si pas de format LOT détecté, utiliser l'adresse brute tronquée
+      setIdentificationLogement('');
     }
   }, [adresse]);
 
@@ -484,19 +486,38 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
                 {/* Identification du logement */}
                 <div>
                   <label className="text-xs font-bold text-slate-600 uppercase block mb-1.5">Identification du logement</label>
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-stretch">
+                    {/* LOT — lecture seule, extrait automatiquement de l'adresse */}
                     <div className="flex-1">
-                      <p className="text-[10px] text-slate-400 mb-1">N° de lot (auto depuis adresse)</p>
-                      <input value={identification_logement} onChange={e => setIdentificationLogement(e.target.value)} placeholder="Ex: 20/AA-146" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-mono" />
+                      <p className="text-[10px] text-slate-400 mb-1">N° de lot <span className="text-indigo-500 font-semibold">(auto depuis adresse)</span></p>
+                      <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-mono border ${identification_logement ? 'bg-indigo-50 border-indigo-200 text-indigo-800' : 'bg-slate-50 border-slate-200 text-slate-400 italic'}`}>
+                        <span className="text-slate-400 text-xs select-none">LOT</span>
+                        <span className="font-bold">{identification_logement || 'Saisir l\'adresse ci-dessus'}</span>
+                        <span className="ml-auto text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-sans">Auto</span>
+                      </div>
                     </div>
+                    {/* N° maison — seul champ modifiable */}
                     <div className="w-28 shrink-0">
-                      <p className="text-[10px] text-slate-400 mb-1">N° maison</p>
-                      <input value={numero_maison} onChange={e => setNumeroMaison(e.target.value)} placeholder="Ex: M1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-mono uppercase" />
+                      <p className="text-[10px] text-slate-400 mb-1">N° maison <span className="text-red-400">*</span></p>
+                      <input
+                        value={numero_maison}
+                        onChange={e => setNumeroMaison(e.target.value.toUpperCase())}
+                        placeholder="M1"
+                        maxLength={5}
+                        className="w-full border-2 border-indigo-300 bg-white rounded-lg px-3 py-2.5 text-sm focus:border-indigo-600 outline-none font-mono uppercase text-center font-bold tracking-widest"
+                      />
                     </div>
                   </div>
-                  {identification_logement && numero_maison && (
-                    <p className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mt-2">
-                      ID : LOT {identification_logement}-{numero_maison}
+                  {/* Identifiant final calculé */}
+                  {identification_logement && numero_maison ? (
+                    <div className="mt-2 flex items-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5">
+                      <span className="text-xs font-semibold opacity-80">Identifiant officiel :</span>
+                      <span className="font-mono font-bold text-base tracking-wide">LOT {identification_logement}-{numero_maison}</span>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+                      <span className="text-amber-500">⚠</span>
+                      {!identification_logement ? "Saisissez une adresse avec numéro de lot (ex: Lot 20/AA-146)" : "Ajoutez le numéro de maison (ex: M1, M2...)"}
                     </p>
                   )}
                 </div>
