@@ -264,6 +264,7 @@ export default function DocumentsModule({ foyers, membres }: Props) {
                       <div>
                         <p className="text-sm font-semibold text-slate-800">[{doc.code}] {doc.nom}</p>
                         <p className="text-xs text-slate-400">{doc.description}</p>
+                        <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">{(doc as any).format}</span>
                       </div>
                     </div>
                     <button
