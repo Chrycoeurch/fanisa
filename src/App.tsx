@@ -10,12 +10,13 @@ import DocumentsModule from './components/DocumentsModule';
 import FinanceModule from './components/FinanceModule';
 import MaterialsModule from './components/MaterialsModule';
 import FoncierModule from './components/FoncierModule';
+import PatrimoineModule from './components/PatrimoineModule';
 import StatsView from './components/StatsView';
 import { FOKONTANY_LIST } from './seedData';
 import {
   FolderLock, Users, HeartPulse, History, PlusCircle, Search,
   RotateCcw, ShieldCheck, Building, FileSignature, Landmark,
-  Package, Loader2, Home, Filter
+  Package, Loader2, Home, Filter, Award
 } from 'lucide-react';
 
 export default function App() {
@@ -27,7 +28,7 @@ export default function App() {
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'finances'|'materials'|'logs'|'land'>('annuaire');
+  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'finances'|'materials'|'logs'|'land'|'patrimoine'>('annuaire');
   const [searchQuery, setSearchQuery] = useState('');
   const [fokontanyFilter, setFokontanyFilter] = useState('Tous');
   const [statutFilter, setStatutFilter] = useState('Tous');
@@ -224,6 +225,7 @@ export default function App() {
             ['finances', Landmark, 'Finances'],
             ['materials', Package, 'Matériels'],
             ['land', Building, 'Foncier'],
+            ['patrimoine', Award, 'Patrimoine'],
             ['logs', History, `Journal (${logs.length})`],
           ] as const).map(([key, Icon, label]) => (
             <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-2 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
@@ -307,6 +309,7 @@ export default function App() {
           />
         )}
         {activeTab === 'land' && <FoncierModule foyers={foyers} membres={membres} />}
+        {activeTab === 'patrimoine' && <PatrimoineModule foyers={foyers} />}
         {activeTab === 'logs' && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
