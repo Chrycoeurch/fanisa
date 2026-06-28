@@ -24,11 +24,16 @@ export interface Foyer {
   nombre_membres: number;
   // Logement
   type_logement?: string;
+  identification_logement?: string;
+  numero_maison?: string;
   a_etage?: boolean;
   nombre_etages?: number;
   materiau_toiture?: string;
   materiau_mur?: string;
   materiau_plancher?: string;
+  materiaux_toiture?: string[];
+  materiaux_mur?: string[];
+  materiaux_plancher?: string[];
   // Occupation
   statut_occupant?: string;
   proprietaire_nom?: string;
@@ -130,6 +135,7 @@ export interface Membre {
   mere_nom?: string;
   // Éducation
   niveau_etude: string;
+  filiere_etudes?: string;
   diplome?: string;
   competences: string[];
   langues: string[];

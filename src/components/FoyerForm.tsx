@@ -10,8 +10,8 @@ interface Props {
 }
 
 const TYPES_LOGEMENT = ['Maison traditionnelle', 'Villa', 'Appartement', 'Case en bois', 'Studio', 'Autres'];
-const MATERIAUX_TOITURE = ['Tôle', 'Tuile', 'Chaume / Ravinala', 'Béton', 'Autres'];
-const MATERIAUX_MUR = ['Brique', 'Parpaing / Béton', 'Bois', 'Terre battue', 'Ravinala / Falafa', 'Autres'];
+const MATERIAUX_TOITURE = ['Tôle', 'Tuile', 'Chaume / Ravinala', 'Béton', 'Bois', 'Autres'];
+const MATERIAUX_MUR = ['Brique', 'Parpaing / Béton', 'Bois', 'Terre battue', 'Ravinala / Falafa', 'Tôle', 'Autres'];
 const MATERIAUX_PLANCHER = ['Ciment', 'Carrelage', 'Terre battue', 'Bois', 'Autres'];
 const STATUTS_OCCUPANT = ['Propriétaire', 'Locataire', 'Gardien', 'Occupant à titre gratuit', 'Autres'];
 
@@ -24,7 +24,7 @@ const ECLAIRAGE_SOURCES = ['JIRAMA', 'Panneaux solaires', 'Groupe electrogene', 
 const CUISSON_SOURCES = ['Charbon', 'Bois de chauffe', 'Gaz', 'Electricite', 'Biogaz', 'Autre'];
 const DECHETS_MODES = ['Collecte communale', 'Collecte privee', 'Brulage', 'Enterrement', 'Compostage', 'Depot sauvage', 'Rejet dans la nature', 'Autre'];
 const RESEAU_NIVEAUX = ['Tres bonne', 'Bonne', 'Moyenne', 'Faible', 'Aucune'];
-const INTERNET_MOYENS = ['Donnees mobiles', 'Fibre optique', 'ADSL', 'Satellite', 'Wi-Fi partage', 'Aucun'];
+const INTERNET_MOYENS = ['Donnees mobiles', 'Fibre optique', 'ADSL', 'Satellite', 'Starlink', 'Wi-Fi partage', 'Aucun'];
 const RISQUES_TYPES = ['Inondation', 'Cyclone', 'Glissement de terrain', 'Secheresse', 'Erosion', 'Incendie', 'Autre'];
 const CATASTROPHE_TYPES = ['Inondation', 'Cyclone', 'Incendie', 'Secheresse', 'Autre'];
 const CONDITIONS_VIE = ['Tres bonnes', 'Bonnes', 'Moyennes', 'Difficiles', 'Tres difficiles'];
@@ -35,7 +35,7 @@ const FREQUENCE_DIFFICULTE = ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Tres 
 const REPAS_JOUR = ['1 repas', '2 repas', '3 repas ou plus'];
 const CATASTROPHES_NAT = ['Cyclone', 'Inondation', 'Incendie', 'Glissement de terrain', 'Secheresse', 'Autre'];
 const NIVEAUX_DEGATS = ['Faible', 'Modere', 'Important', 'Total'];
-const ORGANISMES_AIDE = ['Fokontany', 'Commune', 'District', 'BNGRC', 'Croix-Rouge Malagasy', 'ONG nationale', 'ONG internationale', 'Association', 'Eglise', 'Entreprise privee', 'Autre'];
+const ORGANISMES_AIDE = ['Fokontany', 'Commune', 'District', 'BNGRC', 'FID', 'Croix-Rouge Malagasy', 'ONG nationale', 'ONG internationale', 'Association', 'Eglise', 'Entreprise privee', 'Autre'];
 const TYPES_AIDE = ['Vivres alimentaires', 'Riz', 'Huile', 'Eau potable', "Kit d'hygiene", 'Kit scolaire', 'Couvertures', 'Vetements', 'Ustensiles de cuisine', 'Materiaux de construction', 'Toles', 'Bois', 'Argent / Transfert monetaire', 'Relogement temporaire', 'Assistance medicale', 'Semences agricoles', 'Autre'];
 const TRAVAUX_TYPES = ['Aucune intervention', 'Reparation mineure', 'Renovation partielle', 'Renovation importante', 'Reconstruction complete'];
 const TRAVAUX_PARTIES = ['Toiture', 'Murs', 'Sol', 'Portes', 'Fenetres', 'Charpente', 'Installation electrique', 'Installation sanitaire', 'Ensemble de la maison'];
@@ -153,11 +153,13 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
 
   // Logement
   const [type_logement, setTypeLogement] = useState(foyer?.type_logement || '');
+  const [identification_logement, setIdentificationLogement] = useState(foyer?.identification_logement || '');
+  const [numero_maison, setNumeroMaison] = useState(foyer?.numero_maison || '');
   const [a_etage, setAEtage] = useState(foyer?.a_etage || false);
   const [nombre_etages, setNombreEtages] = useState(foyer?.nombre_etages?.toString() || '1');
-  const [materiau_toiture, setMateriauToiture] = useState(foyer?.materiau_toiture || '');
-  const [materiau_mur, setMateriauMur] = useState(foyer?.materiau_mur || '');
-  const [materiau_plancher, setMateriauPlancher] = useState(foyer?.materiau_plancher || '');
+  const [materiaux_toiture, setMateriauxToiture] = useState<string[]>(foyer?.materiaux_toiture || (foyer?.materiau_toiture ? [foyer.materiau_toiture] : []));
+  const [materiaux_mur, setMateriauxMur] = useState<string[]>(foyer?.materiaux_mur || (foyer?.materiau_mur ? [foyer.materiau_mur] : []));
+  const [materiaux_plancher, setMateriauxPlancher] = useState<string[]>(foyer?.materiaux_plancher || (foyer?.materiau_plancher ? [foyer.materiau_plancher] : []));
   const [nombre_pieces, setNombrePieces] = useState(foyer?.nombre_pieces?.toString() || '');
   const [superficie_maison, setSuperficie] = useState(foyer?.superficie_maison?.toString() || '');
   const [photo_maison_url, setPhotoMaisonUrl] = useState(foyer?.photo_maison_url || '');
@@ -242,6 +244,15 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   useEffect(() => {
     if (!foyer) genCodeMenage().then(code => { setCodeMenage(code); setLoadingCode(false); });
   }, [foyer]);
+
+  // Auto-remplir identification_logement depuis l'adresse (extrait le numéro de lot)
+  useEffect(() => {
+    if (!foyer && adresse && !identification_logement) {
+      // Extraire le numéro de lot depuis l'adresse (ex: "Lot 20/AA-146" → "20/AA-146")
+      const match = adresse.match(/(?:lot\s+)?(\d+\/[A-Z0-9\-]+)/i);
+      if (match) setIdentificationLogement(match[1]);
+    }
+  }, [adresse]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -328,8 +339,14 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
       adresse: adresse || undefined, fokontany, commune: commune || undefined, district: district || undefined,
       gps_lat: gps_lat ? parseFloat(gps_lat) : undefined, gps_lng: gps_lng ? parseFloat(gps_lng) : undefined,
       carreau: carreau || undefined, num_carreau: num_carreau || undefined,
-      type_logement: type_logement || undefined, a_etage, nombre_etages: a_etage ? (parseInt(nombre_etages) || 1) : undefined,
-      materiau_toiture: materiau_toiture || undefined, materiau_mur: materiau_mur || undefined, materiau_plancher: materiau_plancher || undefined,
+      type_logement: type_logement || undefined,
+      identification_logement: identification_logement || undefined,
+      numero_maison: numero_maison || undefined,
+      a_etage, nombre_etages: a_etage ? (parseInt(nombre_etages) || 1) : undefined,
+      materiaux_toiture, materiaux_mur, materiaux_plancher,
+      materiau_toiture: materiaux_toiture[0] || undefined,
+      materiau_mur: materiaux_mur[0] || undefined,
+      materiau_plancher: materiaux_plancher[0] || undefined,
       nombre_pieces: nombre_pieces ? parseInt(nombre_pieces) : undefined, superficie_maison: superficie_maison ? parseFloat(superficie_maison) : undefined,
       photo_maison_url: photo_maison_url || undefined,
       statut_occupant,
@@ -463,6 +480,27 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
             {tab === 'logement' && (
               <div className="space-y-5">
                 <ChoiceGroup label="Type de logement" options={TYPES_LOGEMENT} value={type_logement} onChange={setTypeLogement} required />
+
+                {/* Identification du logement */}
+                <div>
+                  <label className="text-xs font-bold text-slate-600 uppercase block mb-1.5">Identification du logement</label>
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1">
+                      <p className="text-[10px] text-slate-400 mb-1">N° de lot (auto depuis adresse)</p>
+                      <input value={identification_logement} onChange={e => setIdentificationLogement(e.target.value)} placeholder="Ex: 20/AA-146" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-mono" />
+                    </div>
+                    <div className="w-28 shrink-0">
+                      <p className="text-[10px] text-slate-400 mb-1">N° maison</p>
+                      <input value={numero_maison} onChange={e => setNumeroMaison(e.target.value)} placeholder="Ex: M1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-mono uppercase" />
+                    </div>
+                  </div>
+                  {identification_logement && numero_maison && (
+                    <p className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mt-2">
+                      ID : LOT {identification_logement}-{numero_maison}
+                    </p>
+                  )}
+                </div>
+
                 <div>
                   <label className="text-xs font-bold text-slate-600 uppercase block mb-1.5">Maison à étage ?</label>
                   <div className="flex gap-3 items-center">
@@ -481,9 +519,10 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
                     )}
                   </div>
                 </div>
-                <ChoiceGroup label="Matériau de toiture" options={MATERIAUX_TOITURE} value={materiau_toiture} onChange={setMateriauToiture} />
-                <ChoiceGroup label="Matériau de mur" options={MATERIAUX_MUR} value={materiau_mur} onChange={setMateriauMur} />
-                <ChoiceGroup label="Matériau de plancher" options={MATERIAUX_PLANCHER} value={materiau_plancher} onChange={setMateriauPlancher} />
+
+                <CheckGroup label="Matériau(x) de toiture" options={MATERIAUX_TOITURE} values={materiaux_toiture} onToggle={v => setMateriauxToiture(prev => toggleArr(prev, v))} />
+                <CheckGroup label="Matériau(x) de mur" options={MATERIAUX_MUR} values={materiaux_mur} onToggle={v => setMateriauxMur(prev => toggleArr(prev, v))} />
+                <CheckGroup label="Matériau(x) de plancher" options={MATERIAUX_PLANCHER} values={materiaux_plancher} onToggle={v => setMateriauxPlancher(prev => toggleArr(prev, v))} />
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="text-xs font-bold text-slate-600 uppercase block mb-1">Nombre de pièces</label><input value={nombre_pieces} onChange={e => setNombrePieces(e.target.value)} placeholder="Ex: 3" type="number" min="1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" /></div>
                   <div><label className="text-xs font-bold text-slate-600 uppercase block mb-1">Superficie (m²)</label><input value={superficie_maison} onChange={e => setSuperficie(e.target.value)} placeholder="Ex: 85" type="number" min="1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" /></div>

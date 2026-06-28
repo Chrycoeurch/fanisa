@@ -14,7 +14,7 @@ interface Props {
 
 const RELATIONS: RelationChef[] = ['Chef', 'Épouse/Époux', 'Fils', 'Fille', 'Père', 'Mère', 'Frère', 'Sœur', 'Grand-père', 'Grand-mère', 'Petit-fils', 'Petite-fille', 'Oncle', 'Tante', 'Neveu', 'Nièce', 'Autre'];
 const GROUPES_SANG = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Inconnu'];
-const NIVEAUX_ETUDE = ['Non scolarisé', 'Primaire', 'Secondaire', 'Universitaire', 'Formation professionnelle'];
+const NIVEAUX_ETUDE = ['Nourrisson / Crèche', 'Préscolaire', 'Non scolarisé', 'Primaire', 'Secondaire', 'Universitaire', 'Formation professionnelle'];
 const ACTIVITES_PRINCIPALES = [
   'Agriculture', 'Élevage', 'Pêche', 'Artisanat', 'Commerce', 'Transport',
   'Construction', 'Administration', 'Enseignement', 'Santé', 'Services',
@@ -103,6 +103,16 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
   // Famille
   const [conjoint_id, setConjointId] = useState(membre?.conjoint_id || '');
+
+  // Auto-remplissage contact d'urgence depuis le conjoint si chef de famille
+  const conjointMembre = membres.find(m => m.id === conjoint_id);
+  useEffect(() => {
+    if (conjoint_id && conjointMembre && !contact_urgence_nom) {
+      setContactUrgenceNom(`${conjointMembre.nom} ${conjointMembre.prenom}`);
+      if (conjointMembre.telephone) setContactUrgenceTelephone(conjointMembre.telephone);
+      setContactUrgenceLien('Epoux / Epouse');
+    }
+  }, [conjoint_id]);
   const [pere_id, setPereId] = useState(membre?.pere_id || '');
   const [mere_id, setMereId] = useState(membre?.mere_id || '');
   const [pere_nom, setPereNom] = useState(membre?.pere_nom || '');
@@ -110,6 +120,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
   // Éducation
   const [niveau_etude, setNiveauEtude] = useState(membre?.niveau_etude || 'Secondaire');
+  const [filiere_etudes, setFiliereEtudes] = useState(membre?.filiere_etudes || '');
   const [diplome, setDiplome] = useState(membre?.diplome || '');
   const [profession, setProfession] = useState(membre?.profession || '');
   const [detail_activite, setDetailActivite] = useState(membre?.employeur || '');
@@ -173,6 +184,10 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const toggleArr = <T,>(arr: T[], val: T) => arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
   const age = date_naissance ? Math.abs(new Date(Date.now() - new Date(date_naissance).getTime()).getUTCFullYear() - 1970) : 99;
   const isMineur = age < 18;
+  const isJeuneAdulte = age >= 16; // téléphone/email autorisés dès 16 ans
+  const isEnfant = age < 15;       // pas de CIN, pas d'activité économique
+  const isTresPetit = age < 6;     // nourrisson/préscolaire — masquer éducation/eco/vulnérabilité
+  const isAdulte = age >= 18;      // CIN, statut pro, revenu, etc.
   const autresMembres = membres.filter(m => m.id !== membre?.id);
   const chef = membres.find(m => m.is_chef);
   const conjointChef = chef ? membres.find(m => m.id === chef.conjoint_id) : undefined;
@@ -287,6 +302,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
       pere_nom: pere_nom || undefined,
       mere_nom: mere_nom || undefined,
       niveau_etude,
+      filiere_etudes: filiere_etudes || undefined,
       diplome: diplome || undefined,
       profession: profession || undefined,
       secteur: secteur || undefined,
@@ -462,29 +478,36 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   </div>
                 </div>
 
-                {/* CIN */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Numéro CIN</label>
-                    <input value={cin} onChange={e => setCin(e.target.value)} placeholder="12 chiffres" maxLength={12} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-mono" />
+                {/* CIN — masqué pour les moins de 18 ans */}
+                {isAdulte && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Numéro CIN</label>
+                      <input value={cin} onChange={e => setCin(e.target.value)} placeholder="12 chiffres" maxLength={12} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-mono" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Date CIN</label>
+                      <input type="date" value={date_cin} onChange={e => setDateCin(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Date CIN</label>
-                    <input type="date" value={date_cin} onChange={e => setDateCin(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                  </div>
-                </div>
+                )}
 
-                {/* Contact */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Téléphone</label>
-                    <input value={telephone} onChange={e => setTelephone(e.target.value)} placeholder="+261 34 56 789 01" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                {/* Contact — téléphone et email dès 16 ans */}
+                {isJeuneAdulte && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Téléphone</label>
+                      <input value={telephone} onChange={e => setTelephone(e.target.value)} placeholder="+261 34 56 789 01" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Email</label>
+                      <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="nom@exemple.mg" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Email</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="nom@exemple.mg" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                  </div>
-                </div>
+                )}
+                {!isJeuneAdulte && date_naissance && (
+                  <p className="text-[11px] text-slate-400 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">Téléphone et email disponibles à partir de 16 ans.</p>
+                )}
 
                 {/* Poids & Taille */}
                 <div className="grid grid-cols-2 gap-3">
@@ -583,6 +606,9 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
             {/* ── ÉDUCATION & ÉCONOMIE ── */}
             {tab === 'education' && (
               <div className="space-y-4">
+                {isTresPetit && date_naissance && (
+                  <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg p-3">Enfant de moins de 6 ans — seul le niveau d'instruction est applicable.</p>
+                )}
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Niveau d'instruction</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -593,10 +619,19 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                     ))}
                   </div>
                 </div>
+
+                {!isTresPetit && (
+                  <>
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Diplôme le plus élevé</label>
                   <input value={diplome} onChange={e => setDiplome(e.target.value)} placeholder="Ex: BACC, Licence, Master" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
                 </div>
+                {(niveau_etude === 'Universitaire' || niveau_etude === 'Formation professionnelle') && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Filière / Spécialisation</label>
+                    <input value={filiere_etudes} onChange={e => setFiliereEtudes(e.target.value)} placeholder="Ex: Médecine, Génie civil, Informatique, Menuiserie..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Langues</label>
                   <div className="flex flex-wrap gap-2">
@@ -607,6 +642,12 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                     ))}
                   </div>
                 </div>
+                </>
+                )}
+
+                {/* Économie — masqué pour les enfants */}
+                {!isEnfant && (
+                  <>
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Activité principale <span className="text-red-500">*</span></label>
                   <div className="grid grid-cols-2 gap-2">
@@ -686,6 +727,8 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                     <button type="button" onClick={() => { if (newCompetence) { setCompetences(prev => [...prev, newCompetence]); setNewCompetence(''); }}} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">+</button>
                   </div>
                 </div>
+                  </>
+                )} {/* fin !isEnfant */}
               </div>
             )}
 
