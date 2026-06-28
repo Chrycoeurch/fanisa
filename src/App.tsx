@@ -6,7 +6,7 @@ import FoyerCard from './components/FoyerCard';
 import FoyerForm from './components/FoyerForm';
 import FoyerDetail from './components/FoyerDetail';
 import MembreForm from './components/MembreForm';
-import DocumentGenerator from './components/DocumentGenerator';
+import DocumentsModule from './components/DocumentsModule';
 import FinanceModule from './components/FinanceModule';
 import MaterialsModule from './components/MaterialsModule';
 import LandModule from './components/LandModule';
@@ -289,7 +289,7 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'documents' && <DocumentGenerator habitants={habitants} onLoggedAction={(a, d) => addLog(a, d)} />}
+        {activeTab === 'documents' && <DocumentsModule foyers={foyers} membres={membres} />}
         {activeTab === 'statistics' && <StatsView habitants={habitants} foyers={foyers} membres={membres} />}
         {activeTab === 'finances' && (
           <FinanceModule transactions={transactions} habitants={habitants} cotisations={cotisations}
