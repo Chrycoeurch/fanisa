@@ -226,3 +226,112 @@ export interface LotFoncier { id: string; numeroLot: string; titreFoncier?: stri
 export interface Transaction { id: string; date: string; type: 'recette' | 'depense'; montant: number; categorie: 'Subvention' | 'Droits administratifs' | 'Dons & Cotisations' | 'Taxes locales' | 'Achat matériel' | 'Fournitures' | 'Entretien' | 'Social' | 'Événements' | 'Autre'; description: string; responsable: string; justificatifRef?: string; }
 export interface Materiel { id: string; nom: string; categorie: 'Mobilier' | 'Informatique' | 'Logistique' | 'Événementiel' | 'Sécurité' | 'Autre'; quantiteTotal: number; quantiteDisponible: number; etat: 'Excellent' | 'Bon' | 'Moyen' | 'Détérioré' | 'En panne'; dateAcquisition: string; valeurEstimee: number; responsable: string; lieuStockage: string; }
 export interface CotisationAdidy { id: string; codeMenage: string; habitantId?: string; annee: number; mois: number; montant: number; datePaiement: string; responsable: string; recuNo: string; }
+
+// ── Types fonciers ────────────────────────────────────────────
+export interface Parcelle {
+  id: string;
+  numero_lot: string;
+  titre_foncier?: string;
+  cadastre_ref?: string;
+  superficie_m2?: number;
+  gps_lat?: number;
+  gps_lng?: number;
+  adresse?: string;
+  fokontany?: string;
+  usage?: string;
+  historique_subdivision?: string;
+  notes?: string;
+  photo_url?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TitulaireFoncier {
+  id: string;
+  parcelle_id: string;
+  type_titulaire: string;
+  nom?: string;
+  prenom?: string;
+  cin?: string;
+  telephone?: string;
+  adresse?: string;
+  notes?: string;
+}
+
+export interface Detenteur {
+  id: string;
+  parcelle_id: string;
+  membre_id?: string;
+  foyer_id?: string;
+  type_detention: string;
+  nom?: string;
+  prenom?: string;
+  cin?: string;
+  telephone?: string;
+  date_debut_occupation?: string;
+  document_detenu?: string;
+  notes?: string;
+}
+
+export interface Batiment {
+  id: string;
+  parcelle_id: string;
+  foyer_id?: string;
+  reference_batiment: string;
+  type_batiment: string;
+  etat: string;
+  superficie_m2?: number;
+  nombre_niveaux?: number;
+  materiaux_mur?: string;
+  materiaux_toiture?: string;
+  annee_construction?: number;
+  photo_url?: string;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface ProprietaireBatiment {
+  id: string;
+  batiment_id: string;
+  membre_id?: string;
+  nom?: string;
+  prenom?: string;
+  cin?: string;
+  telephone?: string;
+  lien_avec_parcelle?: string;
+  notes?: string;
+}
+
+export interface OccupantReel {
+  id: string;
+  batiment_id: string;
+  foyer_id?: string;
+  membre_id?: string;
+  type_occupation: string;
+  date_debut?: string;
+  loyer_mensuel?: number;
+  notes?: string;
+}
+
+export interface MiseEnValeur {
+  id: string;
+  parcelle_id: string;
+  maison?: boolean;
+  cloture?: boolean;
+  cultures?: boolean;
+  elevage?: boolean;
+  eau?: boolean;
+  electricite?: boolean;
+  commerce?: boolean;
+  annee_debut?: number;
+  description?: string;
+}
+
+export interface BienFoyer {
+  id: string;
+  foyer_id: string;
+  type_bien: string;
+  quantite: number;
+  description?: string;
+  valeur_estimee?: number;
+}

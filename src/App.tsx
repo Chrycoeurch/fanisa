@@ -9,7 +9,7 @@ import MembreForm from './components/MembreForm';
 import DocumentsModule from './components/DocumentsModule';
 import FinanceModule from './components/FinanceModule';
 import MaterialsModule from './components/MaterialsModule';
-import LandModule from './components/LandModule';
+import FoncierModule from './components/FoncierModule';
 import StatsView from './components/StatsView';
 import { FOKONTANY_LIST } from './seedData';
 import {
@@ -306,7 +306,7 @@ export default function App() {
             onDeleteMateriel={async (id) => setMateriels(p => p.filter(x => x.id !== id))}
           />
         )}
-        {activeTab === 'land' && <LandModule allResidents={habitants} onAddLog={addLog} />}
+        {activeTab === 'land' && <FoncierModule foyers={foyers} membres={membres} />}
         {activeTab === 'logs' && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
