@@ -58,8 +58,9 @@ export default function FinancesModule({ foyers, membres }: Props) {
   const [searchCot, setSearchCot] = useState('');
   const [filtreCot, setFiltreCot] = useState<'tous' | 'payes' | 'non_payes'>('tous');
 
-  // Historique
-  const [pageEnc, setPageEnc] = useState(1);
+  // Dashboard filtre dates
+  const [dashDebut, setDashDebut] = useState('');
+  const [dashFin, setDashFin] = useState('');
   const [pageDep, setPageDep] = useState(1);
   const [dateDebutEnc, setDateDebutEnc] = useState('');
   const [dateFinEnc, setDateFinEnc] = useState('');
@@ -323,16 +324,59 @@ export default function FinancesModule({ foyers, membres }: Props) {
       {loading ? <div className="text-center py-16"><Loader2 className="h-8 w-8 text-green-600 animate-spin mx-auto" /></div> : <>
 
       {/* ── TABLEAU DE BORD ── */}
-      {subMenu === 'dashboard' && (
+      {subMenu === 'dashboard' && (() => {
+        // Calculs filtrés par dates
+        const encFiltres = encaissements.filter(e => {
+          if (dashDebut && e.created_at < dashDebut) return false;
+          if (dashFin && e.created_at > dashFin + 'T23:59:59') return false;
+          return true;
+        });
+        const depFiltres = depenses.filter(d => {
+          if (dashDebut && d.created_at < dashDebut) return false;
+          if (dashFin && d.created_at > dashFin + 'T23:59:59') return false;
+          return true;
+        });
+        const donsFiltres = dons.filter(d => {
+          if (dashDebut && d.date_reception < dashDebut) return false;
+          if (dashFin && d.date_reception > dashFin + 'T23:59:59') return false;
+          return true;
+        });
+        const recettesFiltrees = encFiltres.reduce((s, e) => s + (e.montant_total || 0), 0);
+        const depFiltrees      = depFiltres.reduce((s, d) => s + (d.montant || 0), 0);
+        const donsFiltres$     = donsFiltres.filter(d => typeof d.montant === 'number').reduce((s, d) => s + (d.montant || 0), 0);
+        const hasFiltres = dashDebut || dashFin;
+        const labelPeriode = hasFiltres
+          ? `${dashDebut ? new Date(dashDebut).toLocaleDateString('fr-FR') : '…'} → ${dashFin ? new Date(dashFin).toLocaleDateString('fr-FR') : '…'}`
+          : 'Toutes périodes';
+
+        return (
         <div className="space-y-4">
-          {/* Solde — le plus important */}
+          {/* Filtre dates */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
+            <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="text-xs font-bold text-slate-500 uppercase">Période :</span>
+            <input type="date" value={dashDebut} onChange={e => setDashDebut(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-green-400" />
+            <span className="text-xs text-slate-400">→</span>
+            <input type="date" value={dashFin} onChange={e => setDashFin(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-green-400" />
+            {hasFiltres && (
+              <button onClick={() => { setDashDebut(''); setDashFin(''); }}
+                className="text-xs text-slate-400 hover:text-red-500 font-semibold px-2 py-1 hover:bg-red-50 rounded-lg">✕ Réinitialiser</button>
+            )}
+            <span className={`ml-auto text-xs font-semibold px-3 py-1.5 rounded-full ${hasFiltres ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+              {labelPeriode}
+            </span>
+          </div>
+
+          {/* Solde — toujours global */}
           <div className={`rounded-2xl p-6 text-white flex items-center justify-between ${solde >= 0 ? 'bg-gradient-to-br from-emerald-600 to-emerald-700' : 'bg-gradient-to-br from-red-600 to-red-700'}`}>
             <div>
               <p className="text-xs opacity-70 font-bold uppercase tracking-widest mb-1">Solde de caisse</p>
               <p className="text-5xl font-black tracking-tight">{fmt(Math.abs(solde))}</p>
               <p className="text-sm opacity-70 mt-2">{solde >= 0 ? '✅ Excédentaire' : '⚠ Déficitaire'}</p>
             </div>
-            <div className="text-right text-sm space-y-1 opacity-70">
+            <div className="text-right text-sm space-y-1 opacity-75">
               <p>Initial : {fmt(config.solde_initial || 0)}</p>
               <p>+ Recettes : {fmt(totalRecettes)}</p>
               <p>+ Dons : {fmt(totalDons)}</p>
@@ -340,27 +384,41 @@ export default function FinancesModule({ foyers, membres }: Props) {
             </div>
           </div>
 
-          {/* Cards financières */}
+          {/* Cards globales — filtrées si dates saisies */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2"><ArrowUpCircle className="h-4 w-4 text-green-500" /><span className="text-xs font-bold text-slate-500 uppercase">Recettes du jour</span></div>
-              <p className="text-xl font-black text-green-600">{fmt(recettesJour)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{new Date().toLocaleDateString('fr-FR')}</p>
+            <div className="bg-white border-2 border-emerald-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ArrowUpCircle className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs font-bold text-slate-500 uppercase">Recettes</span>
+              </div>
+              <p className="text-2xl font-black text-emerald-600">{fmt(recettesFiltrees)}</p>
+              <p className="text-xs text-slate-400 mt-1">{encFiltres.length} encaissement{encFiltres.length > 1 ? 's' : ''}</p>
             </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2"><ArrowDownCircle className="h-4 w-4 text-red-500" /><span className="text-xs font-bold text-slate-500 uppercase">Dépenses du jour</span></div>
-              <p className="text-xl font-black text-red-600">{fmt(depJour)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{new Date().toLocaleDateString('fr-FR')}</p>
+            <div className="bg-white border-2 border-red-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ArrowDownCircle className="h-4 w-4 text-red-500" />
+                <span className="text-xs font-bold text-slate-500 uppercase">Dépenses</span>
+              </div>
+              <p className="text-2xl font-black text-red-600">{fmt(depFiltrees)}</p>
+              <p className="text-xs text-slate-400 mt-1">{depFiltres.length} dépense{depFiltres.length > 1 ? 's' : ''}</p>
             </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2"><TrendingUp className="h-4 w-4 text-indigo-500" /><span className="text-xs font-bold text-slate-500 uppercase">Total recettes</span></div>
-              <p className="text-xl font-black text-indigo-600">{fmt(totalRecettes)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{encaissements.length} encaissements</p>
+            <div className="bg-white border-2 border-purple-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Gift className="h-4 w-4 text-purple-500" />
+                <span className="text-xs font-bold text-slate-500 uppercase">Dons reçus</span>
+              </div>
+              <p className="text-2xl font-black text-purple-600">{fmt(donsFiltres$)}</p>
+              <p className="text-xs text-slate-400 mt-1">{donsFiltres.length} don{donsFiltres.length > 1 ? 's' : ''}</p>
             </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2"><TrendingDown className="h-4 w-4 text-amber-500" /><span className="text-xs font-bold text-slate-500 uppercase">Total dépenses</span></div>
-              <p className="text-xl font-black text-amber-600">{fmt(totalDep)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{depenses.length} dépenses</p>
+            <div className="bg-white border-2 border-indigo-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="h-4 w-4 text-indigo-500" />
+                <span className="text-xs font-bold text-slate-500 uppercase">Solde période</span>
+              </div>
+              <p className={`text-2xl font-black ${recettesFiltrees + donsFiltres$ - depFiltrees >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
+                {fmt(recettesFiltrees + donsFiltres$ - depFiltrees)}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">{labelPeriode}</p>
             </div>
           </div>
 
@@ -391,7 +449,8 @@ export default function FinancesModule({ foyers, membres }: Props) {
                 <h3 className="text-sm font-bold text-red-600 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />Non payé — {MOIS[MOIS_COURANT - 1]} {ANNEE_COURANTE}
                 </h3>
-                <button onClick={() => { setFiltreCot('non_payes'); setAnneeSelCot(ANNEE_COURANTE); setSubMenu('cotisations'); }} className="text-xs text-green-600 font-semibold hover:underline">Gérer →</button>
+                <button onClick={() => { setFiltreCot('non_payes'); setAnneeSelCot(ANNEE_COURANTE); setSubMenu('cotisations'); }}
+                  className="text-xs text-green-600 font-semibold hover:underline">Gérer →</button>
               </div>
               <div className="divide-y divide-slate-50 max-h-52 overflow-y-auto">
                 {foyers.filter(f => !foyersAJourSet.has(f.id)).slice(0, 15).map(f => {
@@ -409,7 +468,8 @@ export default function FinancesModule({ foyers, membres }: Props) {
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* ── COTISATIONS ── */}
       {subMenu === 'cotisations' && (
