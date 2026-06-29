@@ -202,11 +202,14 @@ export default function FinancesModule({ foyers, membres }: Props) {
     await loadAll();
   };
 
-  // Supprimer encaissement/dépense
+  // Supprimer encaissement → supprime aussi la cotisation liée
   const deleteEncaissement = async (id: string) => {
-    if (!confirm('Supprimer cet encaissement ?')) return;
+    if (!confirm('Supprimer cet encaissement ? La cotisation associée sera également annulée.')) return;
+    // 1. Supprimer les lignes de détail
     await supabase.from('encaissement_lignes').delete().eq('encaissement_id', id);
-    await supabase.from('cotisations').update({ encaissement_id: null }).eq('encaissement_id', id);
+    // 2. Supprimer la cotisation liée (bidirectionnel)
+    await supabase.from('cotisations').delete().eq('encaissement_id', id);
+    // 3. Supprimer l'encaissement lui-même
     await supabase.from('encaissements').delete().eq('id', id);
     await loadAll();
   };
