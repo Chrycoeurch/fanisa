@@ -5,7 +5,7 @@ import {
   Wallet, TrendingUp, TrendingDown, Receipt, Users,
   Settings, Save, Loader2, CheckCircle, AlertCircle,
   Clock, Gift, BarChart2, ChevronLeft, ChevronRight,
-  Search, Calendar, Trash2, ArrowUpCircle, ArrowDownCircle
+  Search, Calendar, Trash2, ArrowUpCircle, ArrowDownCircle, Plus
 } from 'lucide-react';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; }
@@ -13,11 +13,37 @@ interface Props { foyers: Foyer[]; membres: Membre[]; }
 const fmt = (n: number) => new Intl.NumberFormat('fr-MG').format(n) + ' Ar';
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const ANNEE_COURANTE = new Date().getFullYear();
-const MOIS_COURANT = new Date().getMonth() + 1; // 1-12
-const ANNEES = [ANNEE_COURANTE - 1, ANNEE_COURANTE, ANNEE_COURANTE + 1];
+const MOIS_COURANT = new Date().getMonth() + 1;
 const PAGE_SIZE = 10;
 
-type SubMenu = 'dashboard' | 'cotisations' | 'historique' | 'dons' | 'parametres';
+// Tous les documents du système avec leurs clés de tarif
+const TOUS_LES_DOCS = [
+  { code: 'CR',  label: 'Certificat de Résidence',          key: 'tarif_cr',  categorie: 'Administratif' },
+  { code: 'CVI', label: 'Certificat de Vie Individuelle',    key: 'tarif_cvi', categorie: 'Administratif' },
+  { code: 'CVC', label: 'Certificat de Vie Collective',      key: 'tarif_cvc', categorie: 'Administratif' },
+  { code: 'CEL', label: 'Certificat de Célibat',             key: 'tarif_cel', categorie: 'Administratif' },
+  { code: 'BC',  label: 'Certificat de Bonne Conduite',      key: 'tarif_bc',  categorie: 'Administratif' },
+  { code: 'CM',  label: 'Composition du Ménage',             key: 'tarif_cm',  categorie: 'Administratif' },
+  { code: 'FM',  label: 'Fiche Ménage',                      key: 'tarif_fm',  categorie: 'Administratif' },
+  { code: 'FFD', label: 'Déclaration de Décès',              key: 'tarif_ffd', categorie: 'Administratif' },
+  { code: 'FAS', label: 'Attestation de Travail',            key: 'tarif_fas', categorie: 'Administratif' },
+  { code: 'PCG', label: 'Prise en Charge et Garde',          key: 'tarif_pcg', categorie: 'Administratif' },
+  { code: 'NR',  label: 'Certificat de Non-Remariage',       key: 'tarif_nr',  categorie: 'Administratif' },
+  { code: 'NSC', label: 'Certificat de Non-Séparation',      key: 'tarif_nsc', categorie: 'Administratif' },
+  { code: 'ELE', label: "Certificat d'Existence Exploitation",key: 'tarif_ele', categorie: 'Administratif' },
+  { code: 'FFA', label: 'Fanambarana Fananana',              key: 'tarif_ffa', categorie: 'Administratif' },
+  { code: 'COT', label: "Certificat d'Occupation de Terrain",key: 'tarif_cot', categorie: 'Foncier' },
+  { code: 'JOR', label: 'JOROLAVA',                          key: 'tarif_jor', categorie: 'Foncier' },
+  { code: 'ADF', label: 'Attestation de Détention Foncière', key: 'tarif_adf', categorie: 'Foncier' },
+  { code: 'APB', label: 'Attestation Propriété Bâtiment',    key: 'tarif_apb', categorie: 'Foncier' },
+  { code: 'AMV', label: 'Attestation de Mise en Valeur',     key: 'tarif_amv', categorie: 'Foncier' },
+  { code: 'FP',  label: 'Fiche Parcellaire',                 key: 'tarif_fp',  categorie: 'Foncier' },
+  { code: 'FB',  label: 'Fiche Bâtiment',                    key: 'tarif_fb',  categorie: 'Foncier' },
+  { code: 'DRF', label: 'Demande de Régularisation Foncière',key: 'tarif_drf', categorie: 'Foncier' },
+  { code: 'IFT', label: 'Ticket IFT',                        key: 'tarif_ift', categorie: 'Foncier' },
+];
+
+type SubMenu = 'dashboard' | 'cotisations' | 'depenses' | 'historique' | 'dons' | 'parametres';
 
 export default function FinancesModule({ foyers, membres }: Props) {
   const [subMenu, setSubMenu] = useState<SubMenu>('dashboard');
@@ -31,6 +57,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
   // Cotisations
   const [anneeSelCot, setAnneeSelCot] = useState(ANNEE_COURANTE);
+  const [anneeInput, setAnneeInput] = useState(ANNEE_COURANTE.toString());
   const [savingCot, setSavingCot] = useState<string | null>(null);
   const [searchCot, setSearchCot] = useState('');
 
@@ -71,30 +98,21 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // ── Calculs corrects ──────────────────────────────────────
+  // ── Calculs ───────────────────────────────────────────────
   const totalRecettes = encaissements.reduce((s, e) => s + (e.montant_total || 0), 0);
   const totalDep = depenses.reduce((s, d) => s + (d.montant || 0), 0);
   const totalDons = dons.filter(d => typeof d.montant === 'number').reduce((s, d) => s + (d.montant || 0), 0);
   const solde = (config.solde_initial || 0) + totalRecettes + totalDons - totalDep;
-
   const today = new Date().toISOString().split('T')[0];
   const recettesJour = encaissements.filter(e => e.created_at?.startsWith(today)).reduce((s, e) => s + (e.montant_total || 0), 0);
   const depJour = depenses.filter(d => d.created_at?.startsWith(today)).reduce((s, d) => s + (d.montant || 0), 0);
-
-  // À jour = a payé le mois EN COURS de l'année en cours
   const periodeActuelle = `${MOIS[MOIS_COURANT - 1]} ${ANNEE_COURANTE}`;
-  const foyersAJour = new Set(
-    cotisations.filter(c => c.periode === periodeActuelle && c.statut === 'À jour').map(c => c.foyer_id)
-  );
+  const foyersAJour = new Set(cotisations.filter(c => c.periode === periodeActuelle && c.statut === 'À jour').map(c => c.foyer_id));
   const nbAJour = foyersAJour.size;
   const nbEnRetard = foyers.length - nbAJour;
+  const totalCotAnnee = cotisations.filter(c => c.periode?.includes(ANNEE_COURANTE.toString()) && c.statut === 'À jour').reduce((s, c) => s + (c.montant_paye || 0), 0);
 
-  // Cotisations de l'année en cours — total encaissé
-  const totalCotAnnee = cotisations
-    .filter(c => c.periode?.includes(ANNEE_COURANTE.toString()) && c.statut === 'À jour')
-    .reduce((s, c) => s + (c.montant_paye || 0), 0);
-
-  // ── Grille cotisations ────────────────────────────────────
+  // ── Cotisations ───────────────────────────────────────────
   const getCotStatut = (foyerId: string, moisNum: number) => {
     const periode = `${MOIS[moisNum - 1]} ${anneeSelCot}`;
     return cotisations.find(c => c.foyer_id === foyerId && c.periode === periode && c.statut === 'À jour') ? 'paye' : 'non_paye';
@@ -107,13 +125,10 @@ export default function FinancesModule({ foyers, membres }: Props) {
     if (!w) return;
     w.document.write(`<html><head><title>Reçu</title><style>body{font-family:monospace;font-size:12px;margin:20px;max-width:320px}.t{font-size:16px;font-weight:bold;text-align:center}.s{text-align:center;font-size:11px;margin-bottom:12px}hr{border:1px dashed #000;margin:8px 0}.r{display:flex;justify-content:space-between;margin:4px 0}.tot{font-weight:bold;font-size:14px;border-top:2px solid #000;padding-top:8px;margin-top:8px}.f{text-align:center;margin-top:16px;font-size:10px}</style></head><body>`);
     w.document.write(`<div class="t">FOKONTANY FANISA</div><div class="s">REÇU DE COTISATION</div><hr>`);
-    w.document.write(`<div class="r"><span>Réf.:</span><span>${ref}</span></div>`);
-    w.document.write(`<div class="r"><span>Date:</span><span>${new Date().toLocaleDateString('fr-FR')}</span></div>`);
-    w.document.write(`<div class="r"><span>Ménage:</span><span>${foyer.code_menage}</span></div>`);
+    w.document.write(`<div class="r"><span>Réf.:</span><span>${ref}</span></div><div class="r"><span>Date:</span><span>${new Date().toLocaleDateString('fr-FR')}</span></div><div class="r"><span>Ménage:</span><span>${foyer.code_menage}</span></div>`);
     if (chef) w.document.write(`<div class="r"><span>Chef:</span><span>${chef.nom} ${chef.prenom}</span></div>`);
-    w.document.write(`<hr><div class="r"><span>Cotisation — ${periode}</span><span>${new Intl.NumberFormat('fr-MG').format(montant)} Ar</span></div>`);
-    w.document.write(`<div class="tot"><div class="r"><span>TOTAL</span><span>${new Intl.NumberFormat('fr-MG').format(montant)} Ar</span></div></div>`);
-    w.document.write(`<div class="f">Généré automatiquement par FANISA<br>Merci pour votre paiement</div></body></html>`);
+    w.document.write(`<hr><div class="r"><span>Cotisation — ${periode}</span><span>${new Intl.NumberFormat('fr-MG').format(montant)} Ar</span></div><div class="tot"><div class="r"><span>TOTAL</span><span>${new Intl.NumberFormat('fr-MG').format(montant)} Ar</span></div></div>`);
+    w.document.write(`<div class="f">Généré par FANISA · Merci pour votre paiement</div></body></html>`);
     w.document.close();
     setTimeout(() => w.print(), 300);
   };
@@ -151,7 +166,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
     await loadAll();
   };
 
-  // ── Supprimer encaissement / dépense ─────────────────────
+  // ── Suppressions ──────────────────────────────────────────
   const deleteEncaissement = async (id: string) => {
     if (!confirm('Supprimer cet encaissement ?')) return;
     await supabase.from('encaissement_lignes').delete().eq('encaissement_id', id);
@@ -166,7 +181,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
     await loadAll();
   };
 
-  // ── Historique filtré + paginé ────────────────────────────
+  // ── Historique filtré ─────────────────────────────────────
   const filteredEnc = encaissements.filter(e => {
     if (dateDebutEnc && e.created_at < dateDebutEnc) return false;
     if (dateFinEnc && e.created_at > dateFinEnc + 'T23:59:59') return false;
@@ -192,17 +207,6 @@ export default function FinancesModule({ foyers, membres }: Props) {
     ) : null
   );
 
-  const DateFilter = ({ debut, fin, onDebut, onFin, total, totalMontant, label }: any) => (
-    <div className="flex items-center gap-3 flex-wrap bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-3">
-      <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
-      <input type="date" value={debut} onChange={e => { onDebut(e.target.value); }} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-indigo-400" />
-      <span className="text-xs text-slate-400">→</span>
-      <input type="date" value={fin} onChange={e => { onFin(e.target.value); }} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-indigo-400" />
-      {(debut || fin) && <button onClick={() => { onDebut(''); onFin(''); }} className="text-xs text-slate-400 hover:text-red-500 font-semibold">✕</button>}
-      <span className="ml-auto text-xs text-slate-500"><strong>{total}</strong> {label} · Total : <strong className="text-slate-800">{fmt(totalMontant)}</strong></span>
-    </div>
-  );
-
   const handleSaveDep = async () => {
     if (!newDep.categorie || !newDep.montant) { alert('Catégorie et montant requis.'); return; }
     setSavingDep(true);
@@ -224,6 +228,11 @@ export default function FinancesModule({ foyers, membres }: Props) {
     loadAll();
   };
 
+  const handleSaveConfig = async () => {
+    await supabase.from('config_finances').update(config).eq('id', 1);
+    alert('Configuration enregistrée !');
+  };
+
   const foyersCot = foyers.filter(f => {
     if (!searchCot) return true;
     const q = searchCot.toLowerCase();
@@ -234,22 +243,24 @@ export default function FinancesModule({ foyers, membres }: Props) {
   const MENUS: { key: SubMenu; label: string; icon: any }[] = [
     { key: 'dashboard',   label: 'Tableau de bord', icon: BarChart2 },
     { key: 'cotisations', label: 'Cotisations',     icon: Users },
+    { key: 'depenses',    label: 'Dépenses',        icon: TrendingDown },
     { key: 'historique',  label: 'Historique',      icon: Clock },
     { key: 'dons',        label: 'Dons',            icon: Gift },
     { key: 'parametres',  label: 'Paramètres',      icon: Settings },
   ];
 
+  // Grouper docs par catégorie pour les paramètres
+  const docsAdmin = TOUS_LES_DOCS.filter(d => d.categorie === 'Administratif');
+  const docsFoncier = TOUS_LES_DOCS.filter(d => d.categorie === 'Foncier');
+
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-green-600 p-2.5 rounded-xl"><Wallet className="h-5 w-5 text-white" /></div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Finances & Cotisations</h2>
-              <p className="text-xs text-slate-500">Gestion financière du Fokontany</p>
-            </div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-green-600 p-2.5 rounded-xl"><Wallet className="h-5 w-5 text-white" /></div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Finances & Cotisations</h2>
+            <p className="text-xs text-slate-500">Gestion financière du Fokontany</p>
           </div>
         </div>
         <div className="flex gap-1 flex-wrap">
@@ -263,17 +274,16 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
       {loading ? <div className="text-center py-16"><Loader2 className="h-8 w-8 text-green-600 animate-spin mx-auto" /></div> : <>
 
-      {/* ── TABLEAU DE BORD ── */}
+      {/* ── DASHBOARD ── */}
       {subMenu === 'dashboard' && (
         <div className="space-y-4">
-          {/* Solde principal — le plus important */}
           <div className={`rounded-2xl p-6 text-white flex items-center justify-between ${solde >= 0 ? 'bg-gradient-to-br from-emerald-600 to-emerald-700' : 'bg-gradient-to-br from-red-600 to-red-700'}`}>
             <div>
               <p className="text-xs opacity-70 font-bold uppercase tracking-widest mb-1">Solde de caisse actuel</p>
-              <p className="text-5xl font-black tracking-tight">{fmt(Math.abs(solde))}</p>
+              <p className="text-5xl font-black">{fmt(Math.abs(solde))}</p>
               <p className="text-sm opacity-70 mt-2">{solde >= 0 ? '✅ Excédentaire' : '⚠ Déficitaire'}</p>
             </div>
-            <div className="text-right opacity-60 space-y-1 text-sm">
+            <div className="text-right text-sm opacity-60 space-y-1">
               <p>Solde initial : {fmt(config.solde_initial || 0)}</p>
               <p>+ Recettes : {fmt(totalRecettes)}</p>
               <p>+ Dons : {fmt(totalDons)}</p>
@@ -281,7 +291,6 @@ export default function FinancesModule({ foyers, membres }: Props) {
             </div>
           </div>
 
-          {/* Cards cotisations — le sujet principal du module */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 text-center">
               <CheckCircle className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
@@ -299,35 +308,24 @@ export default function FinancesModule({ foyers, membres }: Props) {
               <Users className="h-8 w-8 text-indigo-400 mx-auto mb-2" />
               <p className="text-3xl font-black text-indigo-700">{foyers.length}</p>
               <p className="text-sm font-bold text-indigo-600 mt-1">Total ménages</p>
-              <p className="text-xs text-indigo-400 mt-0.5">dans le registre</p>
             </div>
           </div>
 
-          {/* Cards financières secondaires */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2"><ArrowUpCircle className="h-4 w-4 text-green-500" /><span className="text-xs font-bold text-slate-500 uppercase">Recettes du jour</span></div>
-              <p className="text-lg font-black text-green-600">{fmt(recettesJour)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{new Date().toLocaleDateString('fr-FR')}</p>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2"><ArrowDownCircle className="h-4 w-4 text-red-500" /><span className="text-xs font-bold text-slate-500 uppercase">Dépenses du jour</span></div>
-              <p className="text-lg font-black text-red-600">{fmt(depJour)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{new Date().toLocaleDateString('fr-FR')}</p>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2"><Receipt className="h-4 w-4 text-indigo-500" /><span className="text-xs font-bold text-slate-500 uppercase">Cotisations {ANNEE_COURANTE}</span></div>
-              <p className="text-lg font-black text-indigo-600">{fmt(totalCotAnnee)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{cotisations.filter(c => c.periode?.includes(ANNEE_COURANTE.toString()) && c.statut === 'À jour').length} paiements</p>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2"><Gift className="h-4 w-4 text-purple-500" /><span className="text-xs font-bold text-slate-500 uppercase">Dons reçus</span></div>
-              <p className="text-lg font-black text-purple-600">{fmt(totalDons)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{dons.length} don{dons.length > 1 ? 's' : ''}</p>
-            </div>
+            {[
+              { label: 'Recettes du jour', val: fmt(recettesJour), icon: ArrowUpCircle, color: 'text-green-600', sub: today },
+              { label: 'Dépenses du jour', val: fmt(depJour), icon: ArrowDownCircle, color: 'text-red-600', sub: today },
+              { label: `Cotisations ${ANNEE_COURANTE}`, val: fmt(totalCotAnnee), icon: Receipt, color: 'text-indigo-600', sub: `${cotisations.filter(c=>c.periode?.includes(ANNEE_COURANTE.toString())&&c.statut==='À jour').length} paiements` },
+              { label: 'Dons reçus', val: fmt(totalDons), icon: Gift, color: 'text-purple-600', sub: `${dons.length} don${dons.length>1?'s':''}` },
+            ].map(({ label, val, icon: Icon, color, sub }) => (
+              <div key={label} className="bg-white border border-slate-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2"><Icon className={`h-4 w-4 ${color}`} /><span className="text-xs font-bold text-slate-500 uppercase">{label}</span></div>
+                <p className={`text-lg font-black ${color}`}>{val}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
+              </div>
+            ))}
           </div>
 
-          {/* Ménages en retard ce mois */}
           {nbEnRetard > 0 && (
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -345,7 +343,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
                     </div>
                   );
                 })}
-                {nbEnRetard > 10 && <p className="text-center text-xs text-slate-400 py-2">+ {nbEnRetard - 10} autres ménages</p>}
+                {nbEnRetard > 10 && <p className="text-center text-xs text-slate-400 py-2">+ {nbEnRetard - 10} autres</p>}
               </div>
             </div>
           )}
@@ -356,33 +354,48 @@ export default function FinancesModule({ foyers, membres }: Props) {
       {subMenu === 'cotisations' && (
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-4">
+            {/* Sélection année libre */}
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-500 uppercase">Année :</span>
-              <div className="flex gap-1">
-                {ANNEES.map(a => (
-                  <button key={a} onClick={() => setAnneeSelCot(a)} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${anneeSelCot === a ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{a}</button>
-                ))}
+              <label className="text-xs font-bold text-slate-500 uppercase">Année :</label>
+              <input
+                type="number"
+                value={anneeInput}
+                onChange={e => setAnneeInput(e.target.value)}
+                onBlur={() => {
+                  const y = parseInt(anneeInput);
+                  if (y >= 2000 && y <= 2100) setAnneeSelCot(y);
+                  else setAnneeInput(anneeSelCot.toString());
+                }}
+                onKeyDown={e => { if (e.key === 'Enter') { const y = parseInt(anneeInput); if (y >= 2000 && y <= 2100) setAnneeSelCot(y); } }}
+                className="w-20 border-2 border-indigo-300 rounded-lg px-2 py-1.5 text-sm font-bold text-center outline-none focus:border-indigo-600"
+              />
+              <div className="flex gap-0.5">
+                <button onClick={() => { const y = anneeSelCot - 1; setAnneeSelCot(y); setAnneeInput(y.toString()); }} className="px-2 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-l-lg font-bold text-slate-600">◀</button>
+                <button onClick={() => { const y = anneeSelCot + 1; setAnneeSelCot(y); setAnneeInput(y.toString()); }} className="px-2 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-r-lg font-bold text-slate-600">▶</button>
               </div>
+              {anneeSelCot !== ANNEE_COURANTE && (
+                <button onClick={() => { setAnneeSelCot(ANNEE_COURANTE); setAnneeInput(ANNEE_COURANTE.toString()); }} className="text-xs text-indigo-600 font-semibold hover:underline">Aujourd'hui</button>
+              )}
             </div>
             <div className="flex-1 min-w-48 relative">
               <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
               <input value={searchCot} onChange={e => setSearchCot(e.target.value)} placeholder="Rechercher un foyer..." className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-green-500" />
             </div>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-emerald-500 inline-block" />Payé → clic = annuler</span>
-              <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-slate-100 border border-slate-200 inline-block" />Non payé → clic = encaisser + reçu</span>
+            <div className="flex items-center gap-3 text-xs text-slate-500">
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-emerald-500 inline-block" /> Payé (clic = annuler)</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-slate-100 border border-slate-300 inline-block" /> Non payé (clic = encaisser)</span>
             </div>
-            <span className="text-xs font-bold text-slate-500 ml-auto">{fmt(config.cotisation_mensuelle || 5000)}/mois</span>
+            <span className="ml-auto text-xs font-bold text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">{fmt(config.cotisation_mensuelle || 5000)} / mois</span>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-xl overflow-auto">
-            <table className="w-full text-xs min-w-[900px]">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-slate-800">
-                  <th className="p-3 text-left text-white sticky left-0 bg-slate-800 z-20 min-w-44">Ménage / Chef</th>
+          <div className="bg-white border border-slate-200 rounded-xl overflow-auto shadow-sm">
+            <table className="w-full text-xs min-w-[960px]">
+              <thead>
+                <tr className="bg-slate-800 sticky top-0 z-10">
+                  <th className="p-3 text-left text-white sticky left-0 bg-slate-800 z-20 min-w-48">Ménage / Chef</th>
                   {MOIS.map((m, i) => (
-                    <th key={m} className={`p-2 text-center text-white min-w-16 ${i + 1 === MOIS_COURANT && anneeSelCot === ANNEE_COURANTE ? 'text-emerald-300' : ''}`}>
-                      {m.slice(0, 3)}{i + 1 === MOIS_COURANT && anneeSelCot === ANNEE_COURANTE ? ' ●' : ''}
+                    <th key={m} className={`p-2 text-center text-white min-w-16 ${i + 1 === MOIS_COURANT && anneeSelCot === ANNEE_COURANTE ? 'bg-emerald-700' : ''}`}>
+                      {m.slice(0, 3)}
                     </th>
                   ))}
                   <th className="p-3 text-center text-white min-w-16">Bilan</th>
@@ -404,7 +417,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
                             <p className="text-slate-600 text-[11px] truncate max-w-32">{chef ? `${chef.nom} ${chef.prenom}` : '—'}</p>
                           </div>
                           {anneeSelCot === ANNEE_COURANTE && (
-                            <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${estAJourCeMois ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                            <span className={`ml-auto text-[10px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${estAJourCeMois ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
                               {estAJourCeMois ? '✓' : '!'}
                             </span>
                           )}
@@ -416,20 +429,20 @@ export default function FinancesModule({ foyers, membres }: Props) {
                         const key = `${foyer.id}-${moisNom} ${anneeSelCot}`;
                         const isSaving = savingCot === key;
                         const isFutur = anneeSelCot > ANNEE_COURANTE || (anneeSelCot === ANNEE_COURANTE && moisNum > MOIS_COURANT);
-                        const isMoisCourant = anneeSelCot === ANNEE_COURANTE && moisNum === MOIS_COURANT;
+                        const isCurrent = anneeSelCot === ANNEE_COURANTE && moisNum === MOIS_COURANT;
                         return (
-                          <td key={moisNom} className={`p-1 text-center ${isMoisCourant ? 'bg-emerald-50' : ''}`}>
+                          <td key={moisNom} className={`p-1 text-center ${isCurrent ? 'bg-emerald-50' : ''}`}>
                             {isFutur ? (
-                              <span className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 inline-flex items-center justify-center text-slate-300">—</span>
+                              <span className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 inline-flex items-center justify-center text-slate-300 text-[10px]">—</span>
                             ) : isSaving ? (
                               <span className="w-8 h-8 rounded-lg bg-emerald-100 inline-flex items-center justify-center"><Loader2 className="h-4 w-4 text-emerald-500 animate-spin" /></span>
                             ) : statut === 'paye' ? (
-                              <button onClick={() => handleDecocherCot(foyer, moisNum)} className="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-red-400 inline-flex items-center justify-center transition group" title="Annuler">
+                              <button onClick={() => handleDecocherCot(foyer, moisNum)} className="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-red-400 inline-flex items-center justify-center transition" title="Cliquer pour annuler">
                                 <CheckCircle className="h-4 w-4 text-white" />
                               </button>
                             ) : (
-                              <button onClick={() => handleCocherCot(foyer, moisNum)} className={`w-8 h-8 rounded-lg inline-flex items-center justify-center transition border ${isMoisCourant ? 'bg-emerald-100 border-emerald-300 hover:bg-emerald-500' : 'bg-slate-100 border-slate-200 hover:bg-emerald-100 hover:border-emerald-300'}`} title="Encaisser">
-                                <span className={`font-bold text-sm ${isMoisCourant ? 'text-emerald-600' : 'text-slate-400'}`}>+</span>
+                              <button onClick={() => handleCocherCot(foyer, moisNum)} className={`w-8 h-8 rounded-lg border inline-flex items-center justify-center transition ${isCurrent ? 'bg-emerald-100 border-emerald-400 hover:bg-emerald-500' : 'bg-white border-slate-200 hover:bg-emerald-100 hover:border-emerald-300'}`} title="Cliquer pour encaisser">
+                                <span className={`font-bold text-lg leading-none ${isCurrent ? 'text-emerald-600' : 'text-slate-400'}`}>+</span>
                               </button>
                             )}
                           </td>
@@ -442,12 +455,12 @@ export default function FinancesModule({ foyers, membres }: Props) {
                   );
                 })}
               </tbody>
-              <tfoot className="sticky bottom-0">
-                <tr className="bg-slate-700">
-                  <td className="p-3 text-white font-bold text-xs sticky left-0 bg-slate-700">Payés ce mois</td>
+              <tfoot>
+                <tr className="bg-slate-700 sticky bottom-0">
+                  <td className="p-3 text-white font-bold text-xs sticky left-0 bg-slate-700">Payés</td>
                   {MOIS.map((moisNom, mi) => {
                     const count = foyers.filter(f => getCotStatut(f.id, mi + 1) === 'paye').length;
-                    return <td key={moisNom} className="p-2 text-center"><span className={`text-xs font-bold ${count > 0 ? 'text-emerald-300' : 'text-slate-500'}`}>{count}</span></td>;
+                    return <td key={moisNom} className={`p-2 text-center ${mi + 1 === MOIS_COURANT && anneeSelCot === ANNEE_COURANTE ? 'bg-emerald-800' : ''}`}><span className={`text-xs font-bold ${count > 0 ? 'text-emerald-300' : 'text-slate-500'}`}>{count}</span></td>;
                   })}
                   <td className="p-2 text-center text-emerald-300 font-bold text-xs">{nbAJour}/{foyers.length}</td>
                 </tr>
@@ -457,42 +470,56 @@ export default function FinancesModule({ foyers, membres }: Props) {
         </div>
       )}
 
-      {/* ── HISTORIQUE (encaissements + dépenses) ── */}
+      {/* ── DÉPENSES ── */}
+      {subMenu === 'depenses' && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><ArrowDownCircle className="h-5 w-5 text-red-500" />Enregistrer une dépense</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Catégorie *</label>
+              <select value={newDep.categorie} onChange={e => setNewDep(p => ({ ...p, categorie: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white outline-none focus:border-red-400">
+                <option value="">Choisir...</option>
+                {CATEGORIES_DEP.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Montant (Ar) *</label>
+              <input type="number" value={newDep.montant} onChange={e => setNewDep(p => ({ ...p, montant: e.target.value }))} placeholder="Ex: 15000" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-red-400" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Description</label>
+              <input value={newDep.description} onChange={e => setNewDep(p => ({ ...p, description: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Bénéficiaire</label>
+              <input value={newDep.beneficiaire} onChange={e => setNewDep(p => ({ ...p, beneficiaire: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
+            </div>
+          </div>
+          <button onClick={handleSaveDep} disabled={savingDep} className="w-full py-3 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl flex items-center justify-center gap-2">
+            {savingDep ? <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement…</> : <><Save className="h-4 w-4" />Enregistrer la dépense</>}
+          </button>
+          <p className="text-xs text-slate-400 text-center">La dépense sera visible dans l'onglet Historique.</p>
+        </div>
+      )}
+
+      {/* ── HISTORIQUE ── */}
       {subMenu === 'historique' && (
         <div className="space-y-5">
-          {/* Formulaire dépense */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><ArrowDownCircle className="h-4 w-4 text-red-500" />Enregistrer une dépense</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Catégorie *</label>
-                <select value={newDep.categorie} onChange={e => setNewDep(p => ({ ...p, categorie: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white outline-none focus:border-red-400">
-                  <option value="">Choisir...</option>
-                  {CATEGORIES_DEP.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Montant (Ar) *</label>
-                <input type="number" value={newDep.montant} onChange={e => setNewDep(p => ({ ...p, montant: e.target.value }))} placeholder="Ex: 15000" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-red-400" />
-              </div>
-              <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Description</label>
-                <input value={newDep.description} onChange={e => setNewDep(p => ({ ...p, description: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
-              </div>
-              <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Bénéficiaire</label>
-                <input value={newDep.beneficiaire} onChange={e => setNewDep(p => ({ ...p, beneficiaire: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
-              </div>
-            </div>
-            <button onClick={handleSaveDep} disabled={savingDep} className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
-              {savingDep ? <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement…</> : <><Save className="h-4 w-4" />Enregistrer la dépense</>}
-            </button>
-          </div>
-
-          {/* Tableau encaissements */}
+          {/* Encaissements */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
               <h3 className="text-sm font-bold text-green-700 flex items-center gap-2 mb-3"><ArrowUpCircle className="h-4 w-4" />Encaissements</h3>
-              <DateFilter debut={dateDebutEnc} fin={dateFinEnc} onDebut={(v: string) => { setDateDebutEnc(v); setPageEnc(1); }} onFin={(v: string) => { setDateFinEnc(v); setPageEnc(1); }} total={filteredEnc.length} totalMontant={filteredEnc.reduce((s, e) => s + (e.montant_total || 0), 0)} label="encaissement(s)" />
+              <div className="flex items-center gap-3 flex-wrap bg-slate-50 rounded-lg px-3 py-2">
+                <Calendar className="h-4 w-4 text-slate-400" />
+                <input type="date" value={dateDebutEnc} onChange={e => { setDateDebutEnc(e.target.value); setPageEnc(1); }} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-green-400" />
+                <span className="text-xs text-slate-400">→</span>
+                <input type="date" value={dateFinEnc} onChange={e => { setDateFinEnc(e.target.value); setPageEnc(1); }} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-green-400" />
+                {(dateDebutEnc || dateFinEnc) && <button onClick={() => { setDateDebutEnc(''); setDateFinEnc(''); }} className="text-xs text-slate-400 hover:text-red-500 font-semibold">✕</button>}
+                <span className="ml-auto text-xs text-slate-500 font-semibold">{filteredEnc.length} résultat(s) · <span className="text-green-600">{fmt(filteredEnc.reduce((s,e)=>s+(e.montant_total||0),0))}</span></span>
+              </div>
             </div>
             <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b"><th className="p-3 text-left text-slate-500">Référence</th><th className="p-3 text-left text-slate-500">Ménage</th><th className="p-3 text-left text-slate-500">Bénéficiaire</th><th className="p-3 text-right text-slate-500">Montant</th><th className="p-3 text-left text-slate-500">Mode</th><th className="p-3 text-left text-slate-500">Date</th><th className="p-3 text-center text-slate-500">Action</th></tr></thead>
+              <thead><tr className="bg-slate-50 border-b"><th className="p-3 text-left text-slate-500">Référence</th><th className="p-3 text-left text-slate-500">Ménage</th><th className="p-3 text-left text-slate-500">Bénéficiaire</th><th className="p-3 text-right text-slate-500">Montant</th><th className="p-3 text-left text-slate-500">Mode</th><th className="p-3 text-left text-slate-500">Date</th><th className="p-3 text-center text-slate-500">Suppr.</th></tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {encPage.map(e => (
                   <tr key={e.id} className="hover:bg-slate-50">
@@ -500,7 +527,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
                     <td className="p-3 font-mono text-indigo-600">{e.code_menage}</td>
                     <td className="p-3 text-slate-700">{e.nom_beneficiaire}</td>
                     <td className="p-3 text-right font-bold text-green-700">{fmt(e.montant_total)}</td>
-                    <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${e.mode_paiement === 'Espèces' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{e.mode_paiement}</span></td>
+                    <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${e.mode_paiement==='Espèces'?'bg-green-100 text-green-700':'bg-blue-100 text-blue-700'}`}>{e.mode_paiement}</span></td>
                     <td className="p-3 text-slate-400">{new Date(e.created_at).toLocaleDateString('fr-FR')}</td>
                     <td className="p-3 text-center"><button onClick={() => deleteEncaissement(e.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-slate-300 hover:text-red-500 transition"><Trash2 className="h-4 w-4" /></button></td>
                   </tr>
@@ -511,14 +538,21 @@ export default function FinancesModule({ foyers, membres }: Props) {
             <Pagination page={pageEnc} total={totalPagesEnc} onPage={setPageEnc} />
           </div>
 
-          {/* Tableau dépenses */}
+          {/* Dépenses */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
               <h3 className="text-sm font-bold text-red-600 flex items-center gap-2 mb-3"><ArrowDownCircle className="h-4 w-4" />Dépenses</h3>
-              <DateFilter debut={dateDebutDep} fin={dateFinDep} onDebut={(v: string) => { setDateDebutDep(v); setPageDep(1); }} onFin={(v: string) => { setDateFinDep(v); setPageDep(1); }} total={filteredDep.length} totalMontant={filteredDep.reduce((s, d) => s + (d.montant || 0), 0)} label="dépense(s)" />
+              <div className="flex items-center gap-3 flex-wrap bg-slate-50 rounded-lg px-3 py-2">
+                <Calendar className="h-4 w-4 text-slate-400" />
+                <input type="date" value={dateDebutDep} onChange={e => { setDateDebutDep(e.target.value); setPageDep(1); }} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-red-400" />
+                <span className="text-xs text-slate-400">→</span>
+                <input type="date" value={dateFinDep} onChange={e => { setDateFinDep(e.target.value); setPageDep(1); }} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-red-400" />
+                {(dateDebutDep || dateFinDep) && <button onClick={() => { setDateDebutDep(''); setDateFinDep(''); }} className="text-xs text-slate-400 hover:text-red-500 font-semibold">✕</button>}
+                <span className="ml-auto text-xs text-slate-500 font-semibold">{filteredDep.length} résultat(s) · <span className="text-red-600">{fmt(filteredDep.reduce((s,d)=>s+(d.montant||0),0))}</span></span>
+              </div>
             </div>
             <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b"><th className="p-3 text-left text-slate-500">Référence</th><th className="p-3 text-left text-slate-500">Catégorie</th><th className="p-3 text-left text-slate-500">Description</th><th className="p-3 text-left text-slate-500">Bénéficiaire</th><th className="p-3 text-right text-slate-500">Montant</th><th className="p-3 text-left text-slate-500">Date</th><th className="p-3 text-center text-slate-500">Action</th></tr></thead>
+              <thead><tr className="bg-slate-50 border-b"><th className="p-3 text-left text-slate-500">Référence</th><th className="p-3 text-left text-slate-500">Catégorie</th><th className="p-3 text-left text-slate-500">Description</th><th className="p-3 text-left text-slate-500">Bénéficiaire</th><th className="p-3 text-right text-slate-500">Montant</th><th className="p-3 text-left text-slate-500">Date</th><th className="p-3 text-center text-slate-500">Suppr.</th></tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {depPage.map(d => (
                   <tr key={d.id} className="hover:bg-slate-50">
@@ -561,7 +595,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
               </div>
             </div>
             <button onClick={handleSaveDon} disabled={savingDon} className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
-              {savingDon ? <><Loader2 className="h-4 w-4 animate-spin" />…</> : <><Save className="h-4 w-4" />Enregistrer</>}
+              {savingDon ? <><Loader2 className="h-4 w-4 animate-spin" /></> : <><Save className="h-4 w-4" />Enregistrer</>}
             </button>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -591,25 +625,66 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
       {/* ── PARAMÈTRES ── */}
       {subMenu === 'parametres' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-5">
-          <h3 className="text-sm font-bold text-slate-700">⚙️ Paramètres</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {[{k:'cotisation_mensuelle',l:'Cotisation mensuelle (Ar)'},{k:'cotisation_trimestrielle',l:'Trimestrielle (Ar)'},{k:'cotisation_annuelle',l:'Annuelle (Ar)'}].map(({k,l})=>(
-              <div key={k}><label className="text-xs font-semibold text-slate-500 block mb-1">{l}</label>
-                <input type="number" value={config[k]||''} onChange={e=>setConfig((p:any)=>({...p,[k]:parseFloat(e.target.value)}))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-500" />
+        <div className="space-y-5">
+          {/* Cotisations */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Users className="h-4 w-4 text-green-600" />Cotisations</h3>
+            <div className="grid grid-cols-3 gap-3">
+              {[{k:'cotisation_mensuelle',l:'Mensuelle (Ar)'},{k:'cotisation_trimestrielle',l:'Trimestrielle (Ar)'},{k:'cotisation_annuelle',l:'Annuelle (Ar)'}].map(({k,l})=>(
+                <div key={k}>
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">{l}</label>
+                  <input type="number" value={config[k]||''} onChange={e=>setConfig((p:any)=>({...p,[k]:parseFloat(e.target.value)}))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-500" />
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-semibold text-slate-500 block mb-1">Solde initial (Ar)</label>
+                <input type="number" value={config.solde_initial||0} onChange={e=>setConfig((p:any)=>({...p,solde_initial:parseFloat(e.target.value)}))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-500" />
               </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs font-semibold text-slate-500 block mb-1">Solde initial (Ar)</label>
-              <input type="number" value={config.solde_initial||0} onChange={e=>setConfig((p:any)=>({...p,solde_initial:parseFloat(e.target.value)}))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-500" />
-            </div>
-            <div><label className="text-xs font-semibold text-slate-500 block mb-1">Préfixe des reçus</label>
-              <input value={config.prefixe_recu||'REC'} onChange={e=>setConfig((p:any)=>({...p,prefixe_recu:e.target.value}))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-mono" />
+              <div><label className="text-xs font-semibold text-slate-500 block mb-1">Préfixe des reçus</label>
+                <input value={config.prefixe_recu||'REC'} onChange={e=>setConfig((p:any)=>({...p,prefixe_recu:e.target.value}))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none font-mono" />
+              </div>
             </div>
           </div>
-          <button onClick={async()=>{await supabase.from('config_finances').update(config).eq('id',1);alert('Enregistré !');}} className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl flex items-center justify-center gap-2">
-            <Save className="h-4 w-4" />Enregistrer
+
+          {/* Tarifs documents administratifs */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Receipt className="h-4 w-4 text-indigo-600" />Tarifs — Documents administratifs</h3>
+            <p className="text-xs text-slate-400">Ces tarifs sont utilisés automatiquement lors de la génération des actes dans le module Actes & Docs.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {docsAdmin.map(doc => (
+                <div key={doc.key} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                  <span className="text-xs font-mono font-bold text-indigo-600 w-10 shrink-0">[{doc.code}]</span>
+                  <span className="text-xs text-slate-600 flex-1">{doc.label}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <input type="number" value={config[doc.key]||''} onChange={e=>setConfig((p:any)=>({...p,[doc.key]:parseFloat(e.target.value)}))} className="w-24 border border-slate-200 rounded-lg px-2 py-1 text-sm text-right outline-none focus:border-indigo-400 font-mono" placeholder="0" />
+                    <span className="text-xs text-slate-400">Ar</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tarifs documents fonciers */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Receipt className="h-4 w-4 text-amber-600" />Tarifs — Documents fonciers</h3>
+            <p className="text-xs text-slate-400">Ces tarifs sont utilisés automatiquement lors de la génération des actes fonciers.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {docsFoncier.map(doc => (
+                <div key={doc.key} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                  <span className="text-xs font-mono font-bold text-amber-600 w-10 shrink-0">[{doc.code}]</span>
+                  <span className="text-xs text-slate-600 flex-1">{doc.label}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <input type="number" value={config[doc.key]||''} onChange={e=>setConfig((p:any)=>({...p,[doc.key]:parseFloat(e.target.value)}))} className="w-24 border border-slate-200 rounded-lg px-2 py-1 text-sm text-right outline-none focus:border-amber-400 font-mono" placeholder="0" />
+                    <span className="text-xs text-slate-400">Ar</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button onClick={handleSaveConfig} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2">
+            <Save className="h-5 w-5" />Enregistrer toute la configuration
           </button>
         </div>
       )}
