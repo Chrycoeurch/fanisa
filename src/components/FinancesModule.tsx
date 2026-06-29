@@ -4,7 +4,7 @@ import { Foyer, Membre } from '../types';
 import {
   Wallet, TrendingUp, TrendingDown, Receipt, Users,
   Settings, Save, Loader2, CheckCircle, AlertCircle,
-  Gift, BarChart2, ChevronLeft, ChevronRight,
+  Gift, BarChart2, ChevronLeft, ChevronRight, ChevronDown,
   Search, Calendar, Trash2, ArrowUpCircle, ArrowDownCircle, Filter
 } from 'lucide-react';
 
@@ -52,7 +52,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
   // Cotisations
   const [anneeSelCot, setAnneeSelCot] = useState(ANNEE_COURANTE);
-  const [anneeInputCot, setAnneeInputCot] = useState(String(ANNEE_COURANTE));
+  const [showAnneePicker, setShowAnneePicker] = useState(false);
   const [savingCot, setSavingCot] = useState<string | null>(null);
   const [searchCot, setSearchCot] = useState('');
   const [filtreCot, setFiltreCot] = useState<'tous' | 'payes' | 'non_payes'>('tous');
@@ -93,6 +93,17 @@ export default function FinancesModule({ foyers, membres }: Props) {
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Fermer le popup année si clic ailleurs
+  useEffect(() => {
+    if (!showAnneePicker) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-annee-picker]')) setShowAnneePicker(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAnneePicker]);
 
   // ── Calculs ───────────────────────────────────────────────
   const totalRecettes  = encaissements.reduce((s, e) => s + (e.montant_total || 0), 0);
@@ -405,31 +416,29 @@ export default function FinancesModule({ foyers, membres }: Props) {
           {/* Barre de contrôle */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
             {/* Sélecteur année libre */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-500 uppercase">Année :</span>
-              <input
-                type="number"
-                value={anneeInputCot}
-                onChange={e => setAnneeInputCot(e.target.value)}
-                onBlur={() => {
-                  const y = parseInt(anneeInputCot);
-                  if (y >= 2020 && y <= 2099) setAnneeSelCot(y);
-                  else setAnneeInputCot(String(anneeSelCot));
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    const y = parseInt(anneeInputCot);
-                    if (y >= 2020 && y <= 2099) setAnneeSelCot(y);
-                  }
-                }}
-                className="w-20 border-2 border-green-400 rounded-lg px-2 py-1.5 text-sm font-bold text-center outline-none focus:border-green-600"
-                min={2020} max={2099}
-              />
-              <div className="flex gap-1">
-                <button onClick={() => { const y = anneeSelCot - 1; setAnneeSelCot(y); setAnneeInputCot(String(y)); }} className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold text-slate-600">‹</button>
-                <button onClick={() => { setAnneeSelCot(ANNEE_COURANTE); setAnneeInputCot(String(ANNEE_COURANTE)); }} className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-600">Auj.</button>
-                <button onClick={() => { const y = anneeSelCot + 1; setAnneeSelCot(y); setAnneeInputCot(String(y)); }} className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold text-slate-600">›</button>
-              </div>
+            {/* Sélecteur année — popup */}
+            <div className="relative" data-annee-picker>
+              <button
+                onClick={() => setShowAnneePicker(!showAnneePicker)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm transition"
+              >
+                <Calendar className="h-4 w-4 opacity-70" />
+                {anneeSelCot}
+                <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+              </button>
+              {showAnneePicker && (
+                <div className="absolute top-full left-0 mt-2 z-30 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 w-56">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Sélectionner l'année</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {Array.from({ length: 12 }, (_, i) => ANNEE_COURANTE - 3 + i).map(y => (
+                      <button key={y} onClick={() => { setAnneeSelCot(y); setShowAnneePicker(false); }}
+                        className={`py-2 rounded-lg text-sm font-bold transition ${y === anneeSelCot ? 'bg-green-600 text-white' : y === ANNEE_COURANTE ? 'bg-slate-100 text-green-700 border border-green-300' : 'hover:bg-slate-100 text-slate-700'}`}>
+                        {y}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Filtre payé / non payé */}
