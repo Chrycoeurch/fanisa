@@ -343,7 +343,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
         });
         const recettesFiltrees = encFiltres.reduce((s, e) => s + (e.montant_total || 0), 0);
         const depFiltrees      = depFiltres.reduce((s, d) => s + (d.montant || 0), 0);
-        const donsFiltres$     = donsFiltres.filter(d => typeof d.montant === 'number').reduce((s, d) => s + (d.montant || 0), 0);
+        const donsMontant     = donsFiltres.filter(d => typeof d.montant === 'number').reduce((s, d) => s + (d.montant || 0), 0);
         const hasFiltres = dashDebut || dashFin;
         const labelPeriode = hasFiltres
           ? `${dashDebut ? new Date(dashDebut).toLocaleDateString('fr-FR') : '…'} → ${dashFin ? new Date(dashFin).toLocaleDateString('fr-FR') : '…'}`
@@ -407,7 +407,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
                 <Gift className="h-4 w-4 text-purple-500" />
                 <span className="text-xs font-bold text-slate-500 uppercase">Dons reçus</span>
               </div>
-              <p className="text-2xl font-black text-purple-600">{fmt(donsFiltres$)}</p>
+              <p className="text-2xl font-black text-purple-600">{fmt(donsMontant)}</p>
               <p className="text-xs text-slate-400 mt-1">{donsFiltres.length} don{donsFiltres.length > 1 ? 's' : ''}</p>
             </div>
             <div className="bg-white border-2 border-indigo-200 rounded-xl p-4">
@@ -415,8 +415,8 @@ export default function FinancesModule({ foyers, membres }: Props) {
                 <TrendingUp className="h-4 w-4 text-indigo-500" />
                 <span className="text-xs font-bold text-slate-500 uppercase">Solde période</span>
               </div>
-              <p className={`text-2xl font-black ${recettesFiltrees + donsFiltres$ - depFiltrees >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
-                {fmt(recettesFiltrees + donsFiltres$ - depFiltrees)}
+              <p className={`text-2xl font-black ${recettesFiltrees + donsMontant - depFiltrees >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
+                {fmt(recettesFiltrees + donsMontant - depFiltrees)}
               </p>
               <p className="text-xs text-slate-400 mt-1">{labelPeriode}</p>
             </div>
