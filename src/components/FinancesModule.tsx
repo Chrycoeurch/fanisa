@@ -53,6 +53,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
   // Cotisations
   const [anneeSelCot, setAnneeSelCot] = useState(ANNEE_COURANTE);
   const [showAnneePicker, setShowAnneePicker] = useState(false);
+  const [anneePickerBase, setAnneePickerBase] = useState(ANNEE_COURANTE - 3);
   const [savingCot, setSavingCot] = useState<string | null>(null);
   const [searchCot, setSearchCot] = useState('');
   const [filtreCot, setFiltreCot] = useState<'tous' | 'payes' | 'non_payes'>('tous');
@@ -429,8 +430,15 @@ export default function FinancesModule({ foyers, membres }: Props) {
               {showAnneePicker && (
                 <div className="absolute top-full left-0 mt-2 z-30 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 w-56">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Sélectionner l'année</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <button onClick={e => { e.stopPropagation(); setAnneePickerBase(b => b - 12); }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 font-bold">‹‹</button>
+                    <button onClick={e => { e.stopPropagation(); setAnneePickerBase(b => b - 3); }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 font-bold">‹</button>
+                    <span className="text-xs text-slate-400 font-semibold">{anneePickerBase} – {anneePickerBase + 11}</span>
+                    <button onClick={e => { e.stopPropagation(); setAnneePickerBase(b => b + 3); }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 font-bold">›</button>
+                    <button onClick={e => { e.stopPropagation(); setAnneePickerBase(b => b + 12); }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 font-bold">››</button>
+                  </div>
                   <div className="grid grid-cols-3 gap-1.5">
-                    {Array.from({ length: 12 }, (_, i) => ANNEE_COURANTE - 3 + i).map(y => (
+                    {Array.from({ length: 12 }, (_, i) => anneePickerBase + i).map(y => (
                       <button key={y} onClick={() => { setAnneeSelCot(y); setShowAnneePicker(false); }}
                         className={`py-2 rounded-lg text-sm font-bold transition ${y === anneeSelCot ? 'bg-green-600 text-white' : y === ANNEE_COURANTE ? 'bg-slate-100 text-green-700 border border-green-300' : 'hover:bg-slate-100 text-slate-700'}`}>
                         {y}
