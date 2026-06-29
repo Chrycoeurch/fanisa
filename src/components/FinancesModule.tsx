@@ -623,7 +623,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
                     return <td key={moisNom} className="p-2 text-center"><span className={`text-xs font-bold ${count > 0 ? 'text-emerald-300' : 'text-slate-500'}`}>{count}</span></td>;
                   })}
                   <td className="p-2 text-center text-emerald-300 font-bold text-xs">{nbAJour}/{foyers.length}</td>
-                  <td className="p-2 text-center text-red-300 font-bold text-xs">{fmt(foyersCotAll => foyersCotAll)}</td>
+                  <td className="p-2 text-center text-red-300 font-bold text-xs">{fmt(foyers.reduce((s, f) => s + getResteAPayer(f.id), 0))}</td>
                 </tr>
               </tfoot>
             </table>
