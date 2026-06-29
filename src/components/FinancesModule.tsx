@@ -119,6 +119,16 @@ export default function FinancesModule({ foyers, membres }: Props) {
   const nbAJour         = foyersAJourSet.size;
   const nbEnRetard      = foyers.length - nbAJour;
 
+  // Total encaissé cotisations année courante
+  const totalCotEncaisse = cotisations
+    .filter(c => c.statut === 'À jour' && c.periode?.includes(String(ANNEE_COURANTE)))
+    .reduce((s, c) => s + (c.montant_paye || 0), 0);
+  // Total restant à payer (tous foyers, mois passés + courant non payés)
+  const tarifMois = config.cotisation_mensuelle || 5000;
+  const moisEcoules = MOIS_COURANT; // Jan=1 → Juin=6
+  const totalCotDu = foyers.length * moisEcoules * tarifMois;
+  const totalCotReste = Math.max(0, totalCotDu - totalCotEncaisse);
+
   // ── Calculs dashboard filtrés ─────────────────────────────
   const encFiltresDash = encaissements.filter(e => {
     if (dashDebut && e.created_at < dashDebut) return false;
@@ -386,23 +396,39 @@ export default function FinancesModule({ foyers, membres }: Props) {
                 </div>
               </div>
 
-              {/* Cards cotisations mois courant */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-5 flex items-center gap-4">
-                  <div className="bg-emerald-500 p-3 rounded-xl"><CheckCircle className="h-6 w-6 text-white" /></div>
-                  <div>
-                    <p className="text-3xl font-black text-emerald-700">{nbAJour}</p>
-                    <p className="text-sm font-bold text-emerald-600">Payé ce mois</p>
-                    <p className="text-xs text-emerald-500">{MOIS[MOIS_COURANT - 1]} {ANNEE_COURANTE}</p>
+              {/* Cards cotisations — totaux financiers + mois courant */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-500" />
+                    <span className="text-xs font-bold text-emerald-600 uppercase">Payé ce mois</span>
                   </div>
+                  <p className="text-2xl font-black text-emerald-700">{nbAJour} <span className="text-sm font-semibold opacity-60">/ {foyers.length}</span></p>
+                  <p className="text-xs text-emerald-500 mt-1">{MOIS[MOIS_COURANT - 1]} {ANNEE_COURANTE}</p>
                 </div>
-                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5 flex items-center gap-4">
-                  <div className="bg-red-400 p-3 rounded-xl"><AlertCircle className="h-6 w-6 text-white" /></div>
-                  <div>
-                    <p className="text-3xl font-black text-red-600">{nbEnRetard}</p>
-                    <p className="text-sm font-bold text-red-500">Non payé ce mois</p>
-                    <p className="text-xs text-red-400">sur {foyers.length} ménages</p>
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="h-4 w-4 text-red-400" />
+                    <span className="text-xs font-bold text-red-500 uppercase">Non payé ce mois</span>
                   </div>
+                  <p className="text-2xl font-black text-red-600">{nbEnRetard} <span className="text-sm font-semibold opacity-60">ménage{nbEnRetard > 1 ? 's' : ''}</span></p>
+                  <p className="text-xs text-red-400 mt-1">{fmt((config.cotisation_mensuelle || 5000) * nbEnRetard)} dus</p>
+                </div>
+                <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Receipt className="h-4 w-4 text-indigo-500" />
+                    <span className="text-xs font-bold text-indigo-600 uppercase">Encaissé {ANNEE_COURANTE}</span>
+                  </div>
+                  <p className="text-2xl font-black text-indigo-700">{fmt(totalCotEncaisse)}</p>
+                  <p className="text-xs text-indigo-400 mt-1">{cotisations.filter(c => c.statut === 'À jour' && c.periode?.includes(String(ANNEE_COURANTE))).length} paiements</p>
+                </div>
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingDown className="h-4 w-4 text-amber-500" />
+                    <span className="text-xs font-bold text-amber-600 uppercase">Reste à percevoir</span>
+                  </div>
+                  <p className="text-2xl font-black text-amber-700">{fmt(totalCotReste)}</p>
+                  <p className="text-xs text-amber-500 mt-1">Jan → {MOIS[MOIS_COURANT - 1]}</p>
                 </div>
               </div>
 
@@ -528,7 +554,17 @@ export default function FinancesModule({ foyers, membres }: Props) {
                             const statut = getCotStatut(foyer.id, moisNum);
                             const key = `${foyer.id}-${moisNom} ${anneeSelCot}`;
                             const isSaving = savingCot === key;
-                            const isFutur = anneeSelCot > ANNEE_COURANTE || (anneeSelCot === ANNEE_COURANTE && moisNum > MOIS_COURANT);
+                            const isFutur = (() => {
+                          if (anneeSelCot > ANNEE_COURANTE) return true;
+                          if (anneeSelCot < ANNEE_COURANTE) return false;
+                          // Même année : mois futur bloqué SAUF si le mois précédent est payé
+                          if (moisNum <= MOIS_COURANT) return false; // mois passé ou courant = toujours actif
+                          // Mois futur : actif uniquement si tous les mois de MOIS_COURANT à moisNum-1 sont payés
+                          for (let m = MOIS_COURANT; m < moisNum; m++) {
+                            if (getCotStatut(foyer.id, m) !== 'paye') return true; // bloqué
+                          }
+                          return false; // débloqué car mois précédents payés
+                        })();
                             const isMoisCourant = anneeSelCot === ANNEE_COURANTE && moisNum === MOIS_COURANT;
                             return (
                               <td key={moisNom} className={`p-1 text-center ${isMoisCourant ? 'bg-emerald-50/60' : ''}`}>
