@@ -339,6 +339,15 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
         const { error: errUpdateDemandes } = await supabase.from('demandes_documents').update({ statut: 'Payé', transaction_id: transaction.id }).in('id', demandeIds);
         if (errUpdateDemandes) { console.error('Erreur mise à jour demandes_documents:', errUpdateDemandes); alert(`Le paiement a été validé mais la mise à jour des demandes de documents a échoué.\n\n${errUpdateDemandes.message}\n\nContactez le support technique.`); }
       }
+      // Mettre à jour les cotisations liées (module Cotisations) — passage en statut "À jour"
+      const cotisationsAMettreAJour = operationsSelectionnees.filter(o => o.module_origine === 'Cotisations' && o.foyer_id && o.metadata?.periode);
+      for (const op of cotisationsAMettreAJour) {
+        const { error: errUpdateCot } = await supabase.from('cotisations')
+          .update({ statut: 'À jour', montant_paye: op.montant * (op.quantite || 1), date_paiement: new Date().toISOString() })
+          .eq('foyer_id', op.foyer_id)
+          .eq('periode', op.metadata.periode);
+        if (errUpdateCot) { console.error('Erreur mise à jour cotisations:', errUpdateCot); alert(`Le paiement a été validé mais la mise à jour de la cotisation a échoué.\n\n${errUpdateCot.message}\n\nContactez le support technique.`); }
+      }
       await supabase.from('journal_caisse').insert({
         type_evenement: 'validation_paiement', transaction_id: transaction.id, utilisateur: agent,
         details: { numero_recu: numeroRecu, montant: totalAPayer, nb_operations: ids.length, poste: navigator.userAgent.slice(0, 60) },

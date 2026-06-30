@@ -222,12 +222,6 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
   const handleDecocherCot = async (foyer: Foyer, moisNum: number) => {
     const periode = `${MOIS[moisNum - 1]} ${anneeSelCot}`;
-    const cot = cotisations.find(c => c.foyer_id === foyer.id && c.periode === periode);
-    const estPaye = cot?.statut === 'À jour';
-    if (estPaye) {
-      alert('Cette cotisation a déjà été validée par la Caisse. Pour l\'annuler, utilisez l\'annulation de transaction depuis l\'onglet Caisse → Historique.');
-      return;
-    }
     if (!confirm(`Retirer la cotisation ${periode} de la file d'attente de paiement ?`)) return;
     // Supprimer l'opération en attente liée à cette cotisation (jamais encore payée)
     await supabase.from('operations_caisse')
@@ -461,9 +455,9 @@ export default function FinancesModule({ foyers, membres }: Props) {
                                 ) : isSaving ? (
                                   <span className="w-8 h-8 rounded-lg bg-emerald-100 inline-flex items-center justify-center"><Loader2 className="h-4 w-4 text-emerald-500 animate-spin" /></span>
                                 ) : statut === 'paye' ? (
-                                  <button onClick={() => handleDecocherCot(foyer, moisNum)} title="Payé — clic pour annuler" className="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-red-400 inline-flex items-center justify-center transition">
+                                  <span title="Payé — validé par la Caisse. Pour annuler, voir Caisse → Historique." className="w-8 h-8 rounded-lg bg-emerald-500 inline-flex items-center justify-center cursor-default">
                                     <CheckCircle className="h-4 w-4 text-white" />
-                                  </button>
+                                  </span>
                                 ) : statut === 'en_attente' ? (
                                   <button onClick={() => handleDecocherCot(foyer, moisNum)} title="En attente de paiement en Caisse — clic pour retirer" className="w-8 h-8 rounded-lg bg-amber-400 hover:bg-red-400 inline-flex items-center justify-center transition">
                                     <Clock className="h-4 w-4 text-white" />
