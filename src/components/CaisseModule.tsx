@@ -82,6 +82,11 @@ export default function CaisseModule({ foyers, membres }: Props) {
   const [modePaiement, setModePaiement] = useState('Espèces');
   const [agent, setAgent] = useState('Agent Fokontany');
   const [validating, setValidating] = useState(false);
+  const [showCreditModal, setShowCreditModal] = useState(false);
+  const [creditMotif, setCreditMotif] = useState('');
+  const [creditDateLimite, setCreditDateLimite] = useState('');
+  const [creditResponsable, setCreditResponsable] = useState('');
+  const [creditProcessing, setCreditProcessing] = useState(false);
 
   // ── Historique des transactions ───────────────────────────────
   const [transactions, setTransactions] = useState<TransactionCaisse[]>([]);
@@ -286,6 +291,11 @@ export default function CaisseModule({ foyers, membres }: Props) {
     if (transaction) {
       const ids = operationsSelectionnees.map(o => o.id);
       await supabase.from('operations_caisse').update({ statut: 'Payé', transaction_id: transaction.id }).in('id', ids);
+      // Mettre à jour les demandes de documents liées (module Documents)
+      const demandeIds = operationsSelectionnees.filter(o => o.metadata?.demande_document_id).map(o => o.metadata.demande_document_id);
+      if (demandeIds.length > 0) {
+        await supabase.from('demandes_documents').update({ statut: 'Payé', transaction_id: transaction.id }).in('id', demandeIds);
+      }
       await supabase.from('journal_caisse').insert({
         type_evenement: 'validation_paiement', transaction_id: transaction.id, utilisateur: agent,
         details: { numero_recu: numeroRecu, montant: totalAPayer, nb_operations: ids.length, poste: navigator.userAgent.slice(0, 60) },
@@ -298,6 +308,55 @@ export default function CaisseModule({ foyers, membres }: Props) {
       await loadOperations(selectedUsager);
     }
     setValidating(false);
+  };
+
+  // ── Délivrance à crédit (réservée — pas de recette enregistrée) ──
+  const handleDelivrerACredit = async () => {
+    if (!creditMotif.trim() || !creditDateLimite || !creditResponsable.trim()) { alert('Motif, date limite et responsable sont obligatoires.'); return; }
+    if (operationsSelectionnees.length === 0 || !selectedUsager) return;
+    setCreditProcessing(true);
+    const usagerNom = selectedUsager.membre
+      ? `${selectedUsager.membre.nom} ${selectedUsager.membre.prenom}`
+      : (membres.find(m => m.foyer_id === selectedUsager.foyer?.id && m.is_chef)
+          ? `${membres.find(m => m.foyer_id === selectedUsager.foyer?.id && m.is_chef)!.nom} ${membres.find(m => m.foyer_id === selectedUsager.foyer?.id && m.is_chef)!.prenom}`
+          : selectedUsager.foyer?.code_menage || 'Usager');
+
+    const ids = operationsSelectionnees.map(o => o.id);
+    // Marquer les opérations comme "Délivré à crédit" — aucune transaction financière créée
+    await supabase.from('operations_caisse').update({ statut: 'Délivré à crédit' }).in('id', ids);
+
+    // Mettre à jour les demandes de documents liées
+    const demandeIds = operationsSelectionnees.filter(o => o.metadata?.demande_document_id).map(o => o.metadata.demande_document_id);
+    if (demandeIds.length > 0) {
+      await supabase.from('demandes_documents').update({
+        statut: 'Délivré à crédit', credit_motif: creditMotif, credit_date_limite: creditDateLimite, credit_responsable: creditResponsable,
+        credit_montant_restant: totalAPayer,
+      }).in('id', demandeIds);
+    }
+
+    // Créer la créance dans Finance
+    await supabase.from('creances').insert({
+      demande_document_id: demandeIds[0] || null,
+      nom_debiteur: usagerNom,
+      foyer_id: selectedUsager.foyer?.id || selectedUsager.membre?.foyer_id || null,
+      membre_id: selectedUsager.membre?.id || null,
+      montant: totalAPayer,
+      motif: creditMotif,
+      date_limite: creditDateLimite,
+      responsable: creditResponsable,
+      statut: 'Non soldée',
+    });
+
+    // Journal
+    await supabase.from('journal_caisse').insert({
+      type_evenement: 'delivrance_credit', utilisateur: creditResponsable,
+      details: { motif: creditMotif, date_limite: creditDateLimite, montant: totalAPayer, nb_operations: ids.length, poste: navigator.userAgent.slice(0, 60) },
+    });
+
+    setShowCreditModal(false);
+    setCreditMotif(''); setCreditDateLimite(''); setCreditResponsable('');
+    setCreditProcessing(false);
+    await loadOperations(selectedUsager);
   };
 
   // ── Annulation de transaction ──────────────────────────────────
@@ -512,6 +571,11 @@ export default function CaisseModule({ foyers, membres }: Props) {
                       <button onClick={handleValiderPaiement} disabled={validating} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition">
                         {validating ? <><Loader2 className="h-4 w-4 animate-spin" />Validation…</> : <><Printer className="h-4 w-4" />Valider & Imprimer</>}
                       </button>
+                      {modulesImpliques.includes('Documents') && (
+                        <button onClick={() => setShowCreditModal(true)} className="w-full mt-2 py-2.5 border-2 border-purple-300 hover:bg-purple-50 text-purple-700 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition">
+                          <CreditCard className="h-3.5 w-3.5" />Délivrer à crédit
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -694,6 +758,42 @@ export default function CaisseModule({ foyers, membres }: Props) {
           </div>
         </div>
         )
+      )}
+
+      {/* Modal crédit */}
+      {showCreditModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-100 p-2 rounded-xl"><CreditCard className="h-5 w-5 text-purple-600" /></div>
+              <div>
+                <h3 className="font-bold text-slate-900">Délivrance à crédit</h3>
+                <p className="text-xs text-slate-500">Fonction réservée aux utilisateurs autorisés</p>
+              </div>
+            </div>
+            <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-xs text-purple-700">
+              <p>Le document sera autorisé à être imprimé. Une créance de <strong>{fmt(totalAPayer)}</strong> sera créée dans le module Finance. Aucune recette ne sera enregistrée.</p>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Motif du crédit *</label>
+              <textarea value={creditMotif} onChange={e => setCreditMotif(e.target.value)} rows={2} placeholder="Raison de la délivrance à crédit..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-purple-400 resize-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Date limite de paiement *</label>
+              <input type="date" value={creditDateLimite} onChange={e => setCreditDateLimite(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-purple-400" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Responsable ayant autorisé *</label>
+              <input value={creditResponsable} onChange={e => setCreditResponsable(e.target.value)} placeholder="Nom du responsable..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-purple-400" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => { setShowCreditModal(false); setCreditMotif(''); setCreditDateLimite(''); setCreditResponsable(''); }} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600">Annuler</button>
+              <button onClick={handleDelivrerACredit} disabled={creditProcessing || !creditMotif.trim() || !creditDateLimite || !creditResponsable.trim()} className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-200 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
+                {creditProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}Confirmer le crédit
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal annulation */}

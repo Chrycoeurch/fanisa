@@ -1,208 +1,275 @@
 import React, { useState, useEffect } from 'react';
-import { Membre, Foyer } from '../types';
+import { Membre, Foyer, Parcelle, Batiment, Detenteur, TitulaireFoncier, MiseEnValeur } from '../types';
 import { supabase } from '../lib/supabase';
 import {
   getConfig, updateConfig, ConfigFokontany,
-  genererCR, genererCVI, genererCVC, genererCEL, genererBC,
-  genererCM, genererFM, genererFFD, genererFAS, genererPCG,
-  telechargerPDF, DOCUMENTS_ADMIN,
-  genererCOT, genererJOR, genererADF, genererAPB, genererAMV,
-  genererFP, genererFB, genererDRF, genererIFT, DOCUMENTS_FONCIERS
+  telechargerPDF, DOCUMENTS_ADMIN, DOCUMENTS_FONCIERS,
+  genererDocumentParCode, genererReference, enregistrerDocument,
 } from '../lib/documents';
-import { Parcelle, Batiment, Detenteur, TitulaireFoncier, MiseEnValeur } from '../types';
 import {
   FileText, Settings, Download, Clock, CheckCircle, Loader2, X,
-  ChevronDown, User, Home, AlertCircle, Eye, Receipt, Printer,
-  Search, CreditCard
+  ChevronDown, ChevronLeft, ChevronRight, User, Home, AlertCircle, Eye, Receipt, Printer,
+  Search, CreditCard, ArrowRight, ArrowLeft, Inbox, Wallet, Hourglass
 } from 'lucide-react';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; }
 
-interface DocGenere {
-  id: string; reference: string; code_type: string;
-  genere_le: string; foyer_id: string; membre_id: string;
+interface DemandeDocument {
+  id: string;
+  code_document: string;
+  nom_document: string;
+  format_document: string | null;
+  membre_id: string | null;
+  foyer_id: string | null;
+  parcelle_id: string | null;
+  requerant_est_titulaire: boolean;
+  requerant_nom: string | null;
+  requerant_prenom: string | null;
+  requerant_cin: string | null;
+  requerant_lien: string | null;
+  nombre_exemplaires: number;
+  motif_demande: string | null;
+  montant_unitaire: number;
+  montant_total: number;
+  statut: string; // 'En attente de paiement' | 'Payé' | 'Délivré à crédit' | 'Archivé'
+  operation_caisse_id: string | null;
+  transaction_id: string | null;
+  credit_motif: string | null;
+  credit_date_limite: string | null;
+  credit_responsable: string | null;
+  reference_document: string | null;
+  numero_sequentiel: number | null;
+  telecharge_le: string | null;
+  created_at: string;
 }
 
-// ── Modal Aperçu + Encaissement ───────────────────────────────
-interface PreviewState {
-  code: string;
-  nom: string;
-  format: string;
-  icon: string;
-  foyer?: Foyer;
-  membre?: Membre;
-  parcelle?: Parcelle;
-  bytes?: Uint8Array;
-  fileName?: string;
-  tarif: number;
-  extraData?: any;
-}
+const MOTIFS_DEMANDE = ['Démarche administrative', 'Demande d\'emploi', 'Inscription scolaire', 'Dossier bancaire', 'Pièce justificative', 'Autre'];
+const LIENS_REQUERANT = ['Conjoint(e)', 'Père', 'Mère', 'Fils/Fille', 'Frère/Sœur', 'Mandataire', 'Autre'];
 
-function ModalPreviewEncaissement({
-  preview, config, membres, onClose, onConfirm
-}: {
-  preview: PreviewState;
-  config: any;
+const STATUT_BADGE: Record<string, string> = {
+  'En attente de paiement': 'bg-amber-100 text-amber-700',
+  'Payé': 'bg-emerald-100 text-emerald-700',
+  'Délivré à crédit': 'bg-purple-100 text-purple-700',
+  'Archivé': 'bg-slate-200 text-slate-600',
+};
+
+// ── Wizard de demande de document ───────────────────────────────
+interface WizardProps {
+  code: string; nom: string; format: string; icon: string;
+  niveau: 'membre' | 'foyer' | 'parcelle';
+  foyer?: Foyer; membre?: Membre; parcelle?: Parcelle;
   membres: Membre[];
+  tarif: number;
   onClose: () => void;
-  onConfirm: (bytes: Uint8Array, fileName: string, encaisser: boolean, modePaiement: string) => void;
-}) {
-  const [encaisser, setEncaisser] = useState(true);
-  const [modePaiement, setModePaiement] = useState('Espèces');
-  const [confirming, setConfirming] = useState(false);
+  onSubmit: (data: any) => Promise<void>;
+}
 
-  const chef = preview.foyer ? membres.find(m => m.foyer_id === preview.foyer!.id && m.is_chef) : null;
-  const beneficiaire = preview.membre ? `${preview.membre.nom} ${preview.membre.prenom}` : chef ? `${chef.nom} ${chef.prenom}` : preview.foyer?.code_menage || '-';
-  const fmt = (n: number) => new Intl.NumberFormat('fr-MG').format(n) + ' Ar';
+function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcelle, membres, tarif, onClose, onSubmit }: WizardProps) {
+  const [step, setStep] = useState(1);
+  const [requerantEstTitulaire, setRequerantEstTitulaire] = useState(true);
+  const [requerantNom, setRequerantNom] = useState('');
+  const [requerantPrenom, setRequerantPrenom] = useState('');
+  const [requerantCin, setRequerantCin] = useState('');
+  const [requerantLien, setRequerantLien] = useState('');
+  const [nbExemplaires, setNbExemplaires] = useState(1);
+  const [motif, setMotif] = useState('');
+  const [motifAutre, setMotifAutre] = useState('');
+  const [extraData, setExtraData] = useState<any>({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleConfirm = async () => {
-    if (!preview.bytes || !preview.fileName) return;
-    setConfirming(true);
-    if (encaisser && preview.tarif > 0) {
-      // Créer une opération en attente — l'encaissement réel se fait dans le module Caisse
-      await supabase.from('operations_caisse').insert({
-        module_origine: 'Documents',
-        type_prestation: `[${preview.code}] ${preview.nom}`,
-        reference_document: preview.fileName?.replace('.pdf', '') || null,
-        membre_id: preview.membre?.id || null,
-        foyer_id: preview.foyer?.id || null,
-        nom_beneficiaire: beneficiaire,
-        montant: preview.tarif,
-        quantite: 1,
-        statut: 'En attente de paiement',
-      });
-    }
-    onConfirm(preview.bytes, preview.fileName, encaisser, modePaiement);
-    setConfirming(false);
-  };
+  const totalSteps = 5; // requérant, exemplaires, motif, vérif+aperçu, confirmation
+  const montantTotal = tarif * nbExemplaires;
 
+  // Vérifications automatiques (étape 4)
+  const erreurs: string[] = [];
+  if (niveau === 'membre' && !membre) erreurs.push('Titulaire manquant.');
+  if (niveau === 'foyer' && !foyer) erreurs.push('Foyer manquant.');
+  if (niveau === 'parcelle' && !parcelle) erreurs.push('Parcelle manquante.');
+  if (!requerantEstTitulaire && (!requerantNom.trim() || !requerantPrenom.trim())) erreurs.push('Nom et prénom du requérant obligatoires.');
+  if (nbExemplaires < 1) erreurs.push('Le nombre d\'exemplaires doit être au moins 1.');
+  if (!motif && !motifAutre.trim()) erreurs.push('Le motif de la demande est obligatoire.');
+  if (code === 'FFD' && (!extraData.dateDeces || !extraData.lieuDeces)) erreurs.push('Date et lieu du décès obligatoires pour une déclaration de décès.');
+  const peutValider = erreurs.length === 0;
 
-  const printRecu = (ref: string, beneficiaire: string, menage: string, nomDoc: string, code: string, montant: number, mode: string) => {
-    const w = window.open('', '_blank', 'width=420,height=500');
-    if (!w) return;
-    w.document.write(`<html><head><title>Reçu ${ref}</title><style>body{font-family:monospace;font-size:12px;margin:20px;max-width:320px}.title{font-size:16px;font-weight:bold;text-align:center}.sub{text-align:center;font-size:11px;margin-bottom:12px}hr{border:1px dashed #000;margin:8px 0}.row{display:flex;justify-content:space-between;margin:4px 0}.total{font-weight:bold;font-size:14px;border-top:2px solid black;padding-top:8px;margin-top:8px}.footer{text-align:center;margin-top:16px;font-size:10px}</style></head><body>`);
-    w.document.write(`<div class="title">FOKONTANY FANISA</div><div class="sub">REÇU OFFICIEL</div><hr>`);
-    w.document.write(`<div class="row"><span>Réf.:</span><span>${ref}</span></div>`);
-    w.document.write(`<div class="row"><span>Date:</span><span>${new Date().toLocaleDateString('fr-FR')}</span></div>`);
-    w.document.write(`<div class="row"><span>Ménage:</span><span>${menage}</span></div>`);
-    w.document.write(`<div class="row"><span>Bénéficiaire:</span><span>${beneficiaire}</span></div><hr>`);
-    w.document.write(`<div class="row"><span>[${code}] ${nomDoc}</span><span>${new Intl.NumberFormat('fr-MG').format(montant)} Ar</span></div>`);
-    w.document.write(`<div class="total"><div class="row"><span>TOTAL</span><span>${new Intl.NumberFormat('fr-MG').format(montant)} Ar</span></div></div>`);
-    w.document.write(`<div class="row"><span>Mode:</span><span>${mode}</span></div>`);
-    w.document.write(`<div class="footer">Généré automatiquement par FANISA<br>Merci pour votre paiement</div></body></html>`);
-    w.document.close();
-    setTimeout(() => w.print(), 300);
+  const beneficiaireNom = membre ? `${membre.nom} ${membre.prenom}` : foyer ? (membres.find(m => m.foyer_id === foyer.id && m.is_chef)?.nom || foyer.code_menage) : parcelle ? `LOT ${parcelle.numero_lot}` : '-';
+
+  const handleValiderDemande = async () => {
+    setSubmitting(true);
+    await onSubmit({
+      motifFinal: motif === 'Autre' ? motifAutre : motif,
+      requerantEstTitulaire, requerantNom, requerantPrenom, requerantCin, requerantLien,
+      nbExemplaires, montantTotal, extraData,
+    });
+    setSubmitting(false);
+    setStep(5);
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{preview.icon}</span>
+            <span className="text-2xl">{icon}</span>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Aperçu du document</h2>
-              <p className="text-xs text-indigo-600 font-mono font-bold">[{preview.code}] {preview.nom}</p>
+              <h2 className="text-base font-bold text-slate-900">Demande de document</h2>
+              <p className="text-xs text-indigo-600 font-mono font-bold">[{code}] {nom}</p>
             </div>
           </div>
           <button onClick={onClose}><X className="h-5 w-5 text-slate-400" /></button>
         </div>
 
+        {/* Progress */}
+        {step < 5 && (
+          <div className="flex items-center gap-1 px-5 py-3 border-b border-slate-100 shrink-0">
+            {['Requérant', 'Exemplaires', 'Motif', 'Vérification & Aperçu'].map((label, i) => (
+              <div key={label} className="flex-1 flex items-center gap-1">
+                <div className={`flex-1 h-1.5 rounded-full ${step > i ? 'bg-indigo-500' : 'bg-slate-100'}`} />
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Aperçu document */}
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-2">
-            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Informations du document</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div><span className="text-slate-400">Type :</span> <span className="font-bold text-slate-800">[{preview.code}] {preview.nom}</span></div>
-              <div><span className="text-slate-400">Format :</span> <span className="font-semibold text-slate-600">{preview.format}</span></div>
-              {preview.foyer && <div><span className="text-slate-400">Ménage :</span> <span className="font-mono font-bold text-indigo-700">{preview.foyer.code_menage}</span></div>}
-              {preview.membre && <div><span className="text-slate-400">Membre :</span> <span className="font-semibold text-slate-700">{preview.membre.nom} {preview.membre.prenom}</span></div>}
-              {preview.parcelle && <div><span className="text-slate-400">Parcelle :</span> <span className="font-mono font-bold text-indigo-700">LOT {preview.parcelle.numero_lot}</span></div>}
-              <div><span className="text-slate-400">Bénéficiaire :</span> <span className="font-semibold text-slate-700">{beneficiaire}</span></div>
-              <div><span className="text-slate-400">Date :</span> <span className="font-semibold text-slate-600">{new Date().toLocaleDateString('fr-FR')}</span></div>
-            </div>
-            {/* Données extras FFD */}
-            {preview.extraData?.dateDeces && (
-              <div className="mt-2 grid grid-cols-2 gap-2 text-xs border-t border-indigo-100 pt-2">
-                <div><span className="text-slate-400">Date décès :</span> <span className="font-semibold">{preview.extraData.dateDeces}</span></div>
-                <div><span className="text-slate-400">Lieu décès :</span> <span className="font-semibold">{preview.extraData.lieuDeces}</span></div>
-                <div><span className="text-slate-400">Déclarant :</span> <span className="font-semibold">{preview.extraData.declarant}</span></div>
+          {/* ── Étape 1: Requérant ── */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-700">Étape 1 — Identification du requérant</h3>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                <p className="text-xs text-slate-500">Titulaire du document</p>
+                <p className="text-sm font-bold text-indigo-800">{beneficiaireNom}</p>
               </div>
-            )}
-          </div>
-
-          {/* Encaissement */}
-          <div className={`border-2 rounded-xl p-4 space-y-3 transition ${encaisser ? 'border-green-300 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-slate-700 flex items-center gap-2"><Receipt className="h-4 w-4 text-green-600" />Encaissement associé</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-xs text-slate-500">{encaisser ? 'Activer' : 'Désactiver'}</span>
-                <div className={`w-10 h-5 rounded-full transition ${encaisser ? 'bg-green-500' : 'bg-slate-300'}`} onClick={() => setEncaisser(!encaisser)}>
-                  <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${encaisser ? 'translate-x-5' : 'translate-x-0'}`} />
+              <p className="text-xs font-bold text-slate-500 uppercase">Le requérant est-il le titulaire ?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setRequerantEstTitulaire(true)} className={`flex-1 py-3 rounded-xl border-2 font-semibold text-sm transition ${requerantEstTitulaire ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-500'}`}>✅ Oui</button>
+                <button onClick={() => setRequerantEstTitulaire(false)} className={`flex-1 py-3 rounded-xl border-2 font-semibold text-sm transition ${!requerantEstTitulaire ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-200 text-slate-500'}`}>❌ Non</button>
+              </div>
+              {!requerantEstTitulaire && (
+                <div className="space-y-3 bg-amber-50/50 border border-amber-100 rounded-xl p-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Nom *</label><input value={requerantNom} onChange={e => setRequerantNom(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" /></div>
+                    <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Prénom *</label><input value={requerantPrenom} onChange={e => setRequerantPrenom(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" /></div>
+                    <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">CIN</label><input value={requerantCin} onChange={e => setRequerantCin(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" /></div>
+                    <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Lien avec titulaire</label>
+                      <select value={requerantLien} onChange={e => setRequerantLien(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-indigo-500">
+                        <option value="">Choisir...</option>
+                        {LIENS_REQUERANT.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </div>
+                  </div>
                 </div>
-              </label>
+              )}
+              {code === 'FFD' && (
+                <div className="space-y-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-slate-500 uppercase">Informations du décès</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-xs text-slate-500 block mb-1">Date du décès *</label><input type="date" value={extraData.dateDeces || ''} onChange={e => setExtraData((p: any) => ({ ...p, dateDeces: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Lieu du décès *</label><input value={extraData.lieuDeces || ''} onChange={e => setExtraData((p: any) => ({ ...p, lieuDeces: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
+                    <div className="col-span-2"><label className="text-xs text-slate-500 block mb-1">Déclarant</label><input value={extraData.declarant || ''} onChange={e => setExtraData((p: any) => ({ ...p, declarant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
+                  </div>
+                </div>
+              )}
             </div>
+          )}
 
-            {preview.tarif > 0 ? (
-              <div className="flex items-center justify-between">
+          {/* ── Étape 2: Exemplaires ── */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-700">Étape 2 — Nombre d'exemplaires</h3>
+              <div className="flex items-center justify-center gap-4 py-6">
+                <button onClick={() => setNbExemplaires(n => Math.max(1, n - 1))} className="w-12 h-12 rounded-full bg-slate-100 hover:bg-slate-200 text-2xl font-bold text-slate-600">−</button>
+                <span className="text-4xl font-black text-indigo-600 w-20 text-center">{nbExemplaires}</span>
+                <button onClick={() => setNbExemplaires(n => Math.min(20, n + 1))} className="w-12 h-12 rounded-full bg-slate-100 hover:bg-slate-200 text-2xl font-bold text-slate-600">+</button>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500">Tarif du document</p>
-                  <p className="text-xl font-black text-green-700">{fmt(preview.tarif)}</p>
+                  <p className="text-xs text-emerald-600 font-semibold">Tarif unitaire × {nbExemplaires}</p>
+                  <p className="text-2xl font-black text-emerald-700">{new Intl.NumberFormat('fr-MG').format(montantTotal)} Ar</p>
                 </div>
+                <Receipt className="h-8 w-8 text-emerald-300" />
               </div>
-            ) : (
-              <p className="text-xs text-slate-400 italic">Ce document est gratuit — aucun encaissement requis.</p>
-            )}
+            </div>
+          )}
 
-            {encaisser && preview.tarif > 0 && (
-              <div className="bg-green-100 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-800 flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                Cette prestation sera envoyée en attente de paiement dans le module Caisse.
+          {/* ── Étape 3: Motif ── */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-700">Étape 3 — Motif de la demande</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {MOTIFS_DEMANDE.map(m => (
+                  <button key={m} onClick={() => setMotif(m)} className={`py-2.5 rounded-lg border text-xs font-semibold transition ${motif === m ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{m}</button>
+                ))}
               </div>
-            )}
-            {!encaisser && (
-              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">⚠ Aucune opération de paiement ne sera créée — le document sera généré sans envoi à la Caisse.</p>
-            )}
-          </div>
+              {motif === 'Autre' && (
+                <input value={motifAutre} onChange={e => setMotifAutre(e.target.value)} placeholder="Précisez le motif..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              )}
+              <p className="text-[11px] text-slate-400">Ce motif sera enregistré dans l'historique du document.</p>
+            </div>
+          )}
+
+          {/* ── Étape 4: Vérification + Aperçu ── */}
+          {step === 4 && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-700">Étape 4 — Vérification & Aperçu</h3>
+
+              {erreurs.length > 0 ? (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-1.5">
+                  <p className="text-xs font-bold text-red-600 flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5" />Validation bloquée</p>
+                  {erreurs.map((e, i) => <p key={i} className="text-xs text-red-500 pl-5">• {e}</p>)}
+                </div>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" /><p className="text-xs font-bold text-emerald-700">Toutes les vérifications sont passées.</p>
+                </div>
+              )}
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-slate-400">Document</span><span className="font-semibold">[{code}] {nom}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Titulaire</span><span className="font-semibold">{beneficiaireNom}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Requérant</span><span className="font-semibold">{requerantEstTitulaire ? 'Le titulaire' : `${requerantNom} ${requerantPrenom} (${requerantLien || '-'})`}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Exemplaires</span><span className="font-semibold">{nbExemplaires}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Motif</span><span className="font-semibold">{motif === 'Autre' ? motifAutre : motif}</span></div>
+                <div className="flex justify-between border-t border-slate-200 pt-2"><span className="font-bold text-slate-700">Montant total</span><span className="font-black text-emerald-600 text-base">{new Intl.NumberFormat('fr-MG').format(montantTotal)} Ar</span></div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700 flex items-start gap-2">
+                <Hourglass className="h-4 w-4 shrink-0 mt-0.5" />
+                Le document ne sera pas imprimé immédiatement. La demande sera transmise à la <strong>Caisse</strong> pour encaissement. Vous pourrez télécharger le document une fois le paiement validé (ou un crédit accordé).
+              </div>
+            </div>
+          )}
+
+          {/* ── Étape 5: Confirmation ── */}
+          {step === 5 && (
+            <div className="text-center py-8 space-y-3">
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto"><CheckCircle className="h-8 w-8 text-emerald-600" /></div>
+              <h3 className="text-lg font-bold text-slate-800">Demande envoyée à la Caisse</h3>
+              <p className="text-sm text-slate-500 px-6">La prestation est en attente de paiement. Rendez-vous dans le module <strong>Finances → Caisse</strong> pour l'encaisser, puis revenez dans <strong>Mes Demandes</strong> pour télécharger le document.</p>
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
+        {/* Footer navigation */}
         <div className="flex gap-3 p-5 border-t border-slate-100 shrink-0">
-          <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
-          <button onClick={handleConfirm} disabled={confirming} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition">
-            {confirming ? <><Loader2 className="h-4 w-4 animate-spin" />Génération…</> : <><Download className="h-4 w-4" />Télécharger{encaisser && preview.tarif > 0 ? ' & Envoyer à la Caisse' : ''}</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Modal champs extra (FFD) ──────────────────────────────────
-function ModalExtraFields({ code, onConfirm, onClose }: { code: string; onConfirm: (data: any) => void; onClose: () => void }) {
-  const [dateDeces, setDateDeces] = useState('');
-  const [lieuDeces, setLieuDeces] = useState('');
-  const [declarant, setDeclarant] = useState('');
-  return (
-    <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-        <h3 className="font-bold text-slate-900">Informations du décès</h3>
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Date du décès</label>
-          <input type="date" value={dateDeces} onChange={e => setDateDeces(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Lieu du décès</label>
-          <input value={lieuDeces} onChange={e => setLieuDeces(e.target.value)} placeholder="Ex: Domicile, Hôpital..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Déclarant</label>
-          <input value={declarant} onChange={e => setDeclarant(e.target.value)} placeholder="Nom du déclarant" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
-        </div>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600">Annuler</button>
-          <button onClick={() => onConfirm({ dateDeces, lieuDeces, declarant })} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold">Continuer →</button>
+          {step < 5 ? (
+            <>
+              <button onClick={() => step === 1 ? onClose() : setStep(s => s - 1)} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 flex items-center justify-center gap-1.5">
+                <ArrowLeft className="h-4 w-4" />{step === 1 ? 'Annuler' : 'Précédent'}
+              </button>
+              {step < 4 ? (
+                <button onClick={() => setStep(s => s + 1)} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5">
+                  Suivant<ArrowRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <button onClick={handleValiderDemande} disabled={!peutValider || submitting} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-1.5">
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                  {submitting ? 'Envoi…' : 'Valider & Envoyer à la Caisse'}
+                </button>
+              )}
+            </>
+          ) : (
+            <button onClick={onClose} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold">Fermer</button>
+          )}
         </div>
       </div>
     </div>
@@ -212,9 +279,7 @@ function ModalExtraFields({ code, onConfirm, onClose }: { code: string; onConfir
 // ── Composant principal ───────────────────────────────────────
 export default function DocumentsModule({ foyers, membres }: Props) {
   const [config, setConfig] = useState<any>({});
-  const [generating, setGenerating] = useState<string | null>(null);
-  const [docHistory, setDocHistory] = useState<DocGenere[]>([]);
-  const [activeSection, setActiveSection] = useState<'generer' | 'historique' | 'config'>('generer');
+  const [activeSection, setActiveSection] = useState<'generer' | 'demandes' | 'config'>('generer');
 
   // Sélection
   const [searchFoyer, setSearchFoyer] = useState('');
@@ -230,10 +295,14 @@ export default function DocumentsModule({ foyers, membres }: Props) {
   const [showParcelleSearch, setShowParcelleSearch] = useState(false);
   const [searchParcelle, setSearchParcelle] = useState('');
 
-  // Preview & extra
-  const [preview, setPreview] = useState<PreviewState | null>(null);
-  const [showExtraFields, setShowExtraFields] = useState<string | null>(null);
-  const [extraData, setExtraData] = useState<any>(null);
+  // Wizard
+  const [wizardDoc, setWizardDoc] = useState<{ code: string; nom: string; format: string; icon: string; niveau: 'membre' | 'foyer' | 'parcelle' } | null>(null);
+
+  // Mes demandes
+  const [demandes, setDemandes] = useState<DemandeDocument[]>([]);
+  const [loadingDemandes, setLoadingDemandes] = useState(false);
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const membresDuFoyer = selectedFoyer ? membres.filter(m => m.foyer_id === selectedFoyer.id) : [];
   const filteredFoyers = foyers.filter(f => {
@@ -244,13 +313,16 @@ export default function DocumentsModule({ foyers, membres }: Props) {
 
   useEffect(() => {
     getConfig().then(setConfig);
-    loadHistory();
     supabase.from('parcelles').select('*').order('created_at', { ascending: false }).then(({ data }) => setParcelles((data || []) as Parcelle[]));
   }, []);
 
-  const loadHistory = async () => {
-    const { data } = await supabase.from('documents_generes').select('*').order('genere_le', { ascending: false }).limit(50);
-    setDocHistory((data || []) as DocGenere[]);
+  useEffect(() => { if (activeSection === 'demandes') loadDemandes(); }, [activeSection]);
+
+  const loadDemandes = async () => {
+    setLoadingDemandes(true);
+    const { data } = await supabase.from('demandes_documents').select('*').order('created_at', { ascending: false });
+    setDemandes((data || []) as DemandeDocument[]);
+    setLoadingDemandes(false);
   };
 
   const loadParcelleDetails = async (parcelle: Parcelle) => {
@@ -260,105 +332,115 @@ export default function DocumentsModule({ foyers, membres }: Props) {
       supabase.from('batiments').select('*').eq('parcelle_id', parcelle.id),
       supabase.from('mises_en_valeur').select('*').eq('parcelle_id', parcelle.id).single(),
     ]);
-    setParcelleDetails({ titulaire: t.data, detenteur: d.data, batiments: b.data || [], valeur: v.data });
-    return { titulaire: t.data, detenteur: d.data, batiments: b.data || [], valeur: v.data };
+    const result = { titulaire: t.data, detenteur: d.data, batiments: b.data || [], valeur: v.data };
+    setParcelleDetails(result);
+    return result;
   };
 
-  // Obtenir le tarif depuis la config
-  const getTarif = (code: string): number => {
-    const key = `tarif_${code.toLowerCase()}`;
-    return config[key] || 2000;
+  const getTarif = (code: string): number => config[`tarif_${code.toLowerCase()}`] || 2000;
+
+  // Soumission du wizard → crée la demande + l'opération en attente Caisse
+  const handleWizardSubmit = async (formData: any) => {
+    if (!wizardDoc) return;
+    const { code, nom, format, niveau } = wizardDoc;
+    const tarif = getTarif(code);
+    const beneficiaireNom = niveau === 'membre' && selectedMembre ? `${selectedMembre.nom} ${selectedMembre.prenom}`
+      : niveau === 'foyer' && selectedFoyer ? (membres.find(m => m.foyer_id === selectedFoyer.id && m.is_chef)?.nom || selectedFoyer.code_menage)
+      : niveau === 'parcelle' && selectedParcelle ? `LOT ${selectedParcelle.numero_lot}` : '-';
+
+    const { data: demande } = await supabase.from('demandes_documents').insert({
+      code_document: code, nom_document: nom, format_document: format,
+      membre_id: selectedMembre?.id || null, foyer_id: selectedFoyer?.id || null, parcelle_id: selectedParcelle?.id || null,
+      requerant_est_titulaire: formData.requerantEstTitulaire,
+      requerant_nom: formData.requerantEstTitulaire ? null : formData.requerantNom,
+      requerant_prenom: formData.requerantEstTitulaire ? null : formData.requerantPrenom,
+      requerant_cin: formData.requerantEstTitulaire ? null : formData.requerantCin,
+      requerant_lien: formData.requerantEstTitulaire ? null : formData.requerantLien,
+      nombre_exemplaires: formData.nbExemplaires,
+      motif_demande: formData.motifFinal,
+      montant_unitaire: tarif, montant_total: formData.montantTotal,
+      statut: 'En attente de paiement',
+      snapshot_data: formData.extraData || null,
+    }).select().single();
+
+    if (demande) {
+      // Créer l'opération en attente à la Caisse
+      const { data: operation } = await supabase.from('operations_caisse').insert({
+        module_origine: 'Documents',
+        type_prestation: `[${code}] ${nom}${formData.nbExemplaires > 1 ? ` ×${formData.nbExemplaires}` : ''}`,
+        reference_document: demande.id,
+        membre_id: selectedMembre?.id || null,
+        foyer_id: selectedFoyer?.id || null,
+        nom_beneficiaire: beneficiaireNom,
+        montant: tarif,
+        quantite: formData.nbExemplaires,
+        statut: 'En attente de paiement',
+        metadata: { demande_document_id: demande.id },
+      }).select().single();
+
+      if (operation) {
+        await supabase.from('demandes_documents').update({ operation_caisse_id: operation.id }).eq('id', demande.id);
+      }
+    }
   };
 
-  // Préparer le preview (génère les bytes en avance)
-  const preparePreview = async (code: string, extraDataParam?: any) => {
-    if (!config) return;
-    const docAdmin = DOCUMENTS_ADMIN.find(d => d.code === code);
-    const docFoncier = DOCUMENTS_FONCIERS.find(d => d.code === code);
-    const doc = docAdmin || docFoncier;
-    if (!doc) return;
-
-    if (docAdmin?.niveau === 'membre' && !selectedMembre) { alert('Sélectionnez un membre.'); return; }
-    if (docAdmin?.niveau === 'foyer' && !selectedFoyer) { alert('Sélectionnez un foyer.'); return; }
-    if (docFoncier && !selectedParcelle) { alert('Sélectionnez une parcelle.'); return; }
-
-    // Cas FFD — besoin des champs extra d'abord
-    if (code === 'FFD' && !extraDataParam) { setShowExtraFields('FFD'); return; }
-
-    setGenerating(code);
+  // Téléchargement final — uniquement si Payé ou Délivré à crédit
+  const handleTelecharger = async (demande: DemandeDocument) => {
+    if (demande.statut !== 'Payé' && demande.statut !== 'Délivré à crédit') {
+      alert('Ce document ne peut pas encore être téléchargé : le paiement n\'a pas été validé.');
+      return;
+    }
+    setDownloadingId(demande.id);
     try {
-      let bytes: Uint8Array;
-      const foyer = selectedFoyer!;
-      const membre = selectedMembre!;
-      const pdet = parcelleDetails || (selectedParcelle ? await loadParcelleDetails(selectedParcelle) : null);
-      const bat = pdet?.batiments?.[0] || {} as Batiment;
-      const ed = extraDataParam || extraData;
-
-      switch (code) {
-        case 'CR':  bytes = await genererCR(membre, foyer, config); break;
-        case 'CVI': bytes = await genererCVI(membre, foyer, config); break;
-        case 'CVC': bytes = await genererCVC(foyer, membresDuFoyer, config); break;
-        case 'CEL': bytes = await genererCEL(membre, foyer, config); break;
-        case 'BC':  bytes = await genererBC(membre, foyer, config); break;
-        case 'CM':  bytes = await genererCM(foyer, membresDuFoyer, config); break;
-        case 'FM':  bytes = await genererFM(foyer, membresDuFoyer, config); break;
-        case 'FFD': bytes = await genererFFD(membre, foyer, config, ed?.dateDeces, ed?.lieuDeces, ed?.declarant); break;
-        case 'FAS': bytes = await genererFAS(membre, foyer, config); break;
-        case 'PCG': bytes = await genererPCG(membre, foyer, config, membresDuFoyer.find(m => m.is_chef)); break;
-        case 'COT': bytes = await genererCOT(selectedParcelle!, pdet?.detenteur!, config); break;
-        case 'JOR': bytes = await genererJOR(selectedParcelle!, pdet?.detenteur!, config); break;
-        case 'ADF': bytes = await genererADF(selectedParcelle!, pdet?.detenteur!, config); break;
-        case 'APB': bytes = await genererAPB(selectedParcelle!, bat, {}, config); break;
-        case 'AMV': bytes = await genererAMV(selectedParcelle!, pdet?.valeur!, pdet?.detenteur!, config); break;
-        case 'FP':  bytes = await genererFP(selectedParcelle!, pdet?.titulaire||null, pdet?.detenteur||null, pdet?.batiments||[], pdet?.valeur||null, config); break;
-        case 'FB':  bytes = await genererFB(selectedParcelle!, bat, config); break;
-        case 'DRF': bytes = await genererDRF(selectedParcelle!, pdet?.detenteur||null, pdet?.titulaire||null, pdet?.batiments||[], pdet?.valeur||null, config); break;
-        case 'IFT': bytes = await genererIFT(selectedParcelle!, bat||null, pdet?.titulaire||null, pdet?.detenteur||null, config); break;
-        default: throw new Error('Document non implémenté');
+      const cfg = await getConfig();
+      const membre = demande.membre_id ? membres.find(m => m.id === demande.membre_id) : undefined;
+      const foyer = demande.foyer_id ? foyers.find(f => f.id === demande.foyer_id) : undefined;
+      const membresDuFoyerD = foyer ? membres.filter(m => m.foyer_id === foyer.id) : [];
+      let parcelle, detenteur, titulaire, batiments, valeur;
+      if (demande.parcelle_id) {
+        const { data: p } = await supabase.from('parcelles').select('*').eq('id', demande.parcelle_id).single();
+        parcelle = p;
+        const det = await loadParcelleDetails(p);
+        detenteur = det.detenteur; titulaire = det.titulaire; batiments = det.batiments; valeur = det.valeur;
       }
 
-      const nomFichier = docAdmin?.niveau === 'membre'
-        ? `${code}_${membre.nom}_${membre.prenom}_${new Date().getFullYear()}.pdf`
-        : docAdmin?.niveau === 'foyer'
-        ? `${code}_${foyer.code_menage}_${new Date().getFullYear()}.pdf`
-        : `${code}_LOT${selectedParcelle?.numero_lot}_${new Date().getFullYear()}.pdf`;
+      // Générer un numéro de référence si pas encore fait
+      let reference = demande.reference_document;
+      let numero = demande.numero_sequentiel;
+      if (!reference) {
+        const ref = await genererReference(demande.code_document, cfg);
+        reference = ref.reference; numero = ref.numero;
+        await supabase.from('demandes_documents').update({ reference_document: reference, numero_sequentiel: numero }).eq('id', demande.id);
+      }
 
-      setPreview({
-        code,
-        nom: doc.nom,
-        format: (doc as any).format || 'A5 Paysage',
-        icon: (doc as any).icon || '📄',
-        foyer: selectedFoyer || undefined,
-        membre: selectedMembre || undefined,
-        parcelle: selectedParcelle || undefined,
-        bytes,
-        fileName: nomFichier,
-        tarif: getTarif(code),
-        extraData: ed,
-      });
+      const bytesArray: Uint8Array[] = [];
+      for (let i = 0; i < demande.nombre_exemplaires; i++) {
+        const bytes = await genererDocumentParCode(demande.code_document, cfg, {
+          membre, foyer, membresDuFoyer: membresDuFoyerD, parcelle, detenteur, titulaire, batiments, valeur,
+          extraData: demande.snapshot_data,
+        });
+        bytesArray.push(bytes);
+      }
+      // Télécharger chaque exemplaire
+      for (let i = 0; i < bytesArray.length; i++) {
+        const suffix = demande.nombre_exemplaires > 1 ? `_ex${i + 1}` : '';
+        await telechargerPDF(bytesArray[i], `${demande.code_document}_${reference}${suffix}.pdf`);
+      }
+      await enregistrerDocument(demande.code_document, reference!, numero!, demande.membre_id || undefined, demande.foyer_id || undefined);
+      await supabase.from('demandes_documents').update({ telecharge_le: new Date().toISOString(), statut: demande.statut === 'Payé' ? 'Archivé' : demande.statut }).eq('id', demande.id);
+      await loadDemandes();
     } catch (e) {
-      alert('Erreur génération : ' + e);
+      alert('Erreur téléchargement : ' + e);
     }
-    setGenerating(null);
+    setDownloadingId(null);
   };
 
-  const handleConfirmDownload = async (bytes: Uint8Array, fileName: string) => {
-    await telechargerPDF(bytes, fileName);
-    await loadHistory();
-    setPreview(null);
+  const ouvrirWizard = (code: string, nom: string, format: string, niveau: 'membre' | 'foyer' | 'parcelle', icon: string) => {
+    setWizardDoc({ code, nom, format, icon, niveau });
   };
 
-  // Bouton "Générer" → prépare l'aperçu
-  const btnGenerer = (code: string, disabled: boolean) => (
-    <button
-      onClick={() => !disabled && preparePreview(code)}
-      disabled={disabled || generating === code}
-      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition shrink-0 ${disabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
-    >
-      {generating === code ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
-      {generating === code ? '...' : 'Aperçu'}
-    </button>
-  );
+  const demandesFiltrees = demandes.filter(d => !filtreStatut || d.statut === filtreStatut);
+  const fmt = (n: number) => new Intl.NumberFormat('fr-MG').format(n) + ' Ar';
 
   return (
     <div className="space-y-5">
@@ -373,9 +455,9 @@ export default function DocumentsModule({ foyers, membres }: Props) {
             </div>
           </div>
           <div className="flex gap-2">
-            {(['generer', 'historique', 'config'] as const).map(s => (
-              <button key={s} onClick={() => setActiveSection(s)} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${activeSection === s ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                {s === 'generer' ? '📄 Générer' : s === 'historique' ? '🕐 Historique' : '⚙️ Config'}
+            {(['generer', 'demandes', 'config'] as const).map(s => (
+              <button key={s} onClick={() => setActiveSection(s)} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${activeSection === s ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                {s === 'generer' ? <><FileText className="h-3.5 w-3.5" />Générer</> : s === 'demandes' ? <><Inbox className="h-3.5 w-3.5" />Mes Demandes{demandes.filter(d => d.statut === 'Payé' || d.statut === 'Délivré à crédit').length > 0 && <span className="bg-emerald-500 text-white text-[10px] px-1.5 rounded-full ml-1">{demandes.filter(d => d.statut === 'Payé' || d.statut === 'Délivré à crédit').length}</span>}</> : <><Settings className="h-3.5 w-3.5" />Config</>}
               </button>
             ))}
           </div>
@@ -439,9 +521,9 @@ export default function DocumentsModule({ foyers, membres }: Props) {
         )}
       </div>
 
+      {/* ══════════ GÉNÉRER (catalogue) ══════════ */}
       {activeSection === 'generer' && (
         <div className="space-y-4">
-          {/* Docs administratifs individuel */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><User className="h-3.5 w-3.5" />Documents individuels</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -453,17 +535,18 @@ export default function DocumentsModule({ foyers, membres }: Props) {
                       <p className="text-sm font-semibold text-slate-800">[{doc.code}] {doc.nom}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{(doc as any).format}</span>
-                        <span className="text-[10px] font-bold text-green-600">{new Intl.NumberFormat('fr-MG').format(config[`tarif_${doc.code.toLowerCase()}`] || 2000)} Ar</span>
+                        <span className="text-[10px] font-bold text-green-600">{fmt(getTarif(doc.code))}</span>
                       </div>
                     </div>
                   </div>
-                  {btnGenerer(doc.code, !selectedMembre)}
+                  <button onClick={() => ouvrirWizard(doc.code, doc.nom, (doc as any).format, 'membre', doc.icon)} disabled={!selectedMembre} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition shrink-0 ${!selectedMembre ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
+                    <FileText className="h-3.5 w-3.5" />Demander
+                  </button>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Docs foyer */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><Home className="h-3.5 w-3.5" />Documents du foyer</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -475,11 +558,13 @@ export default function DocumentsModule({ foyers, membres }: Props) {
                       <p className="text-sm font-semibold text-slate-800">[{doc.code}] {doc.nom}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{(doc as any).format}</span>
-                        <span className="text-[10px] font-bold text-green-600">{new Intl.NumberFormat('fr-MG').format(config[`tarif_${doc.code.toLowerCase()}`] || 2000)} Ar</span>
+                        <span className="text-[10px] font-bold text-green-600">{fmt(getTarif(doc.code))}</span>
                       </div>
                     </div>
                   </div>
-                  {btnGenerer(doc.code, !selectedFoyer)}
+                  <button onClick={() => ouvrirWizard(doc.code, doc.nom, (doc as any).format, 'foyer', doc.icon)} disabled={!selectedFoyer} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition shrink-0 ${!selectedFoyer ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
+                    <FileText className="h-3.5 w-3.5" />Demander
+                  </button>
                 </div>
               ))}
             </div>
@@ -495,7 +580,6 @@ export default function DocumentsModule({ foyers, membres }: Props) {
           {/* Docs fonciers */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">🌍 Documents fonciers</h3>
-            {/* Sélecteur parcelle */}
             <div className="mb-4">
               <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Parcelle / Lot</label>
               <div className="relative">
@@ -541,12 +625,14 @@ export default function DocumentsModule({ foyers, membres }: Props) {
                         <p className="text-sm font-semibold text-slate-800">[{doc.code}] {doc.nom}</p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{(doc as any).format}</span>
-                          <span className="text-[10px] font-bold text-green-600">{new Intl.NumberFormat('fr-MG').format(config[`tarif_${doc.code.toLowerCase()}`] || 2000)} Ar</span>
+                          <span className="text-[10px] font-bold text-green-600">{fmt(getTarif(doc.code))}</span>
                         </div>
                         {manque.length > 0 && <p className="text-[10px] text-amber-600 mt-0.5">Manque : {manque.join(', ')}</p>}
                       </div>
                     </div>
-                    {btnGenerer(doc.code, manque.length > 0)}
+                    <button onClick={() => ouvrirWizard(doc.code, doc.nom, (doc as any).format, 'parcelle', doc.icon)} disabled={manque.length > 0} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition shrink-0 ${manque.length > 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
+                      <FileText className="h-3.5 w-3.5" />Demander
+                    </button>
                   </div>
                 );
               })}
@@ -555,31 +641,62 @@ export default function DocumentsModule({ foyers, membres }: Props) {
         </div>
       )}
 
-      {/* Historique */}
-      {activeSection === 'historique' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Clock className="h-4 w-4 text-indigo-600" />Documents générés ({docHistory.length})</h3>
-            <button onClick={loadHistory} className="text-xs text-indigo-600 font-semibold hover:underline">Rafraîchir</button>
+      {/* ══════════ MES DEMANDES ══════════ */}
+      {activeSection === 'demandes' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-2 flex-wrap">
+            {['', 'En attente de paiement', 'Payé', 'Délivré à crédit', 'Archivé'].map(s => (
+              <button key={s} onClick={() => setFiltreStatut(s)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${filtreStatut === s ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                {s === '' ? `Toutes (${demandes.length})` : `${s} (${demandes.filter(d => d.statut === s).length})`}
+              </button>
+            ))}
+            <button onClick={loadDemandes} className="ml-auto text-xs text-indigo-600 font-semibold hover:underline">Rafraîchir</button>
           </div>
-          {docHistory.length === 0 ? <p className="text-center text-slate-400 text-sm py-10">Aucun document généré.</p> : (
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b border-slate-100"><th className="p-3 text-left font-semibold text-slate-500">Référence</th><th className="p-3 text-left font-semibold text-slate-500">Type</th><th className="p-3 text-left font-semibold text-slate-500">Date</th></tr></thead>
-              <tbody className="divide-y divide-slate-50">
-                {docHistory.map(d => (
-                  <tr key={d.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-mono text-indigo-600 font-semibold">{d.reference}</td>
-                    <td className="p-3"><span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded font-bold">{d.code_type}</span></td>
-                    <td className="p-3 text-slate-500">{new Date(d.genere_le).toLocaleString('fr-FR')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          {loadingDemandes ? (
+            <div className="text-center py-12"><Loader2 className="h-7 w-7 text-indigo-600 animate-spin mx-auto" /></div>
+          ) : demandesFiltrees.length === 0 ? (
+            <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl py-16 text-center">
+              <Inbox className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 font-semibold">Aucune demande</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {demandesFiltrees.map(d => {
+                const peutTelecharger = d.statut === 'Payé' || d.statut === 'Délivré à crédit';
+                return (
+                  <div key={d.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-mono font-bold text-indigo-600 text-sm">[{d.code_document}] {d.nom_document}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUT_BADGE[d.statut] || 'bg-slate-100'}`}>{d.statut}</span>
+                        {d.nombre_exemplaires > 1 && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">×{d.nombre_exemplaires}</span>}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {d.motif_demande} · {fmt(d.montant_total)} · {new Date(d.created_at).toLocaleDateString('fr-FR')}
+                        {d.reference_document && <span className="font-mono ml-2 text-indigo-500">{d.reference_document}</span>}
+                      </p>
+                      {d.statut === 'Délivré à crédit' && d.credit_date_limite && (
+                        <p className="text-[11px] text-purple-600 mt-0.5">⏳ Échéance crédit : {new Date(d.credit_date_limite).toLocaleDateString('fr-FR')} — autorisé par {d.credit_responsable}</p>
+                      )}
+                    </div>
+                    {peutTelecharger ? (
+                      <button onClick={() => handleTelecharger(d)} disabled={downloadingId === d.id} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-xs font-bold rounded-lg transition shrink-0">
+                        {downloadingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {downloadingId === d.id ? 'Génération…' : d.telecharge_le ? 'Re-télécharger' : 'Télécharger'}
+                      </button>
+                    ) : (
+                      <span className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 text-amber-600 text-xs font-semibold rounded-lg shrink-0"><Hourglass className="h-3.5 w-3.5" />En attente Caisse</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
 
-      {/* Config */}
+      {/* ══════════ CONFIG ══════════ */}
       {activeSection === 'config' && config && (
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <h3 className="text-sm font-bold text-slate-700 mb-4">⚙️ Configuration du Fokontany</h3>
@@ -604,23 +721,14 @@ export default function DocumentsModule({ foyers, membres }: Props) {
         </div>
       )}
 
-      {/* Modal extra fields (FFD) */}
-      {showExtraFields === 'FFD' && (
-        <ModalExtraFields
-          code="FFD"
-          onConfirm={data => { setExtraData(data); setShowExtraFields(null); preparePreview('FFD', data); }}
-          onClose={() => setShowExtraFields(null)}
-        />
-      )}
-
-      {/* Modal aperçu + encaissement */}
-      {preview && (
-        <ModalPreviewEncaissement
-          preview={preview}
-          config={config}
-          membres={membres}
-          onClose={() => setPreview(null)}
-          onConfirm={handleConfirmDownload}
+      {/* Wizard de demande */}
+      {wizardDoc && (
+        <WizardDemande
+          code={wizardDoc.code} nom={wizardDoc.nom} format={wizardDoc.format} icon={wizardDoc.icon} niveau={wizardDoc.niveau}
+          foyer={selectedFoyer || undefined} membre={selectedMembre || undefined} parcelle={selectedParcelle || undefined}
+          membres={membres} tarif={getTarif(wizardDoc.code)}
+          onClose={() => { setWizardDoc(null); }}
+          onSubmit={handleWizardSubmit}
         />
       )}
     </div>

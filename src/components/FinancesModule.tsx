@@ -6,7 +6,7 @@ import {
   Wallet, TrendingUp, TrendingDown, Receipt, Users, Settings,
   Save, Loader2, CheckCircle, AlertCircle, Gift, BarChart2,
   ChevronLeft, ChevronRight, ChevronDown, Search, Calendar,
-  Trash2, ArrowUpCircle, ArrowDownCircle, Clock
+  Trash2, ArrowUpCircle, ArrowDownCircle, Clock, CreditCard
 } from 'lucide-react';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; }
@@ -39,7 +39,7 @@ const DOCS_TARIFS = [
   { code: 'IFT', label: 'Ticket IFT',                      key: 'tarif_ift' },
 ];
 
-type SubMenu = 'dashboard' | 'caisse' | 'cotisations' | 'historique' | 'depenses' | 'dons' | 'parametres';
+type SubMenu = 'dashboard' | 'caisse' | 'cotisations' | 'historique' | 'depenses' | 'creances' | 'dons' | 'parametres';
 
 export default function FinancesModule({ foyers, membres }: Props) {
   const [subMenu, setSubMenu] = useState<SubMenu>('dashboard');
@@ -49,6 +49,8 @@ export default function FinancesModule({ foyers, membres }: Props) {
   const [encaissements, setEncaissements] = useState<any[]>([]);
   const [cotisations, setCotisations] = useState<any[]>([]);
   const [depenses, setDepenses] = useState<any[]>([]);
+  const [creances, setCreances] = useState<any[]>([]);
+  const [soldingId, setSoldingId] = useState<string | null>(null);
   const [dons, setDons] = useState<any[]>([]);
 
   // Dashboard filtre
@@ -83,18 +85,20 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const [cfg, enc, cot, dep, don] = await Promise.all([
+    const [cfg, enc, cot, dep, don, cre] = await Promise.all([
       supabase.from('config_finances').select('*').single(),
       supabase.from('encaissements').select('*').order('created_at', { ascending: false }),
       supabase.from('cotisations').select('*'),
       supabase.from('depenses').select('*').order('created_at', { ascending: false }),
       supabase.from('dons').select('*').order('date_reception', { ascending: false }),
+      supabase.from('creances').select('*').order('created_at', { ascending: false }),
     ]);
     setConfig(cfg.data || {});
     setEncaissements(enc.data || []);
     setCotisations(cot.data || []);
     setDepenses(dep.data || []);
     setDons(don.data || []);
+    setCreances(cre.data || []);
     setLoading(false);
   }, []);
 
@@ -327,6 +331,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
     { key: 'cotisations', label: 'Cotisations',     icon: Users },
     { key: 'historique',  label: 'Historique',      icon: Receipt },
     { key: 'depenses',    label: 'Dépenses',        icon: TrendingDown },
+    { key: 'creances',    label: 'Créances',        icon: CreditCard },
     { key: 'dons',        label: 'Dons',            icon: Gift },
     { key: 'parametres',  label: 'Paramètres',      icon: Settings },
   ];
@@ -722,6 +727,71 @@ export default function FinancesModule({ foyers, membres }: Props) {
                 {savingDep ? <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement…</> : <><Save className="h-4 w-4" />Enregistrer la dépense</>}
               </button>
               <p className="text-xs text-slate-400 text-center">La dépense sera visible dans l'onglet Historique</p>
+            </div>
+          )}
+
+          {/* ── CRÉANCES ── */}
+          {subMenu === 'creances' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-purple-600 uppercase mb-1">Créances non soldées</p>
+                  <p className="text-2xl font-black text-purple-700">{fmt(creances.filter(c => c.statut === 'Non soldée').reduce((s, c) => s + c.montant, 0))}</p>
+                  <p className="text-xs text-purple-400 mt-1">{creances.filter(c => c.statut === 'Non soldée').length} créance(s)</p>
+                </div>
+                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Créances soldées</p>
+                  <p className="text-2xl font-black text-emerald-700">{fmt(creances.filter(c => c.statut === 'Soldée').reduce((s, c) => s + c.montant, 0))}</p>
+                  <p className="text-xs text-emerald-400 mt-1">{creances.filter(c => c.statut === 'Soldée').length} créance(s)</p>
+                </div>
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-red-600 uppercase mb-1">En retard</p>
+                  <p className="text-2xl font-black text-red-700">{creances.filter(c => c.statut === 'Non soldée' && c.date_limite && c.date_limite < new Date().toISOString().split('T')[0]).length}</p>
+                  <p className="text-xs text-red-400 mt-1">date limite dépassée</p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><CreditCard className="h-4 w-4 text-purple-600" />Liste des créances</h3>
+                </div>
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-slate-50 border-b">
+                    <th className="p-3 text-left text-slate-500">Débiteur</th>
+                    <th className="p-3 text-left text-slate-500">Motif</th>
+                    <th className="p-3 text-right text-slate-500">Montant</th>
+                    <th className="p-3 text-left text-slate-500">Date limite</th>
+                    <th className="p-3 text-left text-slate-500">Responsable</th>
+                    <th className="p-3 text-center text-slate-500">Statut</th>
+                    <th className="p-3 text-center text-slate-500">⋯</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {creances.map(c => {
+                      const enRetard = c.statut === 'Non soldée' && c.date_limite && c.date_limite < new Date().toISOString().split('T')[0];
+                      return (
+                        <tr key={c.id} className="hover:bg-slate-50">
+                          <td className="p-3 font-semibold text-slate-700">{c.nom_debiteur}</td>
+                          <td className="p-3 text-slate-500">{c.motif}</td>
+                          <td className="p-3 text-right font-bold text-purple-700">{fmt(c.montant)}</td>
+                          <td className={`p-3 ${enRetard ? 'text-red-600 font-bold' : 'text-slate-500'}`}>{c.date_limite ? new Date(c.date_limite).toLocaleDateString('fr-FR') : '-'}</td>
+                          <td className="p-3 text-slate-400">{c.responsable}</td>
+                          <td className="p-3 text-center">
+                            {c.statut === 'Soldée' ? <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Soldée</span> : enRetard ? <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">En retard</span> : <span className="text-[10px] font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">Non soldée</span>}
+                          </td>
+                          <td className="p-3 text-center">
+                            {c.statut === 'Non soldée' && (
+                              <button onClick={async () => { setSoldingId(c.id); await supabase.from('creances').update({ statut: 'Soldée', date_soldee: new Date().toISOString() }).eq('id', c.id); setSoldingId(null); loadAll(); }} disabled={soldingId === c.id} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg">
+                                {soldingId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Solder'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {creances.length === 0 && <tr><td colSpan={7} className="text-center text-slate-400 py-10">Aucune créance enregistrée</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

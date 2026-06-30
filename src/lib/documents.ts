@@ -1048,6 +1048,43 @@ export async function telechargerPDF(bytes: Uint8Array, nomFichier: string) {
   URL.revokeObjectURL(url);
 }
 
+// ── DISPATCHER — génère le PDF correspondant au code document ──
+// Utilisé au moment du téléchargement final (après paiement validé), pas à l'aperçu.
+export async function genererDocumentParCode(
+  code: string,
+  config: ConfigFokontany,
+  ctx: {
+    membre?: Membre; foyer?: Foyer; membresDuFoyer?: Membre[];
+    parcelle?: Parcelle; detenteur?: Detenteur; titulaire?: TitulaireFoncier;
+    batiments?: Batiment[]; batiment?: Batiment; valeur?: MiseEnValeur;
+    extraData?: any;
+  }
+): Promise<Uint8Array> {
+  const { membre, foyer, membresDuFoyer, parcelle, detenteur, titulaire, batiments, batiment, valeur, extraData } = ctx;
+  switch (code) {
+    case 'CR':  return await genererCR(membre!, foyer!, config);
+    case 'CVI': return await genererCVI(membre!, foyer!, config);
+    case 'CVC': return await genererCVC(foyer!, membresDuFoyer || [], config);
+    case 'CEL': return await genererCEL(membre!, foyer!, config);
+    case 'BC':  return await genererBC(membre!, foyer!, config);
+    case 'CM':  return await genererCM(foyer!, membresDuFoyer || [], config);
+    case 'FM':  return await genererFM(foyer!, membresDuFoyer || [], config);
+    case 'FFD': return await genererFFD(membre!, foyer!, config, extraData?.dateDeces, extraData?.lieuDeces, extraData?.declarant);
+    case 'FAS': return await genererFAS(membre!, foyer!, config);
+    case 'PCG': return await genererPCG(membre!, foyer!, config, membresDuFoyer?.find(m => m.is_chef));
+    case 'COT': return await genererCOT(parcelle!, detenteur!, config);
+    case 'JOR': return await genererJOR(parcelle!, detenteur!, config);
+    case 'ADF': return await genererADF(parcelle!, detenteur!, config);
+    case 'APB': return await genererAPB(parcelle!, batiment || (batiments?.[0] as Batiment), {}, config);
+    case 'AMV': return await genererAMV(parcelle!, valeur!, detenteur!, config);
+    case 'FP':  return await genererFP(parcelle!, titulaire || null, detenteur || null, batiments || [], valeur || null, config);
+    case 'FB':  return await genererFB(parcelle!, batiment || (batiments?.[0] as Batiment), config);
+    case 'DRF': return await genererDRF(parcelle!, detenteur || null, titulaire || null, batiments || [], valeur || null, config);
+    case 'IFT': return await genererIFT(parcelle!, batiment || null, titulaire || null, detenteur || null, config);
+    default: throw new Error(`Document non implémenté: ${code}`);
+  }
+}
+
 export const DOCUMENTS_ADMIN = [
   { code: 'CR',  nom: 'Certificat de Résidence',       description: "Atteste la résidence",                 icon: '🏠', niveau: 'membre', format: 'A5 Paysage' },
   { code: 'CVI', nom: 'Certificat de Vie Individuelle', description: "Atteste qu'une personne est en vie",   icon: '✅', niveau: 'membre', format: 'A5 Paysage' },
