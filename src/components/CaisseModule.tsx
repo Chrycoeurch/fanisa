@@ -6,7 +6,7 @@ import {
   Wallet, Search, User, Home, Receipt, Trash2, CheckCircle,
   Loader2, X, Printer, ShoppingCart, Building2, FileText,
   CreditCard, Banknote, Smartphone, ChevronDown, ChevronLeft, ChevronRight, AlertCircle,
-  Package, BarChart2, Clock, Calendar, RotateCcw, Filter, Users
+  Package, BarChart2, Clock, Calendar, RotateCcw, Filter, Users, Hourglass
 } from 'lucide-react';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; }
@@ -133,6 +133,16 @@ export default function CaisseModule({ foyers, membres }: Props) {
     setLoading(false);
   }, []);
 
+  // Charge TOUTES les opérations en attente, tous usagers confondus (vue tableau)
+  const [toutesOperationsAttente, setToutesOperationsAttente] = useState<OperationCaisse[]>([]);
+  const [loadingToutes, setLoadingToutes] = useState(false);
+  const loadToutesOperations = useCallback(async () => {
+    setLoadingToutes(true);
+    const { data } = await supabase.from('operations_caisse').select('*').eq('statut', 'En attente de paiement').order('created_at', { ascending: false });
+    setToutesOperationsAttente((data || []) as OperationCaisse[]);
+    setLoadingToutes(false);
+  }, []);
+
   const loadHistorique = useCallback(async () => {
     setLoadingHisto(true);
     const { data } = await supabase.from('transactions_caisse').select('*').order('created_at', { ascending: false });
@@ -169,6 +179,7 @@ export default function CaisseModule({ foyers, membres }: Props) {
   }, []);
 
   useEffect(() => { loadConfig(); setLoading(false); }, [loadConfig]);
+  useEffect(() => { if (tab === 'encaissement' && !selectedUsager) loadToutesOperations(); }, [tab, selectedUsager, loadToutesOperations]);
   useEffect(() => { if (tab === 'historique') loadHistorique(); }, [tab, loadHistorique]);
   useEffect(() => { if (tab === 'statistiques') loadStats(); }, [tab, loadStats]);
 
@@ -208,6 +219,23 @@ export default function CaisseModule({ foyers, membres }: Props) {
   };
 
   const operationsSelectionnees = operationsEnAttente.filter(o => panier.has(o.id));
+
+  // Groupement de toutes les opérations en attente par usager (foyer ou membre)
+  const groupesParUsager = (() => {
+    const groupes = new Map<string, { membre?: Membre; foyer?: Foyer; nom: string; ops: OperationCaisse[]; total: number }>();
+    toutesOperationsAttente.forEach(op => {
+      const key = op.membre_id || op.foyer_id || op.nom_beneficiaire;
+      if (!groupes.has(key)) {
+        const membre = op.membre_id ? membres.find(m => m.id === op.membre_id) : undefined;
+        const foyer = op.foyer_id ? foyers.find(f => f.id === op.foyer_id) : (membre ? foyers.find(f => f.id === membre.foyer_id) : undefined);
+        groupes.set(key, { membre, foyer, nom: op.nom_beneficiaire, ops: [], total: 0 });
+      }
+      const g = groupes.get(key)!;
+      g.ops.push(op);
+      g.total += op.montant * (op.quantite || 1);
+    });
+    return [...groupes.values()].sort((a, b) => b.ops.length - a.ops.length);
+  })();
   const totalAPayer = operationsSelectionnees.reduce((s, o) => s + (o.montant * (o.quantite || 1)), 0);
   const modulesImpliques = [...new Set(operationsSelectionnees.map(o => o.module_origine))];
   const isUniquementDocuments = modulesImpliques.length === 1 && modulesImpliques[0] === 'Documents';
@@ -314,7 +342,7 @@ export default function CaisseModule({ foyers, membres }: Props) {
       } else {
         printRecuGlobal(numeroRecu, usagerNom, operationsSelectionnees, totalAPayer, modePaiement, agent);
       }
-      await loadOperations(selectedUsager);
+      await loadOperations(selectedUsager); await loadToutesOperations();
     }
     setValidating(false);
   };
@@ -365,7 +393,7 @@ export default function CaisseModule({ foyers, membres }: Props) {
     setShowCreditModal(false);
     setCreditMotif(''); setCreditDateLimite(''); setCreditResponsable('');
     setCreditProcessing(false);
-    await loadOperations(selectedUsager);
+    await loadOperations(selectedUsager); await loadToutesOperations();
   };
 
   // ── Annulation de transaction ──────────────────────────────────
@@ -508,7 +536,7 @@ export default function CaisseModule({ foyers, membres }: Props) {
                       </p>
                     </div>
                   </div>
-                  <button onClick={() => { setSelectedUsager(null); setOperationsEnAttente([]); }} className="text-slate-400 hover:text-red-500"><X className="h-5 w-5" /></button>
+                  <button onClick={() => { setSelectedUsager(null); setOperationsEnAttente([]); loadToutesOperations(); }} className="text-slate-400 hover:text-red-500"><X className="h-5 w-5" /></button>
                 </div>
 
                 {loading ? (
@@ -591,10 +619,57 @@ export default function CaisseModule({ foyers, membres }: Props) {
               </div>
             </div>
           ) : (
-            <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl py-16 text-center">
-              <Search className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 font-semibold">Recherchez un usager pour démarrer l'encaissement</p>
-              <p className="text-xs text-slate-400 mt-1">Par nom, CIN ou numéro de ménage</p>
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Hourglass className="h-4 w-4 text-amber-500" />Tous les usagers en attente de paiement ({groupesParUsager.length})</h3>
+                <button onClick={loadToutesOperations} className="text-xs text-emerald-600 font-semibold hover:underline">Rafraîchir</button>
+              </div>
+              {loadingToutes ? (
+                <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
+              ) : groupesParUsager.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  <p className="font-semibold">Aucune opération en attente</p>
+                  <p className="text-xs mt-1">Toutes les prestations sont réglées.</p>
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-slate-50 border-b">
+                    <th className="p-3 text-left text-slate-500">Usager</th>
+                    <th className="p-3 text-left text-slate-500">Ménage</th>
+                    <th className="p-3 text-left text-slate-500">Prestations</th>
+                    <th className="p-3 text-right text-slate-500">Total à payer</th>
+                    <th className="p-3 text-center text-slate-500">Action</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {groupesParUsager.map((g, i) => (
+                      <tr key={i} className="hover:bg-emerald-50/50">
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-[11px] shrink-0">{g.nom.charAt(0)}</div>
+                            <span className="font-semibold text-slate-800">{g.nom}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 font-mono text-indigo-600">{g.foyer?.code_menage || '-'}</td>
+                        <td className="p-3">
+                          <div className="flex gap-1 flex-wrap">
+                            {[...new Set(g.ops.map(o => o.module_origine))].map(m => (
+                              <span key={m} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${moduleColor(m)}`}>{m}</span>
+                            ))}
+                            <span className="text-slate-400">{g.ops.length} opération{g.ops.length > 1 ? 's' : ''}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-right font-bold text-slate-900">{fmt(g.total)}</td>
+                        <td className="p-3 text-center">
+                          <button onClick={() => selectUsager({ membre: g.membre, foyer: g.foyer })} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition">
+                            Encaisser
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
         </div>
