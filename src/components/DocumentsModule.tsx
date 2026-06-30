@@ -61,7 +61,7 @@ interface WizardProps {
   membres: Membre[];
   tarif: number;
   onClose: () => void;
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: any) => Promise<boolean>;
 }
 
 function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcelle, membres, tarif, onClose, onSubmit }: WizardProps) {
@@ -95,13 +95,13 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
 
   const handleValiderDemande = async () => {
     setSubmitting(true);
-    await onSubmit({
+    const ok = await onSubmit({
       motifFinal: motif === 'Autre' ? motifAutre : motif,
       requerantEstTitulaire, requerantNom, requerantPrenom, requerantCin, requerantLien,
       nbExemplaires, montantTotal, extraData,
     });
     setSubmitting(false);
-    setStep(5);
+    if (ok) setStep(5); // sinon on reste à l'étape 4 — l'erreur a déjà été affichée par onSubmit
   };
 
   return (
@@ -340,15 +340,15 @@ export default function DocumentsModule({ foyers, membres }: Props) {
   const getTarif = (code: string): number => config[`tarif_${code.toLowerCase()}`] || 2000;
 
   // Soumission du wizard → crée la demande + l'opération en attente Caisse
-  const handleWizardSubmit = async (formData: any) => {
-    if (!wizardDoc) return;
+  const handleWizardSubmit = async (formData: any): Promise<boolean> => {
+    if (!wizardDoc) return false;
     const { code, nom, format, niveau } = wizardDoc;
     const tarif = getTarif(code);
     const beneficiaireNom = niveau === 'membre' && selectedMembre ? `${selectedMembre.nom} ${selectedMembre.prenom}`
       : niveau === 'foyer' && selectedFoyer ? (membres.find(m => m.foyer_id === selectedFoyer.id && m.is_chef)?.nom || selectedFoyer.code_menage)
       : niveau === 'parcelle' && selectedParcelle ? `LOT ${selectedParcelle.numero_lot}` : '-';
 
-    const { data: demande } = await supabase.from('demandes_documents').insert({
+    const { data: demande, error: errDemande } = await supabase.from('demandes_documents').insert({
       code_document: code, nom_document: nom, format_document: format,
       membre_id: selectedMembre?.id || null, foyer_id: selectedFoyer?.id || null, parcelle_id: selectedParcelle?.id || null,
       requerant_est_titulaire: formData.requerantEstTitulaire,
@@ -363,25 +363,37 @@ export default function DocumentsModule({ foyers, membres }: Props) {
       snapshot_data: formData.extraData || null,
     }).select().single();
 
-    if (demande) {
-      // Créer l'opération en attente à la Caisse
-      const { data: operation } = await supabase.from('operations_caisse').insert({
-        module_origine: 'Documents',
-        type_prestation: `[${code}] ${nom}${formData.nbExemplaires > 1 ? ` ×${formData.nbExemplaires}` : ''}`,
-        reference_document: demande.id,
-        membre_id: selectedMembre?.id || null,
-        foyer_id: selectedFoyer?.id || null,
-        nom_beneficiaire: beneficiaireNom,
-        montant: tarif,
-        quantite: formData.nbExemplaires,
-        statut: 'En attente de paiement',
-        metadata: { demande_document_id: demande.id },
-      }).select().single();
-
-      if (operation) {
-        await supabase.from('demandes_documents').update({ operation_caisse_id: operation.id }).eq('id', demande.id);
-      }
+    if (errDemande || !demande) {
+      console.error('Erreur création demande_document:', errDemande);
+      alert(`Échec de l'enregistrement de la demande.\n\n${errDemande?.message || 'Erreur inconnue — vérifiez que la table demandes_documents existe bien dans Supabase.'}`);
+      return false;
     }
+
+    // Créer l'opération en attente à la Caisse
+    const { data: operation, error: errOperation } = await supabase.from('operations_caisse').insert({
+      module_origine: 'Documents',
+      type_prestation: `[${code}] ${nom}${formData.nbExemplaires > 1 ? ` ×${formData.nbExemplaires}` : ''}`,
+      reference_document: null,
+      membre_id: selectedMembre?.id || null,
+      foyer_id: selectedFoyer?.id || null,
+      nom_beneficiaire: beneficiaireNom,
+      montant: tarif,
+      quantite: formData.nbExemplaires,
+      statut: 'En attente de paiement',
+      metadata: { demande_document_id: demande.id },
+    }).select().single();
+
+    if (errOperation || !operation) {
+      console.error('Erreur création operation_caisse:', errOperation);
+      // Rollback la demande pour ne pas laisser une demande orpheline sans opération de paiement
+      await supabase.from('demandes_documents').delete().eq('id', demande.id);
+      alert(`Échec de l'envoi à la Caisse.\n\n${errOperation?.message || 'Erreur inconnue — vérifiez que la table operations_caisse existe bien dans Supabase.'}`);
+      return false;
+    }
+
+    await supabase.from('demandes_documents').update({ operation_caisse_id: operation.id }).eq('id', demande.id);
+    await loadDemandes();
+    return true;
   };
 
   // Téléchargement final — uniquement si Payé ou Délivré à crédit

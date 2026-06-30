@@ -281,20 +281,29 @@ export default function CaisseModule({ foyers, membres }: Props) {
           ? `${membres.find(m => m.foyer_id === selectedUsager.foyer?.id && m.is_chef)!.nom} ${membres.find(m => m.foyer_id === selectedUsager.foyer?.id && m.is_chef)!.prenom}`
           : selectedUsager.foyer?.code_menage || 'Usager');
 
-    const { data: transaction } = await supabase.from('transactions_caisse').insert({
+    const { data: transaction, error: errTransaction } = await supabase.from('transactions_caisse').insert({
       numero_recu: numeroRecu, nom_usager: usagerNom,
       membre_id: selectedUsager.membre?.id || null,
       foyer_id: selectedUsager.foyer?.id || selectedUsager.membre?.foyer_id || null,
       montant_total: totalAPayer, mode_paiement: modePaiement, agent, statut: 'Validée',
     }).select().single();
 
-    if (transaction) {
+    if (errTransaction || !transaction) {
+      console.error('Erreur création transaction_caisse:', errTransaction);
+      alert(`Échec de la validation du paiement.\n\n${errTransaction?.message || 'Erreur inconnue.'}`);
+      setValidating(false);
+      return;
+    }
+
+    {
       const ids = operationsSelectionnees.map(o => o.id);
-      await supabase.from('operations_caisse').update({ statut: 'Payé', transaction_id: transaction.id }).in('id', ids);
+      const { error: errUpdateOps } = await supabase.from('operations_caisse').update({ statut: 'Payé', transaction_id: transaction.id }).in('id', ids);
+      if (errUpdateOps) console.error('Erreur mise à jour operations_caisse:', errUpdateOps);
       // Mettre à jour les demandes de documents liées (module Documents)
       const demandeIds = operationsSelectionnees.filter(o => o.metadata?.demande_document_id).map(o => o.metadata.demande_document_id);
       if (demandeIds.length > 0) {
-        await supabase.from('demandes_documents').update({ statut: 'Payé', transaction_id: transaction.id }).in('id', demandeIds);
+        const { error: errUpdateDemandes } = await supabase.from('demandes_documents').update({ statut: 'Payé', transaction_id: transaction.id }).in('id', demandeIds);
+        if (errUpdateDemandes) { console.error('Erreur mise à jour demandes_documents:', errUpdateDemandes); alert(`Le paiement a été validé mais la mise à jour des demandes de documents a échoué.\n\n${errUpdateDemandes.message}\n\nContactez le support technique.`); }
       }
       await supabase.from('journal_caisse').insert({
         type_evenement: 'validation_paiement', transaction_id: transaction.id, utilisateur: agent,
