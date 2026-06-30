@@ -435,9 +435,138 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* ── Recherche & panier d'encaissement ── */}
-      <div className="space-y-5">
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
+      {selectedUsager ? (
+        <>
+          {/* Quand un usager est sélectionné : barre de recherche compacte pour en changer */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="relative">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+              <input
+                value={search}
+                onChange={e => { setSearch(e.target.value); setShowSearchResults(true); }}
+                onFocus={() => setShowSearchResults(true)}
+                placeholder="Rechercher un autre usager..."
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
+              />
+              {showSearchResults && search && (
+                <div className="absolute top-full left-0 right-0 z-30 bg-white border border-slate-200 rounded-xl shadow-2xl mt-1 max-h-72 overflow-y-auto">
+                  {searchResults.length === 0 ? (
+                    <p className="text-center text-slate-400 text-sm py-6">Aucun résultat</p>
+                  ) : searchResults.map((r, i) => (
+                    <button key={i} onClick={() => selectUsager(r)} className="w-full text-left px-4 py-3 hover:bg-emerald-50 border-b border-slate-50 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm shrink-0">{r.label.charAt(0)}</div>
+                      <div><p className="text-sm font-semibold text-slate-800">{r.label}</p><p className="text-xs text-slate-400">{r.sub}</p></div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold">
+                    {(selectedUsager.membre ? `${selectedUsager.membre.nom} ${selectedUsager.membre.prenom}` : selectedUsager.foyer?.code_menage || '?').charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800">
+                      {selectedUsager.membre ? `${selectedUsager.membre.nom} ${selectedUsager.membre.prenom}` : (membres.find(m => m.foyer_id === selectedUsager.foyer?.id && m.is_chef)?.nom || selectedUsager.foyer?.code_menage)}
+                    </p>
+                    <p className="text-xs text-slate-500 font-mono">
+                      {selectedUsager.foyer?.code_menage || foyers.find(f => f.id === selectedUsager.membre?.foyer_id)?.code_menage}
+                      {selectedUsager.membre?.cin && ` · CIN: ${selectedUsager.membre.cin}`}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => { setSelectedUsager(null); setOperationsEnAttente([]); loadToutesOperations(); }} className="text-slate-400 hover:text-red-500"><X className="h-5 w-5" /></button>
+              </div>
+
+              {loading ? (
+                <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
+              ) : operationsEnAttente.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  <p className="font-semibold">Aucune opération en attente</p>
+                  <p className="text-xs mt-1">Toutes les prestations de cet usager sont réglées.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-50">
+                  {operationsEnAttente.map(op => (
+                    <label key={op.id} className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer transition ${panier.has(op.id) ? 'bg-emerald-50/60' : 'hover:bg-slate-50'}`}>
+                      <input type="checkbox" checked={panier.has(op.id)} onChange={() => toggleOperation(op.id)} className="w-4 h-4 accent-emerald-600 shrink-0" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${moduleColor(op.module_origine)}`}>{op.module_origine}</span>
+                          <p className="text-sm font-semibold text-slate-800">{op.type_prestation}</p>
+                        </div>
+                        {op.reference_document && <p className="text-[11px] text-slate-400 font-mono mt-0.5">{op.reference_document}</p>}
+                      </div>
+                      <span className="font-bold text-slate-900 shrink-0">{fmt(op.montant * (op.quantite || 1))}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4 h-fit sticky top-4">
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-emerald-600" />Panier ({operationsSelectionnees.length})</h3>
+              {operationsSelectionnees.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">Sélectionnez au moins une prestation à encaisser.</p>
+              ) : (
+                <>
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                    {operationsSelectionnees.map(op => (
+                      <div key={op.id} className="flex items-center justify-between text-xs bg-slate-50 rounded-lg px-2.5 py-1.5">
+                        <span className="text-slate-600 truncate">{op.type_prestation}</span>
+                        <span className="font-semibold text-slate-800 shrink-0 ml-2">{fmt(op.montant)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-slate-100 pt-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-bold text-slate-600">TOTAL</span>
+                      <span className="text-2xl font-black text-emerald-600">{fmt(totalAPayer)}</span>
+                    </div>
+                    {!isUniquementDocuments && modulesImpliques.length > 1 && (
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 mb-3 text-[11px] text-purple-700 flex items-start gap-1.5">
+                        <Receipt className="h-3.5 w-3.5 shrink-0 mt-0.5" />Multi-module : un reçu global sera imprimé en plus des justificatifs.
+                      </div>
+                    )}
+                    {isUniquementDocuments && (
+                      <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mb-3 text-[11px] text-indigo-700 flex items-start gap-1.5">
+                        <FileText className="h-3.5 w-3.5 shrink-0 mt-0.5" />Documents uniquement : justificatif intégré à chaque certificat.
+                      </div>
+                    )}
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Mode de paiement</label>
+                    <div className="grid grid-cols-3 gap-1.5 mb-3">
+                      {MODES_PAIEMENT.map(({ v, icon: Icon }) => (
+                        <button key={v} onClick={() => setModePaiement(v)} className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-[10px] font-semibold transition ${modePaiement === v ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200'}`}>
+                          <Icon className="h-3.5 w-3.5" />{v.split(' ')[0]}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Agent caissier</label>
+                    <input value={agent} onChange={e => setAgent(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 mb-3" />
+                    <button onClick={handleValiderPaiement} disabled={validating} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition">
+                      {validating ? <><Loader2 className="h-4 w-4 animate-spin" />Validation…</> : <><Printer className="h-4 w-4" />Valider & Imprimer</>}
+                    </button>
+                    {modulesImpliques.includes('Documents') && (
+                      <button onClick={() => setShowCreditModal(true)} className="w-full mt-2 py-2.5 border-2 border-purple-300 hover:bg-purple-50 text-purple-700 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition">
+                        <CreditCard className="h-3.5 w-3.5" />Délivrer à crédit
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ── Bloc unique : recherche + tableau, filtre en haut, données en bas ── */
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="p-5 border-b border-slate-100">
             <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2 mb-3"><Search className="h-3.5 w-3.5" />Rechercher un usager</h3>
             <div className="flex gap-2 mb-2">
               {([['nom', 'Nom & Prénom', User], ['cin', 'CIN', FileText], ['menage', 'N° Ménage', Home]] as [string, string, any][]).map(([v, l, Icon]) => (
@@ -470,121 +599,19 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
             </div>
           </div>
 
-          {selectedUsager ? (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-              <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold">
-                      {(selectedUsager.membre ? `${selectedUsager.membre.nom} ${selectedUsager.membre.prenom}` : selectedUsager.foyer?.code_menage || '?').charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-800">
-                        {selectedUsager.membre ? `${selectedUsager.membre.nom} ${selectedUsager.membre.prenom}` : (membres.find(m => m.foyer_id === selectedUsager.foyer?.id && m.is_chef)?.nom || selectedUsager.foyer?.code_menage)}
-                      </p>
-                      <p className="text-xs text-slate-500 font-mono">
-                        {selectedUsager.foyer?.code_menage || foyers.find(f => f.id === selectedUsager.membre?.foyer_id)?.code_menage}
-                        {selectedUsager.membre?.cin && ` · CIN: ${selectedUsager.membre.cin}`}
-                      </p>
-                    </div>
-                  </div>
-                  <button onClick={() => { setSelectedUsager(null); setOperationsEnAttente([]); loadToutesOperations(); }} className="text-slate-400 hover:text-red-500"><X className="h-5 w-5" /></button>
-                </div>
-
-                {loading ? (
-                  <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
-                ) : operationsEnAttente.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400">
-                    <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                    <p className="font-semibold">Aucune opération en attente</p>
-                    <p className="text-xs mt-1">Toutes les prestations de cet usager sont réglées.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-50">
-                    {operationsEnAttente.map(op => (
-                      <label key={op.id} className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer transition ${panier.has(op.id) ? 'bg-emerald-50/60' : 'hover:bg-slate-50'}`}>
-                        <input type="checkbox" checked={panier.has(op.id)} onChange={() => toggleOperation(op.id)} className="w-4 h-4 accent-emerald-600 shrink-0" />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${moduleColor(op.module_origine)}`}>{op.module_origine}</span>
-                            <p className="text-sm font-semibold text-slate-800">{op.type_prestation}</p>
-                          </div>
-                          {op.reference_document && <p className="text-[11px] text-slate-400 font-mono mt-0.5">{op.reference_document}</p>}
-                        </div>
-                        <span className="font-bold text-slate-900 shrink-0">{fmt(op.montant * (op.quantite || 1))}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4 h-fit sticky top-4">
-                <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-emerald-600" />Panier ({operationsSelectionnees.length})</h3>
-                {operationsSelectionnees.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-6">Sélectionnez au moins une prestation à encaisser.</p>
-                ) : (
-                  <>
-                    <div className="space-y-1.5 max-h-44 overflow-y-auto">
-                      {operationsSelectionnees.map(op => (
-                        <div key={op.id} className="flex items-center justify-between text-xs bg-slate-50 rounded-lg px-2.5 py-1.5">
-                          <span className="text-slate-600 truncate">{op.type_prestation}</span>
-                          <span className="font-semibold text-slate-800 shrink-0 ml-2">{fmt(op.montant)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="border-t border-slate-100 pt-3">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-bold text-slate-600">TOTAL</span>
-                        <span className="text-2xl font-black text-emerald-600">{fmt(totalAPayer)}</span>
-                      </div>
-                      {!isUniquementDocuments && modulesImpliques.length > 1 && (
-                        <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 mb-3 text-[11px] text-purple-700 flex items-start gap-1.5">
-                          <Receipt className="h-3.5 w-3.5 shrink-0 mt-0.5" />Multi-module : un reçu global sera imprimé en plus des justificatifs.
-                        </div>
-                      )}
-                      {isUniquementDocuments && (
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mb-3 text-[11px] text-indigo-700 flex items-start gap-1.5">
-                          <FileText className="h-3.5 w-3.5 shrink-0 mt-0.5" />Documents uniquement : justificatif intégré à chaque certificat.
-                        </div>
-                      )}
-                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Mode de paiement</label>
-                      <div className="grid grid-cols-3 gap-1.5 mb-3">
-                        {MODES_PAIEMENT.map(({ v, icon: Icon }) => (
-                          <button key={v} onClick={() => setModePaiement(v)} className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-[10px] font-semibold transition ${modePaiement === v ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200'}`}>
-                            <Icon className="h-3.5 w-3.5" />{v.split(' ')[0]}
-                          </button>
-                        ))}
-                      </div>
-                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Agent caissier</label>
-                      <input value={agent} onChange={e => setAgent(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 mb-3" />
-                      <button onClick={handleValiderPaiement} disabled={validating} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition">
-                        {validating ? <><Loader2 className="h-4 w-4 animate-spin" />Validation…</> : <><Printer className="h-4 w-4" />Valider & Imprimer</>}
-                      </button>
-                      {modulesImpliques.includes('Documents') && (
-                        <button onClick={() => setShowCreditModal(true)} className="w-full mt-2 py-2.5 border-2 border-purple-300 hover:bg-purple-50 text-purple-700 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition">
-                          <CreditCard className="h-3.5 w-3.5" />Délivrer à crédit
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Hourglass className="h-4 w-4 text-amber-500" />Tous les usagers en attente de paiement ({groupesParUsager.length})</h3>
+            <button onClick={loadToutesOperations} className="text-xs text-emerald-600 font-semibold hover:underline">Rafraîchir</button>
+          </div>
+          {loadingToutes ? (
+            <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
+          ) : groupesParUsager.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="font-semibold">Aucune opération en attente</p>
+              <p className="text-xs mt-1">Toutes les prestations sont réglées.</p>
             </div>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Hourglass className="h-4 w-4 text-amber-500" />Tous les usagers en attente de paiement ({groupesParUsager.length})</h3>
-                <button onClick={loadToutesOperations} className="text-xs text-emerald-600 font-semibold hover:underline">Rafraîchir</button>
-              </div>
-              {loadingToutes ? (
-                <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
-              ) : groupesParUsager.length === 0 ? (
-                <div className="text-center py-12 text-slate-400">
-                  <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                  <p className="font-semibold">Aucune opération en attente</p>
-                  <p className="text-xs mt-1">Toutes les prestations sont réglées.</p>
-                </div>
-              ) : (
                 <table className="w-full text-xs">
                   <thead><tr className="bg-slate-50 border-b">
                     <th className="p-3 text-left text-slate-500">Usager</th>
@@ -621,15 +648,13 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
           )}
         </div>
+      )}
 
-      {/* ── Historique des transactions (même page) ── */}
-      <div className="space-y-4">
-        {/* Filtres */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+      {/* ── Historique des transactions (même page, bloc unique) ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="p-4 space-y-3 border-b border-slate-100">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Filter className="h-3.5 w-3.5" />Filtres</h3>
             <button onClick={resetFiltresHisto} className="text-xs text-slate-400 hover:text-red-500 font-semibold flex items-center gap-1"><RotateCcw className="h-3 w-3" />Réinitialiser</button>
@@ -654,14 +679,12 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
           </div>
         </div>
 
-        {/* Tableau historique */}
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-          {loadingHisto ? (
-            <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
-          ) : (
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b">
-                <th className="p-3 text-left text-slate-500">N° Reçu</th>
+        {loadingHisto ? (
+          <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead><tr className="bg-slate-50 border-b">
+              <th className="p-3 text-left text-slate-500">N° Reçu</th>
                 <th className="p-3 text-left text-slate-500">Usager</th>
                 <th className="p-3 text-left text-slate-500">Modules</th>
                 <th className="p-3 text-center text-slate-500">Opérations</th>
@@ -699,14 +722,13 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
               </tbody>
             </table>
           )}
-          {totalPagesHisto > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50">
-              <button onClick={() => setPageHisto(p => Math.max(1, p - 1))} disabled={pageHisto === 1} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-40"><ChevronLeft className="h-4 w-4" />Précédent</button>
-              <span className="text-xs text-slate-500">Page {pageHisto} / {totalPagesHisto}</span>
-              <button onClick={() => setPageHisto(p => Math.min(totalPagesHisto, p + 1))} disabled={pageHisto === totalPagesHisto} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-40">Suivant<ChevronRight className="h-4 w-4" /></button>
-            </div>
-          )}
-        </div>
+        {totalPagesHisto > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50">
+            <button onClick={() => setPageHisto(p => Math.max(1, p - 1))} disabled={pageHisto === 1} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-40"><ChevronLeft className="h-4 w-4" />Précédent</button>
+            <span className="text-xs text-slate-500">Page {pageHisto} / {totalPagesHisto}</span>
+            <button onClick={() => setPageHisto(p => Math.min(totalPagesHisto, p + 1))} disabled={pageHisto === totalPagesHisto} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-40">Suivant<ChevronRight className="h-4 w-4" /></button>
+          </div>
+        )}
       </div>
 
       {/* Modal crédit */}

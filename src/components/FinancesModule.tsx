@@ -378,8 +378,8 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
           {/* ── COTISATIONS ── */}
           {subMenu === 'cotisations' && (
-            <div className="space-y-4">
-              <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="p-4 flex flex-wrap items-center gap-3 border-b border-slate-100">
                 {/* Sélecteur année popup */}
                 <div className="relative" data-annee-picker>
                   <button onClick={() => setShowAnneePicker(!showAnneePicker)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm transition">
@@ -434,7 +434,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
               </div>
 
               {/* Grille */}
-              <div className="bg-white border border-slate-200 rounded-xl overflow-auto">
+              <div className="overflow-auto">
                 <table className="w-full text-xs min-w-[1050px]">
                   <thead className="sticky top-0 z-10">
                     <tr className="bg-slate-800">
