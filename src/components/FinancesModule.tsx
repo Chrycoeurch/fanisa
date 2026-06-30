@@ -46,7 +46,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
   const [config, setConfig] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
-  const [encaissements, setEncaissements] = useState<any[]>([]);
+  const [transactionsCaisse, setTransactionsCaisse] = useState<any[]>([]);
   const [cotisations, setCotisations] = useState<any[]>([]);
   const [depenses, setDepenses] = useState<any[]>([]);
   const [creances, setCreances] = useState<any[]>([]);
@@ -85,16 +85,16 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const [cfg, enc, cot, dep, don, cre] = await Promise.all([
+    const [cfg, tx, cot, dep, don, cre] = await Promise.all([
       supabase.from('config_finances').select('*').single(),
-      supabase.from('encaissements').select('*').order('created_at', { ascending: false }),
+      supabase.from('transactions_caisse').select('*').order('created_at', { ascending: false }),
       supabase.from('cotisations').select('*'),
       supabase.from('depenses').select('*').order('created_at', { ascending: false }),
       supabase.from('dons').select('*').order('date_reception', { ascending: false }),
       supabase.from('creances').select('*').order('created_at', { ascending: false }),
     ]);
     setConfig(cfg.data || {});
-    setEncaissements(enc.data || []);
+    setTransactionsCaisse(tx.data || []);
     setCotisations(cot.data || []);
     setDepenses(dep.data || []);
     setDons(don.data || []);
@@ -114,7 +114,8 @@ export default function FinancesModule({ foyers, membres }: Props) {
   }, [showAnneePicker]);
 
   // ── Calculs globaux ───────────────────────────────────────
-  const totalRecettes = encaissements.reduce((s, e) => s + (e.montant_total || 0), 0);
+  const transactionsValidees = transactionsCaisse.filter(t => t.statut === 'Validée');
+  const totalRecettes = transactionsValidees.reduce((s, t) => s + (t.montant_total || 0), 0);
   const totalDep      = depenses.reduce((s, d) => s + (d.montant || 0), 0);
   const totalDons     = dons.reduce((s, d) => s + (typeof d.montant === 'number' ? d.montant : 0), 0);
   const solde         = (config.solde_initial || 0) + totalRecettes + totalDons - totalDep;
@@ -135,9 +136,9 @@ export default function FinancesModule({ foyers, membres }: Props) {
   const totalCotReste = Math.max(0, totalCotDu - totalCotEncaisse);
 
   // ── Calculs dashboard filtrés ─────────────────────────────
-  const encFiltresDash = encaissements.filter(e => {
-    if (dashDebut && e.created_at < dashDebut) return false;
-    if (dashFin && e.created_at > dashFin + 'T23:59:59') return false;
+  const encFiltresDash = transactionsValidees.filter(t => {
+    if (dashDebut && t.created_at < dashDebut) return false;
+    if (dashFin && t.created_at > dashFin + 'T23:59:59') return false;
     return true;
   });
   const depFiltresDash = depenses.filter(d => {
@@ -150,7 +151,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
     if (dashFin && d.date_reception > dashFin + 'T23:59:59') return false;
     return true;
   });
-  const recettesFiltrees = encFiltresDash.reduce((s, e) => s + (e.montant_total || 0), 0);
+  const recettesFiltrees = encFiltresDash.reduce((s, t) => s + (t.montant_total || 0), 0);
   const depFiltrees      = depFiltresDash.reduce((s, d) => s + (d.montant || 0), 0);
   const donsMontant      = donsFiltresDash.reduce((s, d) => s + (typeof d.montant === 'number' ? d.montant : 0), 0);
   const hasFiltres       = !!(dashDebut || dashFin);
@@ -190,23 +191,8 @@ export default function FinancesModule({ foyers, membres }: Props) {
     return f.code_menage.toLowerCase().includes(q) || (chef ? `${chef.nom} ${chef.prenom}`.toLowerCase().includes(q) : false);
   });
 
-  const printRecuCot = (foyer: Foyer, moisNum: number, annee: number, montant: number, ref: string) => {
-    const chef = membres.find(m => m.foyer_id === foyer.id && m.is_chef);
-    const periode = `${MOIS[moisNum - 1]} ${annee}`;
-    const w = window.open('', '_blank', 'width=400,height=500');
-    if (!w) return;
-    w.document.write(`<html><head><title>Reçu</title><style>body{font-family:monospace;font-size:12px;margin:20px;max-width:320px}.t{font-size:16px;font-weight:bold;text-align:center}.s{text-align:center;font-size:11px;margin-bottom:12px}hr{border:1px dashed #000;margin:8px 0}.r{display:flex;justify-content:space-between;margin:4px 0}.tot{font-weight:bold;font-size:14px;border-top:2px solid #000;padding-top:8px;margin-top:8px}.f{text-align:center;margin-top:16px;font-size:10px}</style></head><body>`);
-    w.document.write(`<div class="t">FOKONTANY FANISA</div><div class="s">REÇU DE COTISATION</div><hr>`);
-    w.document.write(`<div class="r"><span>Réf.:</span><span>${ref}</span></div>`);
-    w.document.write(`<div class="r"><span>Date:</span><span>${new Date().toLocaleDateString('fr-FR')}</span></div>`);
-    w.document.write(`<div class="r"><span>Ménage:</span><span>${foyer.code_menage}</span></div>`);
-    if (chef) w.document.write(`<div class="r"><span>Chef:</span><span>${chef.nom} ${chef.prenom}</span></div>`);
-    w.document.write(`<hr><div class="r"><span>Cotisation — ${periode}</span><span>${new Intl.NumberFormat('fr-MG').format(montant)} Ar</span></div>`);
-    w.document.write(`<div class="tot"><div class="r"><span>TOTAL</span><span>${new Intl.NumberFormat('fr-MG').format(montant)} Ar</span></div></div>`);
-    w.document.write(`<div class="f">Généré automatiquement par FANISA<br>Merci pour votre paiement</div></body></html>`);
-    w.document.close();
-    setTimeout(() => w.print(), 300);
-  };
+  // Note : l'impression du reçu de cotisation se fait désormais exclusivement
+  // via le module Caisse au moment de la validation du paiement (source unique).
 
   const handleCocherCot = async (foyer: Foyer, moisNum: number) => {
     const periode = `${MOIS[moisNum - 1]} ${anneeSelCot}`;
@@ -238,12 +224,12 @@ export default function FinancesModule({ foyers, membres }: Props) {
     const periode = `${MOIS[moisNum - 1]} ${anneeSelCot}`;
     const cot = cotisations.find(c => c.foyer_id === foyer.id && c.periode === periode);
     const estPaye = cot?.statut === 'À jour';
-    if (!confirm(estPaye ? `Annuler le paiement de ${periode} pour ${foyer.code_menage} ?` : `Retirer la cotisation ${periode} de la file d'attente de paiement ?`)) return;
-    if (cot?.encaissement_id) {
-      await supabase.from('encaissement_lignes').delete().eq('encaissement_id', cot.encaissement_id);
-      await supabase.from('encaissements').delete().eq('id', cot.encaissement_id);
+    if (estPaye) {
+      alert('Cette cotisation a déjà été validée par la Caisse. Pour l\'annuler, utilisez l\'annulation de transaction depuis l\'onglet Caisse → Historique.');
+      return;
     }
-    // Supprimer l'opération en attente liée à cette cotisation (si non encore payée)
+    if (!confirm(`Retirer la cotisation ${periode} de la file d'attente de paiement ?`)) return;
+    // Supprimer l'opération en attente liée à cette cotisation (jamais encore payée)
     await supabase.from('operations_caisse')
       .delete()
       .eq('foyer_id', foyer.id)
@@ -254,14 +240,6 @@ export default function FinancesModule({ foyers, membres }: Props) {
     await loadAll();
   };
 
-  const deleteEncaissement = async (id: string) => {
-    if (!confirm('Supprimer cet encaissement ? La cotisation liée sera aussi annulée.')) return;
-    await supabase.from('encaissement_lignes').delete().eq('encaissement_id', id);
-    await supabase.from('cotisations').delete().eq('encaissement_id', id);
-    await supabase.from('encaissements').delete().eq('id', id);
-    await loadAll();
-  };
-
   const deleteDepense = async (id: string) => {
     if (!confirm('Supprimer cette dépense ?')) return;
     await supabase.from('depenses').delete().eq('id', id);
@@ -269,9 +247,9 @@ export default function FinancesModule({ foyers, membres }: Props) {
   };
 
   // ── Historique filtré + paginé ────────────────────────────
-  const filteredEnc = encaissements.filter(e => {
-    if (dateDebutEnc && e.created_at < dateDebutEnc) return false;
-    if (dateFinEnc && e.created_at > dateFinEnc + 'T23:59:59') return false;
+  const filteredEnc = transactionsValidees.filter(t => {
+    if (dateDebutEnc && t.created_at < dateDebutEnc) return false;
+    if (dateFinEnc && t.created_at > dateFinEnc + 'T23:59:59') return false;
     return true;
   });
   const filteredDep = depenses.filter(d => {
@@ -533,24 +511,24 @@ export default function FinancesModule({ foyers, membres }: Props) {
             <div className="space-y-5">
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-100">
-                  <h3 className="text-sm font-bold text-green-700 flex items-center gap-2 mb-3"><ArrowUpCircle className="h-4 w-4" />Encaissements ({encaissements.length})</h3>
-                  <DateFilter debut={dateDebutEnc} fin={dateFinEnc} onDebut={v => { setDateDebutEnc(v); setPageEnc(1); }} onFin={v => { setDateFinEnc(v); setPageEnc(1); }} total={filteredEnc.length} totalMontant={filteredEnc.reduce((s, e) => s + (e.montant_total || 0), 0)} label="encaissement(s)" />
+                  <h3 className="text-sm font-bold text-green-700 flex items-center gap-2 mb-3"><ArrowUpCircle className="h-4 w-4" />Encaissements ({transactionsValidees.length})</h3>
+                  <p className="text-[11px] text-slate-400 mb-3">Source unique : transactions validées par la Caisse. Pour annuler un encaissement, utilisez l'onglet Caisse → Historique.</p>
+                  <DateFilter debut={dateDebutEnc} fin={dateFinEnc} onDebut={v => { setDateDebutEnc(v); setPageEnc(1); }} onFin={v => { setDateFinEnc(v); setPageEnc(1); }} total={filteredEnc.length} totalMontant={filteredEnc.reduce((s, t) => s + (t.montant_total || 0), 0)} label="encaissement(s)" />
                 </div>
                 <table className="w-full text-xs">
-                  <thead><tr className="bg-slate-50 border-b"><th className="p-3 text-left text-slate-500">Référence</th><th className="p-3 text-left text-slate-500">Ménage</th><th className="p-3 text-left text-slate-500">Bénéficiaire</th><th className="p-3 text-right text-slate-500">Montant</th><th className="p-3 text-left text-slate-500">Mode</th><th className="p-3 text-left text-slate-500">Date</th><th className="p-3 text-center text-slate-500">⋯</th></tr></thead>
+                  <thead><tr className="bg-slate-50 border-b"><th className="p-3 text-left text-slate-500">N° Reçu</th><th className="p-3 text-left text-slate-500">Usager</th><th className="p-3 text-right text-slate-500">Montant</th><th className="p-3 text-left text-slate-500">Mode</th><th className="p-3 text-left text-slate-500">Agent</th><th className="p-3 text-left text-slate-500">Date</th></tr></thead>
                   <tbody className="divide-y divide-slate-50">
-                    {encPage.map(e => (
-                      <tr key={e.id} className="hover:bg-slate-50">
-                        <td className="p-3 font-mono text-green-600 font-semibold">{e.reference}</td>
-                        <td className="p-3 font-mono text-indigo-600">{e.code_menage}</td>
-                        <td className="p-3 text-slate-700">{e.nom_beneficiaire}</td>
-                        <td className="p-3 text-right font-bold text-green-700">{fmt(e.montant_total)}</td>
-                        <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${e.mode_paiement === 'Espèces' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{e.mode_paiement}</span></td>
-                        <td className="p-3 text-slate-400">{new Date(e.created_at).toLocaleDateString('fr-FR')}</td>
-                        <td className="p-3 text-center"><button onClick={() => deleteEncaissement(e.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-slate-300 hover:text-red-500 transition"><Trash2 className="h-3.5 w-3.5" /></button></td>
+                    {encPage.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50">
+                        <td className="p-3 font-mono text-green-600 font-semibold">{t.numero_recu}</td>
+                        <td className="p-3 text-slate-700">{t.nom_usager}</td>
+                        <td className="p-3 text-right font-bold text-green-700">{fmt(t.montant_total)}</td>
+                        <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${t.mode_paiement === 'Espèces' ? 'bg-green-100 text-green-700' : t.mode_paiement === 'Mobile Money' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{t.mode_paiement}</span></td>
+                        <td className="p-3 text-slate-500">{t.agent}</td>
+                        <td className="p-3 text-slate-400">{new Date(t.created_at).toLocaleDateString('fr-FR')}</td>
                       </tr>
                     ))}
-                    {encPage.length === 0 && <tr><td colSpan={7} className="text-center text-slate-400 py-8">Aucun encaissement</td></tr>}
+                    {encPage.length === 0 && <tr><td colSpan={6} className="text-center text-slate-400 py-8">Aucun encaissement</td></tr>}
                   </tbody>
                 </table>
                 <Pagination page={pageEnc} total={totalPagesEnc} onPage={setPageEnc} />
