@@ -752,7 +752,9 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
                       </td>
                       <td className="p-3 text-center">
                         {t.statut === 'Validée' && (
-                          <button onClick={() => setShowAnnulModal(t)} className="p-1.5 hover:bg-red-50 rounded-lg text-slate-300 hover:text-red-500 transition" title="Annuler la transaction"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => setShowAnnulModal(t)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition" title="Annuler cette transaction (statut uniquement, rien n'est supprimé)">
+                            <RotateCcw className="h-3.5 w-3.5" />Annuler
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -896,32 +898,32 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
         </div>
       )}
 
-      {/* Modal annulation */}
+      {/* Modal annulation — changement de statut uniquement, aucune suppression en base */}
       {showAnnulModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="bg-red-100 p-2 rounded-xl"><AlertCircle className="h-5 w-5 text-red-600" /></div>
+              <div className="bg-amber-100 p-2 rounded-xl"><RotateCcw className="h-5 w-5 text-amber-600" /></div>
               <div>
                 <h3 className="font-bold text-slate-900">Annuler la transaction</h3>
                 <p className="text-xs text-slate-500 font-mono">{showAnnulModal.numero_recu}</p>
               </div>
             </div>
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              Toutes les opérations liées ({transactionNbOps[showAnnulModal.id] || 0}) reviendront au statut "En attente de paiement". La transaction sera conservée dans l'historique avec le statut "Annulée".
+              Aucune donnée ne sera supprimée. Toutes les opérations liées ({transactionNbOps[showAnnulModal.id] || 0}) reviendront au statut "En attente de paiement", et la transaction restera visible dans l'historique avec le statut "Annulée".
             </p>
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Motif de l'annulation *</label>
-              <textarea value={motifAnnulation} onChange={e => setMotifAnnulation(e.target.value)} rows={3} placeholder="Expliquez la raison de l'annulation..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-red-400 resize-none" />
+              <textarea value={motifAnnulation} onChange={e => setMotifAnnulation(e.target.value)} rows={3} placeholder="Expliquez la raison de l'annulation..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-amber-400 resize-none" />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Annulé par</label>
-              <input value={annulePar} onChange={e => setAnnulePar(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-red-400" />
+              <input value={annulePar} onChange={e => setAnnulePar(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-amber-400" />
             </div>
             <div className="flex gap-3 pt-2">
-              <button onClick={() => { setShowAnnulModal(null); setMotifAnnulation(''); }} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600">Annuler</button>
-              <button onClick={handleAnnuler} disabled={annulingId === showAnnulModal.id || !motifAnnulation.trim()} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-slate-200 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
-                {annulingId === showAnnulModal.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Confirmer l'annulation
+              <button onClick={() => { setShowAnnulModal(null); setMotifAnnulation(''); }} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600">Fermer</button>
+              <button onClick={handleAnnuler} disabled={annulingId === showAnnulModal.id || !motifAnnulation.trim()} className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
+                {annulingId === showAnnulModal.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}Confirmer l'annulation
               </button>
             </div>
           </div>
