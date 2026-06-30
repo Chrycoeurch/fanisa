@@ -1050,6 +1050,22 @@ export async function telechargerPDF(bytes: Uint8Array, nomFichier: string) {
 
 // ── DISPATCHER — génère le PDF correspondant au code document ──
 // Utilisé au moment du téléchargement final (après paiement validé), pas à l'aperçu.
+// ── Fusionne N exemplaires d'un même document en un seul PDF multi-pages ──
+// Important pour la traçabilité : un seul fichier = un seul acte de génération,
+// même si l'agent a demandé plusieurs copies physiques.
+export async function fusionnerExemplaires(bytesUnique: Uint8Array, nbExemplaires: number): Promise<Uint8Array> {
+  if (nbExemplaires <= 1) return bytesUnique;
+  const merged = await PDFDocument.create();
+  const source = await PDFDocument.load(bytesUnique);
+  const nbPages = source.getPageCount();
+  for (let ex = 0; ex < nbExemplaires; ex++) {
+    const indices = Array.from({ length: nbPages }, (_, i) => i);
+    const pages = await merged.copyPages(source, indices);
+    pages.forEach(p => merged.addPage(p));
+  }
+  return await merged.save();
+}
+
 export async function genererDocumentParCode(
   code: string,
   config: ConfigFokontany,

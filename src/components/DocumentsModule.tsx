@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import {
   getConfig, updateConfig, ConfigFokontany,
   telechargerPDF, DOCUMENTS_ADMIN, DOCUMENTS_FONCIERS,
-  genererDocumentParCode, genererReference, enregistrerDocument,
+  genererDocumentParCode, genererReference, enregistrerDocument, fusionnerExemplaires,
 } from '../lib/documents';
 import {
   FileText, Settings, Download, Clock, CheckCircle, Loader2, X,
@@ -40,6 +40,8 @@ interface DemandeDocument {
   reference_document: string | null;
   numero_sequentiel: number | null;
   telecharge_le: string | null;
+  agent_demandeur: string | null;
+  nb_telechargements: number;
   created_at: string;
 }
 
@@ -67,6 +69,7 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
   const [nbExemplaires, setNbExemplaires] = useState(1);
   const [motif, setMotif] = useState('');
   const [motifAutre, setMotifAutre] = useState('');
+  const [agentDemandeur, setAgentDemandeur] = useState('');
   const [extraData, setExtraData] = useState<any>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -81,6 +84,7 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
   if (!requerantEstTitulaire && (!requerantNom.trim() || !requerantPrenom.trim())) erreurs.push('Nom et prénom du requérant obligatoires.');
   if (nbExemplaires < 1) erreurs.push('Le nombre d\'exemplaires doit être au moins 1.');
   if (!motif && !motifAutre.trim()) erreurs.push('Le motif de la demande est obligatoire.');
+  if (!agentDemandeur.trim()) erreurs.push('Le nom de l\'agent demandeur est obligatoire.');
   if (code === 'FFD' && (!extraData.dateDeces || !extraData.lieuDeces)) erreurs.push('Date et lieu du décès obligatoires pour une déclaration de décès.');
   const peutValider = erreurs.length === 0;
 
@@ -91,7 +95,7 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
     const ok = await onSubmit({
       motifFinal: motif === 'Autre' ? motifAutre : motif,
       requerantEstTitulaire, requerantNom, requerantPrenom, requerantCin, requerantLien,
-      nbExemplaires, montantTotal, extraData,
+      nbExemplaires, montantTotal, extraData, agentDemandeur,
     });
     setSubmitting(false);
     if (ok) setStep(5); // sinon on reste à l'étape 4 — l'erreur a déjà été affichée par onSubmit
@@ -197,6 +201,11 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
                 <input value={motifAutre} onChange={e => setMotifAutre(e.target.value)} placeholder="Précisez le motif..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
               )}
               <p className="text-[11px] text-slate-400">Ce motif sera enregistré dans l'historique du document.</p>
+              <div className="pt-2 border-t border-slate-100">
+                <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Agent qui effectue la demande *</label>
+                <input value={agentDemandeur} onChange={e => setAgentDemandeur(e.target.value)} placeholder="Nom de l'agent..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+                <p className="text-[11px] text-slate-400 mt-1">Pour la traçabilité — sera visible dans Mes Demandes et lors d'un éventuel re-téléchargement.</p>
+              </div>
             </div>
           )}
 
@@ -294,7 +303,10 @@ export default function DocumentsModule({ foyers, membres }: Props) {
   // Mes demandes
   const [demandes, setDemandes] = useState<DemandeDocument[]>([]);
   const [loadingDemandes, setLoadingDemandes] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [filtreAgentDoc, setFiltreAgentDoc] = useState('');
+  const [filtreRefDoc, setFiltreRefDoc] = useState('');
+  const [filtreDateDocDebut, setFiltreDateDocDebut] = useState('');
+  const [filtreDateDocFin, setFiltreDateDocFin] = useState('');
 
   const membresDuFoyer = selectedFoyer ? membres.filter(m => m.foyer_id === selectedFoyer.id) : [];
   const filteredFoyers = foyers.filter(f => {
@@ -353,6 +365,7 @@ export default function DocumentsModule({ foyers, membres }: Props) {
       montant_unitaire: tarif, montant_total: formData.montantTotal,
       statut: 'En attente de paiement',
       snapshot_data: formData.extraData || null,
+      agent_demandeur: formData.agentDemandeur || 'Agent Fokontany',
     }).select().single();
 
     if (errDemande || !demande) {
@@ -388,13 +401,20 @@ export default function DocumentsModule({ foyers, membres }: Props) {
     return true;
   };
 
-  // Téléchargement final — uniquement si Payé ou Délivré à crédit
-  const handleTelecharger = async (demande: DemandeDocument) => {
+  // ── Aperçu (étape obligatoire avant tout téléchargement/impression) ──
+  const [previewDoc, setPreviewDoc] = useState<{ demande: DemandeDocument; url: string; bytes: Uint8Array; reference: string } | null>(null);
+  const [preparingPreview, setPreparingPreview] = useState<string | null>(null);
+  const [confirmReDownload, setConfirmReDownload] = useState<DemandeDocument | null>(null);
+  const [motifReDownload, setMotifReDownload] = useState('');
+  const [agentReDownload, setAgentReDownload] = useState('');
+
+  // Construit le PDF fusionné (N exemplaires identiques, même référence) — ne télécharge rien encore.
+  const preparerApercu = async (demande: DemandeDocument) => {
     if (demande.statut !== 'Payé' && demande.statut !== 'Délivré à crédit') {
-      alert('Ce document ne peut pas encore être téléchargé : le paiement n\'a pas été validé.');
+      alert('Ce document ne peut pas encore être consulté : le paiement n\'a pas été validé.');
       return;
     }
-    setDownloadingId(demande.id);
+    setPreparingPreview(demande.id);
     try {
       const cfg = await getConfig();
       const membre = demande.membre_id ? membres.find(m => m.id === demande.membre_id) : undefined;
@@ -408,7 +428,7 @@ export default function DocumentsModule({ foyers, membres }: Props) {
         detenteur = det.detenteur; titulaire = det.titulaire; batiments = det.batiments; valeur = det.valeur;
       }
 
-      // Générer un numéro de référence si pas encore fait
+      // Référence unique pour CET acte — la même pour tous ses exemplaires (anti-falsification)
       let reference = demande.reference_document;
       let numero = demande.numero_sequentiel;
       if (!reference) {
@@ -417,26 +437,77 @@ export default function DocumentsModule({ foyers, membres }: Props) {
         await supabase.from('demandes_documents').update({ reference_document: reference, numero_sequentiel: numero }).eq('id', demande.id);
       }
 
-      const bytesArray: Uint8Array[] = [];
-      for (let i = 0; i < demande.nombre_exemplaires; i++) {
-        const bytes = await genererDocumentParCode(demande.code_document, cfg, {
-          membre, foyer, membresDuFoyer: membresDuFoyerD, parcelle, detenteur, titulaire, batiments, valeur,
-          extraData: demande.snapshot_data,
-        });
-        bytesArray.push(bytes);
-      }
-      // Télécharger chaque exemplaire
-      for (let i = 0; i < bytesArray.length; i++) {
-        const suffix = demande.nombre_exemplaires > 1 ? `_ex${i + 1}` : '';
-        await telechargerPDF(bytesArray[i], `${demande.code_document}_${reference}${suffix}.pdf`);
-      }
-      await enregistrerDocument(demande.code_document, reference!, numero!, demande.membre_id || undefined, demande.foyer_id || undefined);
-      await supabase.from('demandes_documents').update({ telecharge_le: new Date().toISOString() }).eq('id', demande.id);
-      await loadDemandes();
+      const bytesUnique = await genererDocumentParCode(demande.code_document, cfg, {
+        membre, foyer, membresDuFoyer: membresDuFoyerD, parcelle, detenteur, titulaire, batiments, valeur,
+        extraData: demande.snapshot_data,
+      });
+      // Fusion en un seul PDF contenant N pages identiques (N = nombre d'exemplaires demandés)
+      const bytesFusionnes = await fusionnerExemplaires(bytesUnique, demande.nombre_exemplaires);
+
+      const blob = new Blob([bytesFusionnes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      setPreviewDoc({ demande, url, bytes: bytesFusionnes, reference: reference! });
     } catch (e) {
-      alert('Erreur téléchargement : ' + e);
+      alert('Erreur lors de la préparation de l\'aperçu : ' + e);
     }
-    setDownloadingId(null);
+    setPreparingPreview(null);
+  };
+
+  const fermerApercu = () => {
+    if (previewDoc) URL.revokeObjectURL(previewDoc.url);
+    setPreviewDoc(null);
+  };
+
+  // Enregistre l'action dans le journal anti-falsification, puis exécute le téléchargement réel
+  const finaliserAction = async (action: 'Premier téléchargement' | 'Re-téléchargement', agent: string, motif?: string) => {
+    if (!previewDoc) return;
+    const { demande, bytes, reference } = previewDoc;
+    await supabase.from('journal_telechargements').insert({
+      demande_document_id: demande.id,
+      type_action: action,
+      agent: agent || 'Agent Fokontany',
+      motif: motif || null,
+      poste: navigator.userAgent.slice(0, 80),
+    });
+    await telechargerPDF(bytes, `${demande.code_document}_${reference}${demande.nombre_exemplaires > 1 ? `_x${demande.nombre_exemplaires}` : ''}.pdf`);
+    if (action === 'Premier téléchargement') {
+      await enregistrerDocument(demande.code_document, reference, demande.numero_sequentiel || 0, demande.membre_id || undefined, demande.foyer_id || undefined);
+      await supabase.from('demandes_documents').update({ telecharge_le: new Date().toISOString(), nb_telechargements: 1 }).eq('id', demande.id);
+    } else {
+      await supabase.from('demandes_documents').update({ nb_telechargements: (demande.nb_telechargements || 1) + 1 }).eq('id', demande.id);
+    }
+    await loadDemandes();
+  };
+
+  const handleImprimer = () => {
+    if (!previewDoc) return;
+    const w = window.open(previewDoc.url, '_blank');
+    w?.addEventListener('load', () => { try { w.print(); } catch {} });
+  };
+
+  const handleConfirmerTelechargement = async () => {
+    if (!previewDoc) return;
+    const { demande } = previewDoc;
+    const dejaTelecharge = !!demande.telecharge_le;
+    if (dejaTelecharge) {
+      // Protection anti-falsification : motif + agent obligatoires pour tout re-téléchargement
+      setConfirmReDownload(demande);
+      return;
+    }
+    await finaliserAction('Premier téléchargement', demande.agent_demandeur || 'Agent Fokontany');
+    fermerApercu();
+  };
+
+  const handleConfirmerReTelechargement = async () => {
+    if (!confirmReDownload || !motifReDownload.trim() || !agentReDownload.trim()) {
+      alert('Le motif et le nom de l\'agent sont obligatoires pour re-télécharger ce document.');
+      return;
+    }
+    await finaliserAction('Re-téléchargement', agentReDownload, motifReDownload);
+    setConfirmReDownload(null);
+    setMotifReDownload('');
+    setAgentReDownload('');
+    fermerApercu();
   };
 
   const ouvrirWizard = (code: string, nom: string, format: string, niveau: 'membre' | 'foyer' | 'parcelle', icon: string) => {
@@ -444,6 +515,14 @@ export default function DocumentsModule({ foyers, membres }: Props) {
   };
 
   const fmt = (n: number) => new Intl.NumberFormat('fr-MG').format(n) + ' Ar';
+
+  const demandesFiltrees = demandes.filter(d => {
+    if (filtreAgentDoc && !(d.agent_demandeur || '').toLowerCase().includes(filtreAgentDoc.toLowerCase())) return false;
+    if (filtreRefDoc && !(d.reference_document || '').toLowerCase().includes(filtreRefDoc.toLowerCase())) return false;
+    if (filtreDateDocDebut && d.created_at < filtreDateDocDebut) return false;
+    if (filtreDateDocFin && d.created_at > filtreDateDocFin + 'T23:59:59') return false;
+    return true;
+  });
 
   return (
     <div className="space-y-5">
@@ -646,47 +725,75 @@ export default function DocumentsModule({ foyers, membres }: Props) {
 
       {/* ══════════ MES DEMANDES ══════════ */}
       {activeSection === 'demandes' && (
-        <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
-            <p className="text-xs text-slate-500">Le téléchargement se débloque une fois la prestation traitée dans le module <strong>Finances → Caisse</strong>.</p>
-            <button onClick={loadDemandes} className="text-xs text-indigo-600 font-semibold hover:underline shrink-0">Rafraîchir</button>
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="p-4 border-b border-slate-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Search className="h-3.5 w-3.5" />Filtres</h3>
+              <button onClick={loadDemandes} className="text-xs text-indigo-600 font-semibold hover:underline">Rafraîchir</button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <input value={filtreAgentDoc} onChange={e => setFiltreAgentDoc(e.target.value)} placeholder="Agent demandeur..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-indigo-500" />
+              <input value={filtreRefDoc} onChange={e => setFiltreRefDoc(e.target.value)} placeholder="Référence acte..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-indigo-500 font-mono" />
+              <input type="date" value={filtreDateDocDebut} onChange={e => setFiltreDateDocDebut(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-indigo-500" />
+              <input type="date" value={filtreDateDocFin} onChange={e => setFiltreDateDocFin(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-indigo-500" />
+            </div>
+            <div className="flex items-center justify-end pt-1 border-t border-slate-100 text-xs text-slate-500 font-semibold">
+              {demandesFiltrees.length} demande{demandesFiltrees.length > 1 ? 's' : ''}
+            </div>
           </div>
 
           {loadingDemandes ? (
             <div className="text-center py-12"><Loader2 className="h-7 w-7 text-indigo-600 animate-spin mx-auto" /></div>
-          ) : demandes.length === 0 ? (
-            <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl py-16 text-center">
+          ) : demandesFiltrees.length === 0 ? (
+            <div className="text-center py-16">
               <Inbox className="h-10 w-10 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-500 font-semibold">Aucune demande</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {demandes.map(d => {
-                const peutTelecharger = d.statut === 'Payé' || d.statut === 'Délivré à crédit' || d.statut === 'Archivé';
-                return (
-                  <div key={d.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-mono font-bold text-indigo-600 text-sm">[{d.code_document}] {d.nom_document}</span>
-                        {d.nombre_exemplaires > 1 && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">×{d.nombre_exemplaires}</span>}
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        {d.motif_demande} · {fmt(d.montant_total)} · {new Date(d.created_at).toLocaleDateString('fr-FR')}
-                        {d.reference_document && <span className="font-mono ml-2 text-indigo-500">{d.reference_document}</span>}
-                      </p>
-                    </div>
-                    {peutTelecharger ? (
-                      <button onClick={() => handleTelecharger(d)} disabled={downloadingId === d.id} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-xs font-bold rounded-lg transition shrink-0">
-                        {downloadingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        {downloadingId === d.id ? 'Génération…' : d.telecharge_le ? 'Re-télécharger' : 'Télécharger'}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-400 shrink-0">Voir la Caisse</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <table className="w-full text-xs">
+              <thead><tr className="bg-slate-50 border-b">
+                <th className="p-3 text-left text-slate-500">Acte</th>
+                <th className="p-3 text-left text-slate-500">Référence</th>
+                <th className="p-3 text-left text-slate-500">Agent demandeur</th>
+                <th className="p-3 text-left text-slate-500">Date demande</th>
+                <th className="p-3 text-right text-slate-500">Montant</th>
+                <th className="p-3 text-center text-slate-500">Statut</th>
+                <th className="p-3 text-center text-slate-500">Action</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                {demandesFiltrees.map(d => {
+                  const peutVoir = d.statut === 'Payé' || d.statut === 'Délivré à crédit' || d.statut === 'Archivé';
+                  return (
+                    <tr key={d.id} className="hover:bg-slate-50">
+                      <td className="p-3">
+                        <span className="font-mono font-bold text-indigo-600">[{d.code_document}]</span> {d.nom_document}
+                        {d.nombre_exemplaires > 1 && <span className="ml-1.5 text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">×{d.nombre_exemplaires}</span>}
+                        {d.nb_telechargements > 1 && <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">⚠ téléchargé {d.nb_telechargements}×</span>}
+                      </td>
+                      <td className="p-3 font-mono text-slate-500">{d.reference_document || '—'}</td>
+                      <td className="p-3 text-slate-700">{d.agent_demandeur || '—'}</td>
+                      <td className="p-3 text-slate-400">{new Date(d.created_at).toLocaleDateString('fr-FR')} {new Date(d.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                      <td className="p-3 text-right font-bold text-slate-900">{fmt(d.montant_total)}</td>
+                      <td className="p-3 text-center">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.statut === 'Payé' || d.statut === 'Archivé' ? 'bg-emerald-100 text-emerald-700' : d.statut === 'Délivré à crédit' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-600'}`}>
+                          {d.statut === 'En attente de paiement' ? 'En attente Caisse' : d.statut}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        {peutVoir ? (
+                          <button onClick={() => preparerApercu(d)} disabled={preparingPreview === d.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white text-xs font-bold rounded-lg transition mx-auto">
+                            {preparingPreview === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                            {preparingPreview === d.id ? 'Préparation…' : 'Aperçu'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">Voir la Caisse</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       )}
@@ -725,6 +832,71 @@ export default function DocumentsModule({ foyers, membres }: Props) {
           onClose={() => { setWizardDoc(null); }}
           onSubmit={handleWizardSubmit}
         />
+      )}
+
+      {/* ── Modale Aperçu : étape obligatoire avant impression/téléchargement ── */}
+      {previewDoc && (
+        <div className="fixed inset-0 bg-black/70 z-[80] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 shrink-0">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Aperçu — [{previewDoc.demande.code_document}] {previewDoc.demande.nom_document}</h2>
+                <p className="text-xs text-slate-500 font-mono">{previewDoc.reference} · {previewDoc.demande.nombre_exemplaires} exemplaire{previewDoc.demande.nombre_exemplaires > 1 ? 's' : ''} (1 fichier, {previewDoc.demande.nombre_exemplaires} page{previewDoc.demande.nombre_exemplaires > 1 ? 's' : ''})</p>
+              </div>
+              <button onClick={fermerApercu}><X className="h-5 w-5 text-slate-400" /></button>
+            </div>
+            <div className="flex-1 bg-slate-100 overflow-hidden">
+              <iframe src={previewDoc.url} className="w-full h-full border-0" title="Aperçu du document" />
+            </div>
+            <div className="p-4 border-t border-slate-200 shrink-0 flex items-center justify-between gap-3">
+              <p className="text-xs text-slate-400">
+                {previewDoc.demande.telecharge_le ? (
+                  <span className="text-amber-600 font-semibold flex items-center gap-1"><AlertCircle className="h-3.5 w-3.5" />Déjà téléchargé le {new Date(previewDoc.demande.telecharge_le).toLocaleDateString('fr-FR')} — re-téléchargement soumis à confirmation</span>
+                ) : 'Premier téléchargement de ce document.'}
+              </p>
+              <div className="flex gap-2">
+                <button onClick={handleImprimer} className="flex items-center gap-1.5 px-4 py-2.5 border-2 border-indigo-300 hover:bg-indigo-50 text-indigo-700 text-sm font-bold rounded-xl transition">
+                  <Printer className="h-4 w-4" />Imprimer
+                </button>
+                <button onClick={handleConfirmerTelechargement} className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition">
+                  <Download className="h-4 w-4" />Télécharger
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modale confirmation re-téléchargement (anti-falsification) ── */}
+      {confirmReDownload && (
+        <div className="fixed inset-0 bg-black/60 z-[90] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-100 p-2 rounded-xl"><AlertCircle className="h-5 w-5 text-amber-600" /></div>
+              <div>
+                <h3 className="font-bold text-slate-900">Re-téléchargement</h3>
+                <p className="text-xs text-slate-500">Ce document a déjà été téléchargé le {confirmReDownload.telecharge_le && new Date(confirmReDownload.telecharge_le).toLocaleDateString('fr-FR')}.</p>
+              </div>
+            </div>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Pour des raisons de traçabilité et de prévention de la falsification, toute redélivrance doit être justifiée. Cette action sera enregistrée dans le journal.
+            </p>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Motif du re-téléchargement *</label>
+              <textarea value={motifReDownload} onChange={e => setMotifReDownload(e.target.value)} rows={3} placeholder="Ex: problème d'imprimante, document perdu..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-amber-400 resize-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Agent effectuant le re-téléchargement *</label>
+              <input value={agentReDownload} onChange={e => setAgentReDownload(e.target.value)} placeholder="Nom de l'agent..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-amber-400" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => { setConfirmReDownload(null); setMotifReDownload(''); setAgentReDownload(''); }} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600">Annuler</button>
+              <button onClick={handleConfirmerReTelechargement} disabled={!motifReDownload.trim() || !agentReDownload.trim()} className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
+                <Download className="h-4 w-4" />Confirmer le re-téléchargement
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
