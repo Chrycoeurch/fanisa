@@ -39,10 +39,10 @@ const DOCS_TARIFS = [
   { code: 'IFT', label: 'Ticket IFT',                      key: 'tarif_ift' },
 ];
 
-type SubMenu = 'caisse' | 'cotisations' | 'historique' | 'depenses' | 'creances' | 'dons' | 'parametres';
+type SubMenu = 'dashboard' | 'caisse' | 'cotisations' | 'historique' | 'depenses' | 'creances' | 'dons' | 'parametres';
 
 export default function FinancesModule({ foyers, membres }: Props) {
-  const [subMenu, setSubMenu] = useState<SubMenu>('caisse');
+  const [subMenu, setSubMenu] = useState<SubMenu>('dashboard');
   const [config, setConfig] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
@@ -297,7 +297,15 @@ export default function FinancesModule({ foyers, membres }: Props) {
     </div>
   );
 
+  // ── Tableau de bord (essentiel uniquement) ──────────────────
+  const transactionsValideesAll = transactionsCaisse.filter(t => t.statut === 'Validée');
+  const totalEncaisseDash = transactionsValideesAll.reduce((s, t) => s + (t.montant_total || 0), 0);
+  const totalMvola = transactionsValideesAll.filter(t => t.mode_paiement === 'Mobile Money').reduce((s, t) => s + (t.montant_total || 0), 0);
+  const totalResteACredit = creances.filter(c => c.statut === 'Non soldée').reduce((s, c) => s + (c.montant || 0), 0);
+  const nbCreancesNonSoldees = creances.filter(c => c.statut === 'Non soldée').length;
+
   const MENUS: { key: SubMenu; label: string; icon: any }[] = [
+    { key: 'dashboard',   label: 'Tableau de bord', icon: BarChart2 },
     { key: 'caisse',      label: 'Caisse',          icon: Wallet },
     { key: 'cotisations', label: 'Cotisations',     icon: Users },
     { key: 'historique',  label: 'Historique',      icon: Receipt },
@@ -332,6 +340,36 @@ export default function FinancesModule({ foyers, membres }: Props) {
         <div>
 
           {/* ── TABLEAU DE BORD ── */}
+          {subMenu === 'dashboard' && (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="bg-white border-2 border-emerald-200 rounded-xl p-4">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Encaissements</p>
+                <p className="text-xl font-black text-emerald-600">{fmt(totalEncaisseDash)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{transactionsValideesAll.length} transaction{transactionsValideesAll.length > 1 ? 's' : ''}</p>
+              </div>
+              <div className="bg-white border-2 border-red-200 rounded-xl p-4">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Dépenses</p>
+                <p className="text-xl font-black text-red-600">{fmt(totalDep)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{depenses.length} dépense{depenses.length > 1 ? 's' : ''}</p>
+              </div>
+              <div className="bg-white border-2 border-purple-200 rounded-xl p-4">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Dons</p>
+                <p className="text-xl font-black text-purple-600">{fmt(totalDons)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{dons.length} don{dons.length > 1 ? 's' : ''}</p>
+              </div>
+              <div className="bg-white border-2 border-amber-200 rounded-xl p-4">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Reste à payer (crédit)</p>
+                <p className="text-xl font-black text-amber-600">{fmt(totalResteACredit)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{nbCreancesNonSoldees} créance{nbCreancesNonSoldees > 1 ? 's' : ''}</p>
+              </div>
+              <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Paiement Mvola</p>
+                <p className="text-xl font-black text-blue-600">{fmt(totalMvola)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Mobile Money</p>
+              </div>
+            </div>
+          )}
+
       {/* ── CAISSE ── */}
       {subMenu === 'caisse' && (
         <CaisseModule foyers={foyers} membres={membres} onDataChange={loadAll} />

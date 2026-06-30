@@ -65,10 +65,7 @@ interface TransactionCaisse {
   created_at: string;
 }
 
-type CaisseTab = 'encaissement' | 'historique' | 'statistiques';
-
 export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
-  const [tab, setTab] = useState<CaisseTab>('encaissement');
   const [config, setConfig] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
@@ -107,11 +104,6 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
   const [motifAnnulation, setMotifAnnulation] = useState('');
   const [annulePar, setAnnulePar] = useState('Agent Fokontany');
   const [annulingId, setAnnulingId] = useState<string | null>(null);
-
-  // ── Statistiques ───────────────────────────────────────────────
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [statsTransactions, setStatsTransactions] = useState<TransactionCaisse[]>([]);
-  const [statsOperations, setStatsOperations] = useState<OperationCaisse[]>([]);
 
   const loadConfig = useCallback(async () => {
     const cfg = await getConfig();
@@ -167,21 +159,9 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
     setLoadingHisto(false);
   }, []);
 
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    const [{ data: txs }, { data: ops }] = await Promise.all([
-      supabase.from('transactions_caisse').select('*').eq('statut', 'Validée'),
-      supabase.from('operations_caisse').select('*').eq('statut', 'Payé'),
-    ]);
-    setStatsTransactions((txs || []) as TransactionCaisse[]);
-    setStatsOperations((ops || []) as OperationCaisse[]);
-    setStatsLoading(false);
-  }, []);
-
   useEffect(() => { loadConfig(); setLoading(false); }, [loadConfig]);
-  useEffect(() => { if (tab === 'encaissement' && !selectedUsager) loadToutesOperations(); }, [tab, selectedUsager, loadToutesOperations]);
-  useEffect(() => { if (tab === 'historique') loadHistorique(); }, [tab, loadHistorique]);
-  useEffect(() => { if (tab === 'statistiques') loadStats(); }, [tab, loadStats]);
+  useEffect(() => { if (!selectedUsager) loadToutesOperations(); }, [selectedUsager, loadToutesOperations]);
+  useEffect(() => { loadHistorique(); }, [loadHistorique]);
 
   // ── Recherche usager ───────────────────────────────────────────
   const searchResults = (() => {
@@ -453,55 +433,10 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
     setFiltreDateDebut(''); setFiltreDateFin(''); setPageHisto(1);
   };
 
-  // ── Statistiques calculées ──────────────────────────────────────
-  const today = new Date().toISOString().split('T')[0];
-  const moisActuel = new Date().toISOString().slice(0, 7);
-  const txValidees = statsTransactions.filter(t => t.statut === 'Validée');
-  const totalJour = txValidees.filter(t => t.created_at.startsWith(today)).reduce((s, t) => s + t.montant_total, 0);
-  const totalMois = txValidees.filter(t => t.created_at.startsWith(moisActuel)).reduce((s, t) => s + t.montant_total, 0);
-  const totalGlobal = txValidees.reduce((s, t) => s + t.montant_total, 0);
-  const nbTransactions = txValidees.length;
-  const nbOperations = statsOperations.length;
-  const montantMoyen = nbTransactions > 0 ? totalGlobal / nbTransactions : 0;
-
-  const parModule: Record<string, number> = {};
-  statsOperations.forEach(o => { parModule[o.module_origine] = (parModule[o.module_origine] || 0) + (o.montant * (o.quantite || 1)); });
-
-  const parAgent: Record<string, number> = {};
-  txValidees.forEach(t => { parAgent[t.agent] = (parAgent[t.agent] || 0) + t.montant_total; });
-
-  const parMode: Record<string, number> = {};
-  txValidees.forEach(t => { parMode[t.mode_paiement] = (parMode[t.mode_paiement] || 0) + t.montant_total; });
-
-  const TABS: { key: CaisseTab; label: string; icon: any }[] = [
-    { key: 'encaissement', label: 'Encaissement', icon: ShoppingCart },
-    { key: 'historique',   label: 'Historique',   icon: Clock },
-    { key: 'statistiques', label: 'Statistiques', icon: BarChart2 },
-  ];
-
   return (
     <div className="space-y-5">
-      {/* Header + sous-tabs internes */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="bg-emerald-600 p-2.5 rounded-xl"><Wallet className="h-5 w-5 text-white" /></div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Caisse — Facturation & Encaissement</h2>
-            <p className="text-xs text-slate-500">Point unique d'encaissement de toutes les prestations FANISA</p>
-          </div>
-        </div>
-        <div className="flex gap-1">
-          {TABS.map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setTab(key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${tab === key ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-              <Icon className="h-3.5 w-3.5" />{label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ══════════ ENCAISSEMENT ══════════ */}
-      {tab === 'encaissement' && (
-        <div className="space-y-5">
+      {/* ── Recherche & panier d'encaissement ── */}
+      <div className="space-y-5">
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <div className="flex gap-2 mb-2">
               {([['nom', 'Nom & Prénom', User], ['cin', 'CIN', FileText], ['menage', 'N° Ménage', Home]] as [string, string, any][]).map(([v, l, Icon]) => (
@@ -689,178 +624,87 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
             </div>
           )}
         </div>
-      )}
 
-      {/* ══════════ HISTORIQUE ══════════ */}
-      {tab === 'historique' && (
-        <div className="space-y-4">
-          {/* Filtres */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Filter className="h-3.5 w-3.5" />Filtres</h3>
-              <button onClick={resetFiltresHisto} className="text-xs text-slate-400 hover:text-red-500 font-semibold flex items-center gap-1"><RotateCcw className="h-3 w-3" />Réinitialiser</button>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <input value={filtreUsager} onChange={e => { setFiltreUsager(e.target.value); setPageHisto(1); }} placeholder="Usager..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
-              <input value={filtreRecu} onChange={e => { setFiltreRecu(e.target.value); setPageHisto(1); }} placeholder="N° reçu (RC-...)..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500 font-mono" />
-              <input value={filtreAgent} onChange={e => { setFiltreAgent(e.target.value); setPageHisto(1); }} placeholder="Agent..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
-              <select value={filtreMode} onChange={e => { setFiltreMode(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500 bg-white">
-                <option value="">Tous modes paiement</option>
-                {MODES_PAIEMENT.map(m => <option key={m.v} value={m.v}>{m.v}</option>)}
-              </select>
-              <select value={filtreModule} onChange={e => { setFiltreModule(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500 bg-white">
-                <option value="">Tous modules</option>
-                {Object.keys(MODULE_COLORS).map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <input type="date" value={filtreDateDebut} onChange={e => { setFiltreDateDebut(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
-              <input type="date" value={filtreDateFin} onChange={e => { setFiltreDateFin(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
-              <div className="flex items-center justify-end text-xs text-slate-500 font-semibold">{filteredTransactions.length} résultat{filteredTransactions.length > 1 ? 's' : ''} · <span className="text-emerald-600 ml-1">{fmt(totalFiltre)}</span></div>
-            </div>
+      {/* ── Historique des transactions (même page) ── */}
+      <div className="space-y-4">
+        {/* Filtres */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Filter className="h-3.5 w-3.5" />Filtres</h3>
+            <button onClick={resetFiltresHisto} className="text-xs text-slate-400 hover:text-red-500 font-semibold flex items-center gap-1"><RotateCcw className="h-3 w-3" />Réinitialiser</button>
           </div>
-
-          {/* Tableau historique */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            {loadingHisto ? (
-              <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
-            ) : (
-              <table className="w-full text-xs">
-                <thead><tr className="bg-slate-50 border-b">
-                  <th className="p-3 text-left text-slate-500">N° Reçu</th>
-                  <th className="p-3 text-left text-slate-500">Usager</th>
-                  <th className="p-3 text-left text-slate-500">Modules</th>
-                  <th className="p-3 text-center text-slate-500">Opérations</th>
-                  <th className="p-3 text-right text-slate-500">Total</th>
-                  <th className="p-3 text-left text-slate-500">Mode</th>
-                  <th className="p-3 text-left text-slate-500">Agent</th>
-                  <th className="p-3 text-left text-slate-500">Date</th>
-                  <th className="p-3 text-center text-slate-500">Statut</th>
-                  <th className="p-3 text-center text-slate-500">⋯</th>
-                </tr></thead>
-                <tbody className="divide-y divide-slate-50">
-                  {histoPage.map(t => (
-                    <tr key={t.id} className={`hover:bg-slate-50 ${t.statut === 'Annulée' ? 'opacity-50' : ''}`}>
-                      <td className="p-3 font-mono text-emerald-600 font-bold">{t.numero_recu}</td>
-                      <td className="p-3 text-slate-700">{t.nom_usager}</td>
-                      <td className="p-3"><div className="flex gap-1 flex-wrap">{(transactionModules[t.id] || []).map(m => <span key={m} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${moduleColor(m)}`}>{m}</span>)}</div></td>
-                      <td className="p-3 text-center text-slate-500">{transactionNbOps[t.id] || '-'}</td>
-                      <td className="p-3 text-right font-bold text-slate-900">{fmt(t.montant_total)}</td>
-                      <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${MODE_COLORS[t.mode_paiement] || 'bg-slate-100'}`}>{t.mode_paiement}</span></td>
-                      <td className="p-3 text-slate-500">{t.agent}</td>
-                      <td className="p-3 text-slate-400">{new Date(t.created_at).toLocaleDateString('fr-FR')} {new Date(t.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
-                      <td className="p-3 text-center">
-                        {t.statut === 'Validée' ? <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Validée</span> : <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full" title={t.motif_annulation || ''}>Annulée</span>}
-                      </td>
-                      <td className="p-3 text-center">
-                        {t.statut === 'Validée' && (
-                          <button onClick={() => setShowAnnulModal(t)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition" title="Annuler cette transaction (statut uniquement, rien n'est supprimé)">
-                            <RotateCcw className="h-3.5 w-3.5" />Annuler
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {histoPage.length === 0 && <tr><td colSpan={10} className="text-center text-slate-400 py-10">Aucune transaction trouvée</td></tr>}
-                </tbody>
-              </table>
-            )}
-            {totalPagesHisto > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50">
-                <button onClick={() => setPageHisto(p => Math.max(1, p - 1))} disabled={pageHisto === 1} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-40"><ChevronLeft className="h-4 w-4" />Précédent</button>
-                <span className="text-xs text-slate-500">Page {pageHisto} / {totalPagesHisto}</span>
-                <button onClick={() => setPageHisto(p => Math.min(totalPagesHisto, p + 1))} disabled={pageHisto === totalPagesHisto} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-40">Suivant<ChevronRight className="h-4 w-4" /></button>
-              </div>
-            )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <input value={filtreUsager} onChange={e => { setFiltreUsager(e.target.value); setPageHisto(1); }} placeholder="Usager..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
+            <input value={filtreRecu} onChange={e => { setFiltreRecu(e.target.value); setPageHisto(1); }} placeholder="N° reçu (RC-...)..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500 font-mono" />
+            <input value={filtreAgent} onChange={e => { setFiltreAgent(e.target.value); setPageHisto(1); }} placeholder="Agent..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
+            <select value={filtreMode} onChange={e => { setFiltreMode(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500 bg-white">
+              <option value="">Tous modes paiement</option>
+              {MODES_PAIEMENT.map(m => <option key={m.v} value={m.v}>{m.v}</option>)}
+            </select>
+            <select value={filtreModule} onChange={e => { setFiltreModule(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500 bg-white">
+              <option value="">Tous modules</option>
+              {Object.keys(MODULE_COLORS).map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <input type="date" value={filtreDateDebut} onChange={e => { setFiltreDateDebut(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
+            <input type="date" value={filtreDateFin} onChange={e => { setFiltreDateFin(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
+            <div className="flex items-center justify-end text-xs text-slate-500 font-semibold">{filteredTransactions.length} résultat{filteredTransactions.length > 1 ? 's' : ''} · <span className="text-emerald-600 ml-1">{fmt(totalFiltre)}</span></div>
           </div>
         </div>
-      )}
 
-      {/* ══════════ STATISTIQUES ══════════ */}
-      {tab === 'statistiques' && (
-        statsLoading ? (
-          <div className="text-center py-16"><Loader2 className="h-8 w-8 text-emerald-600 animate-spin mx-auto" /></div>
-        ) : (
-        <div className="space-y-4">
-          {/* Cards principales */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white border-2 border-emerald-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Encaissé aujourd'hui</p>
-              <p className="text-2xl font-black text-emerald-600">{fmt(totalJour)}</p>
+        {/* Tableau historique */}
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          {loadingHisto ? (
+            <div className="text-center py-12"><Loader2 className="h-7 w-7 text-emerald-600 animate-spin mx-auto" /></div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead><tr className="bg-slate-50 border-b">
+                <th className="p-3 text-left text-slate-500">N° Reçu</th>
+                <th className="p-3 text-left text-slate-500">Usager</th>
+                <th className="p-3 text-left text-slate-500">Modules</th>
+                <th className="p-3 text-center text-slate-500">Opérations</th>
+                <th className="p-3 text-right text-slate-500">Total</th>
+                <th className="p-3 text-left text-slate-500">Mode</th>
+                <th className="p-3 text-left text-slate-500">Agent</th>
+                <th className="p-3 text-left text-slate-500">Date</th>
+                <th className="p-3 text-center text-slate-500">Statut</th>
+                <th className="p-3 text-center text-slate-500">⋯</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                {histoPage.map(t => (
+                  <tr key={t.id} className={`hover:bg-slate-50 ${t.statut === 'Annulée' ? 'opacity-50' : ''}`}>
+                    <td className="p-3 font-mono text-emerald-600 font-bold">{t.numero_recu}</td>
+                    <td className="p-3 text-slate-700">{t.nom_usager}</td>
+                    <td className="p-3"><div className="flex gap-1 flex-wrap">{(transactionModules[t.id] || []).map(m => <span key={m} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${moduleColor(m)}`}>{m}</span>)}</div></td>
+                    <td className="p-3 text-center text-slate-500">{transactionNbOps[t.id] || '-'}</td>
+                    <td className="p-3 text-right font-bold text-slate-900">{fmt(t.montant_total)}</td>
+                    <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${MODE_COLORS[t.mode_paiement] || 'bg-slate-100'}`}>{t.mode_paiement}</span></td>
+                    <td className="p-3 text-slate-500">{t.agent}</td>
+                    <td className="p-3 text-slate-400">{new Date(t.created_at).toLocaleDateString('fr-FR')} {new Date(t.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td className="p-3 text-center">
+                      {t.statut === 'Validée' ? <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Validée</span> : <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full" title={t.motif_annulation || ''}>Annulée</span>}
+                    </td>
+                    <td className="p-3 text-center">
+                      {t.statut === 'Validée' && (
+                        <button onClick={() => setShowAnnulModal(t)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition" title="Annuler cette transaction (statut uniquement, rien n'est supprimé)">
+                          <RotateCcw className="h-3.5 w-3.5" />Annuler
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {histoPage.length === 0 && <tr><td colSpan={10} className="text-center text-slate-400 py-10">Aucune transaction trouvée</td></tr>}
+              </tbody>
+            </table>
+          )}
+          {totalPagesHisto > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50">
+              <button onClick={() => setPageHisto(p => Math.max(1, p - 1))} disabled={pageHisto === 1} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-40"><ChevronLeft className="h-4 w-4" />Précédent</button>
+              <span className="text-xs text-slate-500">Page {pageHisto} / {totalPagesHisto}</span>
+              <button onClick={() => setPageHisto(p => Math.min(totalPagesHisto, p + 1))} disabled={pageHisto === totalPagesHisto} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-40">Suivant<ChevronRight className="h-4 w-4" /></button>
             </div>
-            <div className="bg-white border-2 border-indigo-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Encaissé ce mois</p>
-              <p className="text-2xl font-black text-indigo-600">{fmt(totalMois)}</p>
-            </div>
-            <div className="bg-white border-2 border-slate-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Nombre de transactions</p>
-              <p className="text-2xl font-black text-slate-700">{nbTransactions}</p>
-            </div>
-            <div className="bg-white border-2 border-amber-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Montant moyen / transaction</p>
-              <p className="text-2xl font-black text-amber-600">{fmt(Math.round(montantMoyen))}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Total encaissé (global)</p>
-              <p className="text-xl font-black text-slate-800">{fmt(totalGlobal)}</p>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Opérations encaissées</p>
-              <p className="text-xl font-black text-slate-800">{nbOperations}</p>
-            </div>
-          </div>
-
-          {/* Répartition par module */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><Building2 className="h-3.5 w-3.5" />Répartition des recettes par module</h3>
-            <div className="space-y-2">
-              {Object.entries(parModule).sort((a, b) => b[1] - a[1]).map(([mod, montant]) => {
-                const pct = totalGlobal > 0 ? (montant / Object.values(parModule).reduce((s, v) => s + v, 0)) * 100 : 0;
-                return (
-                  <div key={mod}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className={`font-bold px-2 py-0.5 rounded-full border ${moduleColor(mod)}`}>{mod}</span>
-                      <span className="font-bold text-slate-700">{fmt(montant)}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2"><div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${pct}%` }} /></div>
-                  </div>
-                );
-              })}
-              {Object.keys(parModule).length === 0 && <p className="text-center text-slate-400 text-sm py-4">Aucune donnée</p>}
-            </div>
-          </div>
-
-          {/* Répartition par mode de paiement */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><CreditCard className="h-3.5 w-3.5" />Répartition par mode de paiement</h3>
-            <div className="grid grid-cols-3 gap-3">
-              {MODES_PAIEMENT.map(({ v, icon: Icon }) => (
-                <div key={v} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-                  <Icon className="h-5 w-5 text-slate-400 mx-auto mb-1" />
-                  <p className="text-sm font-black text-slate-800">{fmt(parMode[v] || 0)}</p>
-                  <p className="text-[10px] text-slate-400">{v}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Répartition par agent */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><Users className="h-3.5 w-3.5" />Total encaissé par agent</h3>
-            <div className="space-y-1.5">
-              {Object.entries(parAgent).sort((a, b) => b[1] - a[1]).map(([ag, montant]) => (
-                <div key={ag} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 text-xs">
-                  <span className="font-semibold text-slate-700">{ag}</span>
-                  <span className="font-bold text-emerald-600">{fmt(montant)}</span>
-                </div>
-              ))}
-              {Object.keys(parAgent).length === 0 && <p className="text-center text-slate-400 text-sm py-4">Aucune donnée</p>}
-            </div>
-          </div>
+          )}
         </div>
-        )
-      )}
+      </div>
 
       {/* Modal crédit */}
       {showCreditModal && (
