@@ -9,7 +9,7 @@ import {
   Package, BarChart2, Clock, Calendar, RotateCcw, Filter, Users, Hourglass
 } from 'lucide-react';
 
-interface Props { foyers: Foyer[]; membres: Membre[]; }
+interface Props { foyers: Foyer[]; membres: Membre[]; onDataChange?: () => void; }
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-MG').format(n) + ' Ar';
 const PAGE_SIZE = 10;
@@ -67,7 +67,7 @@ interface TransactionCaisse {
 
 type CaisseTab = 'encaissement' | 'historique' | 'statistiques';
 
-export default function CaisseModule({ foyers, membres }: Props) {
+export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
   const [tab, setTab] = useState<CaisseTab>('encaissement');
   const [config, setConfig] = useState<any>({});
   const [loading, setLoading] = useState(true);
@@ -267,7 +267,9 @@ export default function CaisseModule({ foyers, membres }: Props) {
     w.document.write(`<div class="row"><span>Usager:</span><span>${usagerNom}</span></div><hr>`);
     ops.forEach(o => {
       w.document.write(`<div class="module">${o.module_origine}</div>`);
-      w.document.write(`<div class="row"><span>${o.type_prestation}</span><span>${new Intl.NumberFormat('fr-MG').format(o.montant * (o.quantite || 1))} Ar</span></div>`);
+      const qte = o.quantite || 1;
+      const label = qte > 1 ? `${o.type_prestation} (${new Intl.NumberFormat('fr-MG').format(o.montant)} × ${qte})` : o.type_prestation;
+      w.document.write(`<div class="row"><span>${label}</span><span>${new Intl.NumberFormat('fr-MG').format(o.montant * qte)} Ar</span></div>`);
     });
     w.document.write(`<div class="tot"><div class="row"><span>TOTAL PAYÉ</span><span>${new Intl.NumberFormat('fr-MG').format(total)} Ar</span></div></div>`);
     w.document.write(`<div class="row"><span>Mode de paiement:</span><span>${mode}</span></div>`);
@@ -292,7 +294,11 @@ export default function CaisseModule({ foyers, membres }: Props) {
     w.document.write(`<div class="r"><span>Transaction:</span><span>${numeroRecu}</span></div>`);
     w.document.write(`<div class="r"><span>Bénéficiaire:</span><span>${usagerNom}</span></div>`);
     w.document.write(`<div class="r"><span>Date paiement:</span><span>${new Date().toLocaleDateString('fr-FR')}</span></div>`);
-    w.document.write(`<div class="r"><span>Montant:</span><span><strong>${new Intl.NumberFormat('fr-MG').format(op.montant)} Ar</strong></span></div>`);
+    if ((op.quantite || 1) > 1) {
+      w.document.write(`<div class="r"><span>Prix unitaire:</span><span>${new Intl.NumberFormat('fr-MG').format(op.montant)} Ar</span></div>`);
+      w.document.write(`<div class="r"><span>Quantité:</span><span>× ${op.quantite}</span></div>`);
+    }
+    w.document.write(`<div class="r"><span>Montant:</span><span><strong>${new Intl.NumberFormat('fr-MG').format(op.montant * (op.quantite || 1))} Ar</strong></span></div>`);
     w.document.write(`<div class="r"><span>Agent:</span><span>${agentNom}</span></div>`);
     w.document.write(`<div class="f">Ce justificatif fait office de preuve de paiement<br>FANISA — Caisse Centrale</div></body></html>`);
     w.document.close();
@@ -342,7 +348,7 @@ export default function CaisseModule({ foyers, membres }: Props) {
       } else {
         printRecuGlobal(numeroRecu, usagerNom, operationsSelectionnees, totalAPayer, modePaiement, agent);
       }
-      await loadOperations(selectedUsager); await loadToutesOperations();
+      await loadOperations(selectedUsager); await loadToutesOperations(); onDataChange?.();
     }
     setValidating(false);
   };
@@ -393,7 +399,7 @@ export default function CaisseModule({ foyers, membres }: Props) {
     setShowCreditModal(false);
     setCreditMotif(''); setCreditDateLimite(''); setCreditResponsable('');
     setCreditProcessing(false);
-    await loadOperations(selectedUsager); await loadToutesOperations();
+    await loadOperations(selectedUsager); await loadToutesOperations(); onDataChange?.();
   };
 
   // ── Annulation de transaction ──────────────────────────────────
@@ -415,6 +421,7 @@ export default function CaisseModule({ foyers, membres }: Props) {
     setMotifAnnulation('');
     setAnnulingId(null);
     await loadHistorique();
+    onDataChange?.();
   };
 
   // ── Historique filtré + paginé ──────────────────────────────────

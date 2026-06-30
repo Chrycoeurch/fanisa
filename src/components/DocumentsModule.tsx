@@ -439,7 +439,7 @@ export default function DocumentsModule({ foyers, membres }: Props) {
         await telechargerPDF(bytesArray[i], `${demande.code_document}_${reference}${suffix}.pdf`);
       }
       await enregistrerDocument(demande.code_document, reference!, numero!, demande.membre_id || undefined, demande.foyer_id || undefined);
-      await supabase.from('demandes_documents').update({ telecharge_le: new Date().toISOString(), statut: demande.statut === 'Payé' ? 'Archivé' : demande.statut }).eq('id', demande.id);
+      await supabase.from('demandes_documents').update({ telecharge_le: new Date().toISOString() }).eq('id', demande.id);
       await loadDemandes();
     } catch (e) {
       alert('Erreur téléchargement : ' + e);
@@ -675,7 +675,7 @@ export default function DocumentsModule({ foyers, membres }: Props) {
           ) : (
             <div className="space-y-2">
               {demandesFiltrees.map(d => {
-                const peutTelecharger = d.statut === 'Payé' || d.statut === 'Délivré à crédit';
+                const peutTelecharger = d.statut === 'Payé' || d.statut === 'Délivré à crédit' || d.statut === 'Archivé';
                 return (
                   <div key={d.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
                     <div className="flex-1">

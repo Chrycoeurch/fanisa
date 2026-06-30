@@ -363,7 +363,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
           {/* ── TABLEAU DE BORD ── */}
       {/* ── CAISSE ── */}
       {subMenu === 'caisse' && (
-        <CaisseModule foyers={foyers} membres={membres} />
+        <CaisseModule foyers={foyers} membres={membres} onDataChange={loadAll} />
       )}
 
       {subMenu === 'dashboard' && (
