@@ -438,6 +438,7 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
       {/* ── Recherche & panier d'encaissement ── */}
       <div className="space-y-5">
           <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2 mb-3"><Search className="h-3.5 w-3.5" />Rechercher un usager</h3>
             <div className="flex gap-2 mb-2">
               {([['nom', 'Nom & Prénom', User], ['cin', 'CIN', FileText], ['menage', 'N° Ménage', Home]] as [string, string, any][]).map(([v, l, Icon]) => (
                 <button key={v} onClick={() => setSearchMode(v as any)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${searchMode === v ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
@@ -647,7 +648,9 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
             </select>
             <input type="date" value={filtreDateDebut} onChange={e => { setFiltreDateDebut(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
             <input type="date" value={filtreDateFin} onChange={e => { setFiltreDateFin(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
-            <div className="flex items-center justify-end text-xs text-slate-500 font-semibold">{filteredTransactions.length} résultat{filteredTransactions.length > 1 ? 's' : ''} · <span className="text-emerald-600 ml-1">{fmt(totalFiltre)}</span></div>
+          </div>
+          <div className="flex items-center justify-end pt-2 border-t border-slate-100 text-xs text-slate-500 font-semibold">
+            {filteredTransactions.length} résultat{filteredTransactions.length > 1 ? 's' : ''} trouvé{filteredTransactions.length > 1 ? 's' : ''} · <span className="text-emerald-600 ml-1">{fmt(totalFiltre)}</span>
           </div>
         </div>
 
