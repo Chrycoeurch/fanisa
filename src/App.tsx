@@ -8,7 +8,6 @@ import FoyerDetail from './components/FoyerDetail';
 import MembreForm from './components/MembreForm';
 import DocumentsModule from './components/DocumentsModule';
 import FinancesModule from './components/FinancesModule';
-import CaisseModule from './components/CaisseModule';
 import MaterialsModule from './components/MaterialsModule';
 import FoncierModule from './components/FoncierModule';
 import PatrimoineModule from './components/PatrimoineModule';
@@ -17,7 +16,7 @@ import { FOKONTANY_LIST } from './seedData';
 import {
   FolderLock, Users, HeartPulse, History, PlusCircle, Search,
   RotateCcw, ShieldCheck, Building, FileSignature, Landmark,
-  Package, Loader2, Home, Filter, Award, Wallet
+  Package, Loader2, Home, Filter, Award
 } from 'lucide-react';
 
 export default function App() {
@@ -29,7 +28,7 @@ export default function App() {
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'finances'|'materials'|'logs'|'land'|'patrimoine'|'caisse'>('annuaire');
+  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'finances'|'materials'|'logs'|'land'|'patrimoine'>('annuaire');
   const [searchQuery, setSearchQuery] = useState('');
   const [fokontanyFilter, setFokontanyFilter] = useState('Tous');
   const [statutFilter, setStatutFilter] = useState('Tous');
@@ -223,7 +222,6 @@ export default function App() {
             ['annuaire', Home, `Foyers (${foyers.length}) · ${totalMembres} personnes`],
             ['documents', FileSignature, 'Actes & Docs'],
             ['statistics', HeartPulse, 'Statistiques'],
-            ['caisse', Wallet, 'Caisse'],
             ['finances', Landmark, 'Finances'],
             ['materials', Package, 'Matériels'],
             ['land', Building, 'Foncier'],
@@ -295,7 +293,6 @@ export default function App() {
 
         {activeTab === 'documents' && <DocumentsModule foyers={foyers} membres={membres} />}
         {activeTab === 'statistics' && <StatsView habitants={habitants} foyers={foyers} membres={membres} />}
-        {activeTab === 'caisse' && <CaisseModule foyers={foyers} membres={membres} />}
         {activeTab === 'finances' && <FinancesModule foyers={foyers} membres={membres} />}
         {activeTab === 'materials' && (
           <MaterialsModule materiels={materiels}

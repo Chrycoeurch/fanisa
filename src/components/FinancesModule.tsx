@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Foyer, Membre } from '../types';
+import CaisseModule from './CaisseModule';
 import {
   Wallet, TrendingUp, TrendingDown, Receipt, Users, Settings,
   Save, Loader2, CheckCircle, AlertCircle, Gift, BarChart2,
@@ -38,7 +39,7 @@ const DOCS_TARIFS = [
   { code: 'IFT', label: 'Ticket IFT',                      key: 'tarif_ift' },
 ];
 
-type SubMenu = 'dashboard' | 'cotisations' | 'historique' | 'depenses' | 'dons' | 'parametres';
+type SubMenu = 'dashboard' | 'caisse' | 'cotisations' | 'historique' | 'depenses' | 'dons' | 'parametres';
 
 export default function FinancesModule({ foyers, membres }: Props) {
   const [subMenu, setSubMenu] = useState<SubMenu>('dashboard');
@@ -322,6 +323,7 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
   const MENUS: { key: SubMenu; label: string; icon: any }[] = [
     { key: 'dashboard',   label: 'Tableau de bord', icon: BarChart2 },
+    { key: 'caisse',      label: 'Caisse',          icon: Wallet },
     { key: 'cotisations', label: 'Cotisations',     icon: Users },
     { key: 'historique',  label: 'Historique',      icon: Receipt },
     { key: 'depenses',    label: 'Dépenses',        icon: TrendingDown },
@@ -354,7 +356,12 @@ export default function FinancesModule({ foyers, membres }: Props) {
         <div>
 
           {/* ── TABLEAU DE BORD ── */}
-          {subMenu === 'dashboard' && (
+      {/* ── CAISSE ── */}
+      {subMenu === 'caisse' && (
+        <CaisseModule foyers={foyers} membres={membres} />
+      )}
+
+      {subMenu === 'dashboard' && (
             <div className="space-y-4">
               {/* Filtre dates */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
