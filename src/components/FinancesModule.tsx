@@ -39,10 +39,10 @@ const DOCS_TARIFS = [
   { code: 'IFT', label: 'Ticket IFT',                      key: 'tarif_ift' },
 ];
 
-type SubMenu = 'dashboard' | 'caisse' | 'cotisations' | 'historique' | 'depenses' | 'creances' | 'dons' | 'parametres';
+type SubMenu = 'caisse' | 'cotisations' | 'historique' | 'depenses' | 'creances' | 'dons' | 'parametres';
 
 export default function FinancesModule({ foyers, membres }: Props) {
-  const [subMenu, setSubMenu] = useState<SubMenu>('dashboard');
+  const [subMenu, setSubMenu] = useState<SubMenu>('caisse');
   const [config, setConfig] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
@@ -326,7 +326,6 @@ export default function FinancesModule({ foyers, membres }: Props) {
   );
 
   const MENUS: { key: SubMenu; label: string; icon: any }[] = [
-    { key: 'dashboard',   label: 'Tableau de bord', icon: BarChart2 },
     { key: 'caisse',      label: 'Caisse',          icon: Wallet },
     { key: 'cotisations', label: 'Cotisations',     icon: Users },
     { key: 'historique',  label: 'Historique',      icon: Receipt },
@@ -366,120 +365,6 @@ export default function FinancesModule({ foyers, membres }: Props) {
         <CaisseModule foyers={foyers} membres={membres} onDataChange={loadAll} />
       )}
 
-      {subMenu === 'dashboard' && (
-            <div className="space-y-4">
-              {/* Filtre dates */}
-              <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
-                <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
-                <span className="text-xs font-bold text-slate-500 uppercase">Période :</span>
-                <input type="date" value={dashDebut} onChange={e => setDashDebut(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-green-400" />
-                <span className="text-xs text-slate-400">→</span>
-                <input type="date" value={dashFin} onChange={e => setDashFin(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-green-400" />
-                {hasFiltres && (
-                  <button onClick={() => { setDashDebut(''); setDashFin(''); }} className="text-xs text-slate-400 hover:text-red-500 font-semibold px-2 py-1 hover:bg-red-50 rounded-lg">✕ Réinitialiser</button>
-                )}
-                <span className={`ml-auto text-xs font-semibold px-3 py-1.5 rounded-full ${hasFiltres ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{labelPeriode}</span>
-              </div>
-
-              {/* Solde global */}
-              <div className={`rounded-2xl p-6 text-white flex items-center justify-between ${solde >= 0 ? 'bg-gradient-to-br from-emerald-600 to-emerald-700' : 'bg-gradient-to-br from-red-600 to-red-700'}`}>
-                <div>
-                  <p className="text-xs opacity-70 font-bold uppercase tracking-widest mb-1">Solde de caisse</p>
-                  <p className="text-5xl font-black tracking-tight">{fmt(Math.abs(solde))}</p>
-                  <p className="text-sm opacity-70 mt-2">{solde >= 0 ? '✅ Excédentaire' : '⚠ Déficitaire'}</p>
-                </div>
-                <div className="text-right text-sm space-y-1 opacity-75">
-                  <p>Initial : {fmt(config.solde_initial || 0)}</p>
-                  <p>+ Recettes : {fmt(totalRecettes)}</p>
-                  <p>+ Dons : {fmt(totalDons)}</p>
-                  <p>− Dépenses : {fmt(totalDep)}</p>
-                </div>
-              </div>
-
-              {/* Cards filtrées */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-white border-2 border-emerald-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2"><ArrowUpCircle className="h-4 w-4 text-emerald-500" /><span className="text-xs font-bold text-slate-500 uppercase">Recettes</span></div>
-                  <p className="text-2xl font-black text-emerald-600">{fmt(recettesFiltrees)}</p>
-                  <p className="text-xs text-slate-400 mt-1">{encFiltresDash.length} encaissement{encFiltresDash.length > 1 ? 's' : ''}</p>
-                </div>
-                <div className="bg-white border-2 border-red-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2"><ArrowDownCircle className="h-4 w-4 text-red-500" /><span className="text-xs font-bold text-slate-500 uppercase">Dépenses</span></div>
-                  <p className="text-2xl font-black text-red-600">{fmt(depFiltrees)}</p>
-                  <p className="text-xs text-slate-400 mt-1">{depFiltresDash.length} dépense{depFiltresDash.length > 1 ? 's' : ''}</p>
-                </div>
-                <div className="bg-white border-2 border-purple-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2"><Gift className="h-4 w-4 text-purple-500" /><span className="text-xs font-bold text-slate-500 uppercase">Dons</span></div>
-                  <p className="text-2xl font-black text-purple-600">{fmt(donsMontant)}</p>
-                  <p className="text-xs text-slate-400 mt-1">{donsFiltresDash.length} don{donsFiltresDash.length > 1 ? 's' : ''}</p>
-                </div>
-                <div className="bg-white border-2 border-indigo-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2"><TrendingUp className="h-4 w-4 text-indigo-500" /><span className="text-xs font-bold text-slate-500 uppercase">Solde période</span></div>
-                  <p className={`text-2xl font-black ${soldePeriode >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>{fmt(soldePeriode)}</p>
-                  <p className="text-xs text-slate-400 mt-1">{labelPeriode}</p>
-                </div>
-              </div>
-
-              {/* Cards cotisations — totaux financiers + mois courant */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="h-4 w-4 text-emerald-500" />
-                    <span className="text-xs font-bold text-emerald-600 uppercase">Payé ce mois</span>
-                  </div>
-                  <p className="text-2xl font-black text-emerald-700">{nbAJour} <span className="text-sm font-semibold opacity-60">/ {foyers.length}</span></p>
-                  <p className="text-xs text-emerald-500 mt-1">{MOIS[MOIS_COURANT - 1]} {ANNEE_COURANTE}</p>
-                </div>
-                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="h-4 w-4 text-red-400" />
-                    <span className="text-xs font-bold text-red-500 uppercase">Non payé ce mois</span>
-                  </div>
-                  <p className="text-2xl font-black text-red-600">{nbEnRetard} <span className="text-sm font-semibold opacity-60">ménage{nbEnRetard > 1 ? 's' : ''}</span></p>
-                  <p className="text-xs text-red-400 mt-1">{fmt((config.cotisation_mensuelle || 5000) * nbEnRetard)} dus</p>
-                </div>
-                <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Receipt className="h-4 w-4 text-indigo-500" />
-                    <span className="text-xs font-bold text-indigo-600 uppercase">Encaissé {ANNEE_COURANTE}</span>
-                  </div>
-                  <p className="text-2xl font-black text-indigo-700">{fmt(totalCotEncaisse)}</p>
-                  <p className="text-xs text-indigo-400 mt-1">{cotisations.filter(c => c.statut === 'À jour' && c.periode?.includes(String(ANNEE_COURANTE))).length} paiements</p>
-                </div>
-                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingDown className="h-4 w-4 text-amber-500" />
-                    <span className="text-xs font-bold text-amber-600 uppercase">Reste à percevoir</span>
-                  </div>
-                  <p className="text-2xl font-black text-amber-700">{fmt(totalCotReste)}</p>
-                  <p className="text-xs text-amber-500 mt-1">Jan → {MOIS[MOIS_COURANT - 1]}</p>
-                </div>
-              </div>
-
-              {/* Liste ménages non payés */}
-              {nbEnRetard > 0 && (
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-red-600 flex items-center gap-2"><AlertCircle className="h-4 w-4" />Non payé — {MOIS[MOIS_COURANT - 1]} {ANNEE_COURANTE}</h3>
-                    <button onClick={() => { setFiltreCot('non_payes'); setAnneeSelCot(ANNEE_COURANTE); setSubMenu('cotisations'); }} className="text-xs text-green-600 font-semibold hover:underline">Gérer →</button>
-                  </div>
-                  <div className="divide-y divide-slate-50 max-h-52 overflow-y-auto">
-                    {foyers.filter(f => !foyersAJourSet.has(f.id)).slice(0, 15).map(f => {
-                      const chef = membres.find(m => m.foyer_id === f.id && m.is_chef);
-                      return (
-                        <div key={f.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-red-50">
-                          <span className="font-mono font-bold text-indigo-600 text-xs w-20 shrink-0">{f.code_menage}</span>
-                          <span className="text-sm text-slate-700 flex-1">{chef ? `${chef.nom} ${chef.prenom}` : f.adresse || '—'}</span>
-                          <span className="text-xs text-red-500 font-semibold shrink-0">{fmt(config.cotisation_mensuelle || 5000)}</span>
-                        </div>
-                      );
-                    })}
-                    {nbEnRetard > 15 && <p className="text-center text-xs text-slate-400 py-2">+{nbEnRetard - 15} autres</p>}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* ── COTISATIONS ── */}
           {subMenu === 'cotisations' && (

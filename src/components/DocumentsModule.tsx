@@ -46,13 +46,6 @@ interface DemandeDocument {
 const MOTIFS_DEMANDE = ['Démarche administrative', 'Demande d\'emploi', 'Inscription scolaire', 'Dossier bancaire', 'Pièce justificative', 'Autre'];
 const LIENS_REQUERANT = ['Conjoint(e)', 'Père', 'Mère', 'Fils/Fille', 'Frère/Sœur', 'Mandataire', 'Autre'];
 
-const STATUT_BADGE: Record<string, string> = {
-  'En attente de paiement': 'bg-amber-100 text-amber-700',
-  'Payé': 'bg-emerald-100 text-emerald-700',
-  'Délivré à crédit': 'bg-purple-100 text-purple-700',
-  'Archivé': 'bg-slate-200 text-slate-600',
-};
-
 // ── Wizard de demande de document ───────────────────────────────
 interface WizardProps {
   code: string; nom: string; format: string; icon: string;
@@ -301,7 +294,6 @@ export default function DocumentsModule({ foyers, membres }: Props) {
   // Mes demandes
   const [demandes, setDemandes] = useState<DemandeDocument[]>([]);
   const [loadingDemandes, setLoadingDemandes] = useState(false);
-  const [filtreStatut, setFiltreStatut] = useState('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const membresDuFoyer = selectedFoyer ? membres.filter(m => m.foyer_id === selectedFoyer.id) : [];
@@ -451,7 +443,6 @@ export default function DocumentsModule({ foyers, membres }: Props) {
     setWizardDoc({ code, nom, format, icon, niveau });
   };
 
-  const demandesFiltrees = demandes.filter(d => !filtreStatut || d.statut === filtreStatut);
   const fmt = (n: number) => new Intl.NumberFormat('fr-MG').format(n) + ' Ar';
 
   return (
@@ -469,7 +460,7 @@ export default function DocumentsModule({ foyers, membres }: Props) {
           <div className="flex gap-2">
             {(['generer', 'demandes', 'config'] as const).map(s => (
               <button key={s} onClick={() => setActiveSection(s)} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${activeSection === s ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                {s === 'generer' ? <><FileText className="h-3.5 w-3.5" />Générer</> : s === 'demandes' ? <><Inbox className="h-3.5 w-3.5" />Mes Demandes{demandes.filter(d => d.statut === 'Payé' || d.statut === 'Délivré à crédit').length > 0 && <span className="bg-emerald-500 text-white text-[10px] px-1.5 rounded-full ml-1">{demandes.filter(d => d.statut === 'Payé' || d.statut === 'Délivré à crédit').length}</span>}</> : <><Settings className="h-3.5 w-3.5" />Config</>}
+                {s === 'generer' ? <><FileText className="h-3.5 w-3.5" />Générer</> : s === 'demandes' ? <><Inbox className="h-3.5 w-3.5" />Mes Demandes</> : <><Settings className="h-3.5 w-3.5" />Config</>}
               </button>
             ))}
           </div>
@@ -656,41 +647,33 @@ export default function DocumentsModule({ foyers, membres }: Props) {
       {/* ══════════ MES DEMANDES ══════════ */}
       {activeSection === 'demandes' && (
         <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-2 flex-wrap">
-            {['', 'En attente de paiement', 'Payé', 'Délivré à crédit', 'Archivé'].map(s => (
-              <button key={s} onClick={() => setFiltreStatut(s)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${filtreStatut === s ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                {s === '' ? `Toutes (${demandes.length})` : `${s} (${demandes.filter(d => d.statut === s).length})`}
-              </button>
-            ))}
-            <button onClick={loadDemandes} className="ml-auto text-xs text-indigo-600 font-semibold hover:underline">Rafraîchir</button>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+            <p className="text-xs text-slate-500">Le téléchargement se débloque une fois la prestation traitée dans le module <strong>Finances → Caisse</strong>.</p>
+            <button onClick={loadDemandes} className="text-xs text-indigo-600 font-semibold hover:underline shrink-0">Rafraîchir</button>
           </div>
 
           {loadingDemandes ? (
             <div className="text-center py-12"><Loader2 className="h-7 w-7 text-indigo-600 animate-spin mx-auto" /></div>
-          ) : demandesFiltrees.length === 0 ? (
+          ) : demandes.length === 0 ? (
             <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl py-16 text-center">
               <Inbox className="h-10 w-10 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-500 font-semibold">Aucune demande</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {demandesFiltrees.map(d => {
+              {demandes.map(d => {
                 const peutTelecharger = d.statut === 'Payé' || d.statut === 'Délivré à crédit' || d.statut === 'Archivé';
                 return (
                   <div key={d.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="font-mono font-bold text-indigo-600 text-sm">[{d.code_document}] {d.nom_document}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUT_BADGE[d.statut] || 'bg-slate-100'}`}>{d.statut}</span>
                         {d.nombre_exemplaires > 1 && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">×{d.nombre_exemplaires}</span>}
                       </div>
                       <p className="text-xs text-slate-500">
                         {d.motif_demande} · {fmt(d.montant_total)} · {new Date(d.created_at).toLocaleDateString('fr-FR')}
                         {d.reference_document && <span className="font-mono ml-2 text-indigo-500">{d.reference_document}</span>}
                       </p>
-                      {d.statut === 'Délivré à crédit' && d.credit_date_limite && (
-                        <p className="text-[11px] text-purple-600 mt-0.5">⏳ Échéance crédit : {new Date(d.credit_date_limite).toLocaleDateString('fr-FR')} — autorisé par {d.credit_responsable}</p>
-                      )}
                     </div>
                     {peutTelecharger ? (
                       <button onClick={() => handleTelecharger(d)} disabled={downloadingId === d.id} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-xs font-bold rounded-lg transition shrink-0">
@@ -698,7 +681,7 @@ export default function DocumentsModule({ foyers, membres }: Props) {
                         {downloadingId === d.id ? 'Génération…' : d.telecharge_le ? 'Re-télécharger' : 'Télécharger'}
                       </button>
                     ) : (
-                      <span className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 text-amber-600 text-xs font-semibold rounded-lg shrink-0"><Hourglass className="h-3.5 w-3.5" />En attente Caisse</span>
+                      <span className="text-xs text-slate-400 shrink-0">Voir la Caisse</span>
                     )}
                   </div>
                 );
