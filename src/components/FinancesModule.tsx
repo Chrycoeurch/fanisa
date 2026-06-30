@@ -5,7 +5,7 @@ import {
   Wallet, TrendingUp, TrendingDown, Receipt, Users, Settings,
   Save, Loader2, CheckCircle, AlertCircle, Gift, BarChart2,
   ChevronLeft, ChevronRight, ChevronDown, Search, Calendar,
-  Trash2, ArrowUpCircle, ArrowDownCircle
+  Trash2, ArrowUpCircle, ArrowDownCircle, Clock
 } from 'lucide-react';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; }
@@ -155,9 +155,13 @@ export default function FinancesModule({ foyers, membres }: Props) {
     : 'Toutes périodes';
 
   // ── Grille cotisations ────────────────────────────────────
-  const getCotStatut = (foyerId: string, moisNum: number) => {
+  const getCotStatut = (foyerId: string, moisNum: number): 'paye' | 'en_attente' | 'non_paye' => {
     const periode = `${MOIS[moisNum - 1]} ${anneeSelCot}`;
-    return cotisations.find(c => c.foyer_id === foyerId && c.periode === periode && c.statut === 'À jour') ? 'paye' : 'non_paye';
+    const cot = cotisations.find(c => c.foyer_id === foyerId && c.periode === periode);
+    if (!cot) return 'non_paye';
+    if (cot.statut === 'À jour') return 'paye';
+    if (cot.statut === 'En attente de paiement') return 'en_attente';
+    return 'non_paye';
   };
 
   const getNbPayesAnnee = (foyerId: string) =>
@@ -205,34 +209,42 @@ export default function FinancesModule({ foyers, membres }: Props) {
     if (savingCot === key) return;
     setSavingCot(key);
     const montant = config.cotisation_mensuelle || 5000;
-    const annee = new Date().getFullYear();
-    const { data: last } = await supabase.from('encaissements').select('reference').like('reference', `${config.prefixe_recu || 'REC'}-${annee}-%`).order('created_at', { ascending: false }).limit(1);
-    const num = last?.[0]?.reference ? parseInt(last[0].reference.split('-').pop() || '0') + 1 : 1;
-    const ref = `${config.prefixe_recu || 'REC'}-${annee}-${String(num).padStart(4, '0')}`;
     const chef = membres.find(m => m.foyer_id === foyer.id && m.is_chef);
-    const { data: enc } = await supabase.from('encaissements').insert({
-      reference: ref, foyer_id: foyer.id,
+    // Envoyer l'opération en attente à la Caisse — le paiement réel se valide dans le module Caisse
+    await supabase.from('operations_caisse').insert({
+      module_origine: 'Cotisations',
+      type_prestation: `Cotisation Mensuelle — ${periode}`,
+      reference_document: null,
+      foyer_id: foyer.id,
       nom_beneficiaire: chef ? `${chef.nom} ${chef.prenom}` : foyer.code_menage,
-      code_menage: foyer.code_menage, montant_total: montant,
-      mode_paiement: 'Espèces', agent: 'Agent Fokontany',
-    }).select().single();
-    if (enc) {
-      await supabase.from('encaissement_lignes').insert({ encaissement_id: enc.id, categorie: 'Cotisation', description: 'Cotisation Mensuelle', montant, periode });
-      await supabase.from('cotisations').insert({ foyer_id: foyer.id, encaissement_id: enc.id, type_cotisation: 'Mensuelle', periode, montant_du: montant, montant_paye: montant, statut: 'À jour', date_paiement: new Date().toISOString() });
-      printRecuCot(foyer, moisNum, anneeSelCot, montant, ref);
-      await loadAll();
-    }
+      montant,
+      quantite: 1,
+      statut: 'En attente de paiement',
+      metadata: { periode, type_cotisation: 'Mensuelle' },
+    });
+    // Marquer comme "en attente" dans la grille (statut intermédiaire visuel)
+    await supabase.from('cotisations').insert({ foyer_id: foyer.id, type_cotisation: 'Mensuelle', periode, montant_du: montant, montant_paye: 0, statut: 'En attente de paiement' });
+    await loadAll();
     setSavingCot(null);
+
   };
 
   const handleDecocherCot = async (foyer: Foyer, moisNum: number) => {
     const periode = `${MOIS[moisNum - 1]} ${anneeSelCot}`;
-    if (!confirm(`Annuler le paiement de ${periode} pour ${foyer.code_menage} ?`)) return;
     const cot = cotisations.find(c => c.foyer_id === foyer.id && c.periode === periode);
+    const estPaye = cot?.statut === 'À jour';
+    if (!confirm(estPaye ? `Annuler le paiement de ${periode} pour ${foyer.code_menage} ?` : `Retirer la cotisation ${periode} de la file d'attente de paiement ?`)) return;
     if (cot?.encaissement_id) {
       await supabase.from('encaissement_lignes').delete().eq('encaissement_id', cot.encaissement_id);
       await supabase.from('encaissements').delete().eq('id', cot.encaissement_id);
     }
+    // Supprimer l'opération en attente liée à cette cotisation (si non encore payée)
+    await supabase.from('operations_caisse')
+      .delete()
+      .eq('foyer_id', foyer.id)
+      .eq('module_origine', 'Cotisations')
+      .eq('statut', 'En attente de paiement')
+      .contains('metadata', { periode });
     await supabase.from('cotisations').delete().eq('foyer_id', foyer.id).eq('periode', periode);
     await loadAll();
   };
@@ -508,7 +520,8 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
                 <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
                   <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-emerald-500 inline-block" />Payé</span>
-                  <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-slate-100 border inline-block" />+ encaisser</span>
+                  <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-amber-400 inline-block" />En attente (Caisse)</span>
+                  <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-slate-100 border inline-block" />+ envoyer en Caisse</span>
                   <span className="font-bold text-slate-700">{fmt(config.cotisation_mensuelle || 5000)}/mois</span>
                 </div>
               </div>
@@ -573,8 +586,12 @@ export default function FinancesModule({ foyers, membres }: Props) {
                                 ) : isSaving ? (
                                   <span className="w-8 h-8 rounded-lg bg-emerald-100 inline-flex items-center justify-center"><Loader2 className="h-4 w-4 text-emerald-500 animate-spin" /></span>
                                 ) : statut === 'paye' ? (
-                                  <button onClick={() => handleDecocherCot(foyer, moisNum)} title="Annuler" className="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-red-400 inline-flex items-center justify-center transition">
+                                  <button onClick={() => handleDecocherCot(foyer, moisNum)} title="Payé — clic pour annuler" className="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-red-400 inline-flex items-center justify-center transition">
                                     <CheckCircle className="h-4 w-4 text-white" />
+                                  </button>
+                                ) : statut === 'en_attente' ? (
+                                  <button onClick={() => handleDecocherCot(foyer, moisNum)} title="En attente de paiement en Caisse — clic pour retirer" className="w-8 h-8 rounded-lg bg-amber-400 hover:bg-red-400 inline-flex items-center justify-center transition">
+                                    <Clock className="h-4 w-4 text-white" />
                                   </button>
                                 ) : (
                                   <button onClick={() => handleCocherCot(foyer, moisNum)} title="Encaisser" className={`w-8 h-8 rounded-lg inline-flex items-center justify-center transition border ${isMoisCourant ? 'bg-emerald-100 border-emerald-300 hover:bg-emerald-500 hover:border-emerald-500' : 'bg-slate-100 border-slate-200 hover:bg-emerald-100 hover:border-emerald-300'}`}>

@@ -22,7 +22,36 @@ export async function updateConfig(config: Partial<ConfigFokontany>) {
   await supabase.from('config_fokontany').update(config).eq('id', 1);
 }
 
-// ── Référence ────────────────────────────────────────────────
+// ── CAISSE — Point d'entrée unique pour toutes les opérations payantes ──
+export interface OperationCaisseInput {
+  module_origine: string;        // 'Documents' | 'Cotisations' | 'Foncier' | 'Légalisation' | ...
+  type_prestation: string;       // 'Certificat de Résidence', 'Cotisation Janvier 2026', ...
+  reference_document?: string;   // référence générée par le module (ex: AMB-TSA-C01-CR-2026-0001)
+  membre_id?: string;
+  foyer_id?: string;
+  nom_beneficiaire: string;
+  montant: number;
+  quantite?: number;
+  metadata?: any;                // données spécifiques au module (ex: bytes du PDF en attente, periode cotisation...)
+}
+
+export async function creerOperationCaisse(input: OperationCaisseInput): Promise<string | null> {
+  const { data, error } = await supabase.from('operations_caisse').insert({
+    module_origine: input.module_origine,
+    type_prestation: input.type_prestation,
+    reference_document: input.reference_document || null,
+    membre_id: input.membre_id || null,
+    foyer_id: input.foyer_id || null,
+    nom_beneficiaire: input.nom_beneficiaire,
+    montant: input.montant,
+    quantite: input.quantite || 1,
+    statut: 'En attente de paiement',
+    metadata: input.metadata || null,
+  }).select().single();
+  if (error) { console.error('creerOperationCaisse error', error); return null; }
+  return data?.id || null;
+}
+
 export async function genererReference(codeType: string, config: ConfigFokontany): Promise<{ reference: string; numero: number }> {
   const annee = new Date().getFullYear();
   const { data } = await supabase.from('documents_generes').select('numero_sequentiel').eq('code_type', codeType).eq('annee', annee).order('numero_sequentiel', { ascending: false }).limit(1);

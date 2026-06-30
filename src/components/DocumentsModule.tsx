@@ -59,35 +59,23 @@ function ModalPreviewEncaissement({
     if (!preview.bytes || !preview.fileName) return;
     setConfirming(true);
     if (encaisser && preview.tarif > 0) {
-      // Enregistrer l'encaissement automatiquement
-      const annee = new Date().getFullYear();
-      const { data: last } = await supabase.from('encaissements').select('reference').like('reference', `${config.prefixe_recu || 'REC'}-${annee}-%`).order('created_at', { ascending: false }).limit(1);
-      const num = last?.[0]?.reference ? parseInt(last[0].reference.split('-').pop() || '0') + 1 : 1;
-      const ref = `${config.prefixe_recu || 'REC'}-${annee}-${String(num).padStart(4, '0')}`;
-      const { data: enc } = await supabase.from('encaissements').insert({
-        reference: ref,
-        foyer_id: preview.foyer?.id || null,
+      // Créer une opération en attente — l'encaissement réel se fait dans le module Caisse
+      await supabase.from('operations_caisse').insert({
+        module_origine: 'Documents',
+        type_prestation: `[${preview.code}] ${preview.nom}`,
+        reference_document: preview.fileName?.replace('.pdf', '') || null,
         membre_id: preview.membre?.id || null,
+        foyer_id: preview.foyer?.id || null,
         nom_beneficiaire: beneficiaire,
-        code_menage: preview.foyer?.code_menage || '-',
-        montant_total: preview.tarif,
-        mode_paiement: modePaiement,
-        agent: 'Agent Fokontany',
-      }).select().single();
-      if (enc) {
-        await supabase.from('encaissement_lignes').insert({
-          encaissement_id: enc.id,
-          categorie: 'Document',
-          description: `[${preview.code}] ${preview.nom}`,
-          montant: preview.tarif,
-        });
-        // Imprimer reçu
-        printRecu(ref, beneficiaire, preview.foyer?.code_menage || '-', preview.nom, preview.code, preview.tarif, modePaiement);
-      }
+        montant: preview.tarif,
+        quantite: 1,
+        statut: 'En attente de paiement',
+      });
     }
     onConfirm(preview.bytes, preview.fileName, encaisser, modePaiement);
     setConfirming(false);
   };
+
 
   const printRecu = (ref: string, beneficiaire: string, menage: string, nomDoc: string, code: string, montant: number, mode: string) => {
     const w = window.open('', '_blank', 'width=420,height=500');
@@ -162,16 +150,6 @@ function ModalPreviewEncaissement({
                   <p className="text-xs text-slate-500">Tarif du document</p>
                   <p className="text-xl font-black text-green-700">{fmt(preview.tarif)}</p>
                 </div>
-                {encaisser && (
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">Mode de paiement</p>
-                    <div className="flex gap-1.5">
-                      {['Espèces', 'Mobile Money', 'Virement'].map(m => (
-                        <button key={m} onClick={() => setModePaiement(m)} className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg border transition ${modePaiement === m ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-600 border-slate-200'}`}>{m}</button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <p className="text-xs text-slate-400 italic">Ce document est gratuit — aucun encaissement requis.</p>
@@ -180,11 +158,11 @@ function ModalPreviewEncaissement({
             {encaisser && preview.tarif > 0 && (
               <div className="bg-green-100 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-800 flex items-center gap-2">
                 <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                Le reçu sera imprimé automatiquement et l'encaissement enregistré dans le module Finances.
+                Cette prestation sera envoyée en attente de paiement dans le module Caisse.
               </div>
             )}
             {!encaisser && (
-              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">⚠ Encaissement désactivé — le document sera généré sans enregistrement financier.</p>
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">⚠ Aucune opération de paiement ne sera créée — le document sera généré sans envoi à la Caisse.</p>
             )}
           </div>
         </div>
@@ -193,7 +171,7 @@ function ModalPreviewEncaissement({
         <div className="flex gap-3 p-5 border-t border-slate-100 shrink-0">
           <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
           <button onClick={handleConfirm} disabled={confirming} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition">
-            {confirming ? <><Loader2 className="h-4 w-4 animate-spin" />Génération…</> : <><Download className="h-4 w-4" />Télécharger{encaisser && preview.tarif > 0 ? ' & Encaisser' : ''}</>}
+            {confirming ? <><Loader2 className="h-4 w-4 animate-spin" />Génération…</> : <><Download className="h-4 w-4" />Télécharger{encaisser && preview.tarif > 0 ? ' & Envoyer à la Caisse' : ''}</>}
           </button>
         </div>
       </div>
