@@ -269,7 +269,12 @@ export default function CampagnesModule({ foyers, membres }: Props) {
   const [viewCampagne, setViewCampagne] = useState<Campagne | null>(null);
   const [filtreStatut, setFiltreStatut] = useState('');
   const [filtreSearch, setFiltreSearch] = useState('');
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [paiementCampagne, setPaiementCampagne] = useState<Campagne | null>(null);
+  const [paiementFoyer, setPaiementFoyer] = useState<Foyer | null>(null);
+  const [paiementMembre, setPaiementMembre] = useState<Membre | null>(null);
+  const [paiementMontant, setPaiementMontant] = useState('');
+  const [paiementSearch, setPaiementSearch] = useState('');
+  const [paiementSubmitting, setPaiementSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -315,6 +320,78 @@ export default function CampagnesModule({ foyers, membres }: Props) {
     await load();
     setActionLoading(null);
   };
+
+  // ── Paiement via la Caisse ──────────────────────────────────────
+  const [actionLoading, setActionLoadingState] = useState<string | null>(null);
+  const setActionLoading = setActionLoadingState;
+
+  const ouvrirPaiement = (c: Campagne) => {
+    setPaiementCampagne(c);
+    setPaiementFoyer(null);
+    setPaiementMembre(null);
+    setPaiementMontant(String(c.montant));
+    setPaiementSearch('');
+  };
+
+  const envoyerPaiementCaisse = async () => {
+    if (!paiementCampagne) return;
+    const nomPayeur = paiementMembre
+      ? `${paiementMembre.nom} ${paiementMembre.prenom}`
+      : paiementFoyer
+        ? (membres.find(m => m.foyer_id === paiementFoyer.id && m.is_chef)?.nom || paiementFoyer.code_menage)
+        : '';
+    if (!nomPayeur) { alert('Veuillez sélectionner un foyer ou un membre payeur.'); return; }
+    const montant = parseFloat(paiementMontant);
+    if (!montant || montant <= 0) { alert('Le montant doit être supérieur à 0.'); return; }
+    if (!paiementCampagne.autoriser_partiel && montant !== paiementCampagne.montant) {
+      alert(`Le paiement partiel n'est pas autorisé. Montant exact requis : ${fmt(paiementCampagne.montant)}.`); return;
+    }
+    if (montant > paiementCampagne.montant) {
+      alert(`Le montant maximum est ${fmt(paiementCampagne.montant)}.`); return;
+    }
+    setPaiementSubmitting(true);
+    const { error } = await supabase.from('operations_caisse').insert({
+      module_origine: 'Campagnes',
+      type_prestation: `${paiementCampagne.nom}`,
+      reference_document: paiementCampagne.code,
+      membre_id: paiementMembre?.id || null,
+      foyer_id: paiementFoyer?.id || paiementMembre?.foyer_id || null,
+      nom_beneficiaire: nomPayeur,
+      montant: montant,
+      quantite: 1,
+      statut: 'En attente de paiement',
+      metadata: {
+        campagne_id: paiementCampagne.id,
+        campagne_code: paiementCampagne.code,
+        campagne_nom: paiementCampagne.nom,
+        montant_total_campagne: paiementCampagne.montant,
+        partiel: montant < paiementCampagne.montant,
+      },
+    });
+    setPaiementSubmitting(false);
+    if (error) { alert('Erreur lors de l\'envoi à la Caisse : ' + error.message); return; }
+    setPaiementCampagne(null);
+    alert(`✅ Envoyé à la Caisse pour ${nomPayeur}.\n\nRendez-vous dans Finances → Caisse pour valider le paiement.`);
+  };
+
+  // Résultats de recherche pour la modale paiement
+  const paiementResultats = (() => {
+    if (!paiementSearch.trim()) return [];
+    const q = paiementSearch.toLowerCase();
+    const res: { foyer?: Foyer; membre?: Membre; label: string; sub: string }[] = [];
+    foyers.filter(f => {
+      const chef = membres.find(m => m.foyer_id === f.id && m.is_chef);
+      return f.code_menage.toLowerCase().includes(q) || `${chef?.nom} ${chef?.prenom}`.toLowerCase().includes(q);
+    }).slice(0, 6).forEach(f => {
+      const chef = membres.find(m => m.foyer_id === f.id && m.is_chef);
+      res.push({ foyer: f, label: chef ? `${chef.nom} ${chef.prenom}` : f.code_menage, sub: f.code_menage });
+    });
+    membres.filter(m => `${m.nom} ${m.prenom}`.toLowerCase().includes(q) || (m.cin || '').toLowerCase().includes(q)).slice(0, 6).forEach(m => {
+      const f = foyers.find(f => f.id === m.foyer_id);
+      res.push({ membre: m, foyer: f, label: `${m.nom} ${m.prenom}`, sub: f?.code_menage || '' });
+    });
+    return res.slice(0, 8);
+  })();
 
   const campagnesFiltrees = campagnes.filter(c => {
     if (filtreStatut && c.statut !== filtreStatut) return false;
@@ -411,6 +488,7 @@ export default function CampagnesModule({ foyers, membres }: Props) {
                         <div className="flex items-center gap-1 justify-center">
                           <button onClick={() => setViewCampagne(c)} title="Consulter" className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600"><Eye className="h-3.5 w-3.5" /></button>
                           {peutModif && <button onClick={() => { setEditing(c); setShowForm(true); }} title="Modifier" className="p-1.5 hover:bg-amber-50 rounded-lg text-slate-400 hover:text-amber-600"><Edit2 className="h-3.5 w-3.5" /></button>}
+                          {c.statut === 'Active' && <button onClick={() => ouvrirPaiement(c)} title="Enregistrer un paiement" className="p-1.5 hover:bg-emerald-50 rounded-lg text-slate-400 hover:text-emerald-600"><Wallet className="h-3.5 w-3.5" /></button>}
                           {c.statut === 'Active' && <button onClick={() => changerStatut(c, 'Suspendue')} title="Suspendre" disabled={actionLoading !== null} className="p-1.5 hover:bg-amber-50 rounded-lg text-slate-400 hover:text-amber-600"><Pause className="h-3.5 w-3.5" /></button>}
                           {c.statut === 'Suspendue' && <button onClick={() => changerStatut(c, 'Active')} title="Réactiver" disabled={actionLoading !== null} className="p-1.5 hover:bg-emerald-50 rounded-lg text-slate-400 hover:text-emerald-600"><Play className="h-3.5 w-3.5" /></button>}
                           {c.statut === 'Brouillon' && <button onClick={() => changerStatut(c, 'Active')} title="Activer" disabled={actionLoading !== null} className="p-1.5 hover:bg-emerald-50 rounded-lg text-slate-400 hover:text-emerald-600"><Play className="h-3.5 w-3.5" /></button>}
@@ -427,6 +505,87 @@ export default function CampagnesModule({ foyers, membres }: Props) {
           </div>
         )}
       </div>
+
+      {/* Modal Paiement — envoie l'opération à la Caisse */}
+      {paiementCampagne && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Enregistrer un paiement</h2>
+                <p className="text-xs text-emerald-600 font-semibold">{paiementCampagne.nom}</p>
+              </div>
+              <button onClick={() => setPaiementCampagne(null)}><X className="h-5 w-5 text-slate-400" /></button>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+              <span className="text-xs text-emerald-700 font-semibold">Montant de la campagne</span>
+              <span className="text-lg font-black text-emerald-700">{fmt(paiementCampagne.montant)}</span>
+            </div>
+
+            {/* Recherche foyer/membre */}
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Foyer / Membre payeur *</label>
+              {(paiementFoyer || paiementMembre) ? (
+                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+                  <span className="text-sm font-semibold text-emerald-800">
+                    {paiementMembre ? `${paiementMembre.nom} ${paiementMembre.prenom}` : membres.find(m => m.foyer_id === paiementFoyer!.id && m.is_chef)?.nom || paiementFoyer!.code_menage}
+                    <span className="text-xs text-emerald-500 ml-2 font-mono">{paiementFoyer?.code_menage || foyers.find(f => f.id === paiementMembre?.foyer_id)?.code_menage}</span>
+                  </span>
+                  <button onClick={() => { setPaiementFoyer(null); setPaiementMembre(null); setPaiementSearch(''); }} className="text-slate-400 hover:text-red-500"><X className="h-4 w-4" /></button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                  <input value={paiementSearch} onChange={e => setPaiementSearch(e.target.value)} placeholder="Rechercher par nom, CIN ou code ménage..." className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-emerald-500" />
+                  {paiementSearch && paiementResultats.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-30 bg-white border border-slate-200 rounded-xl shadow-xl mt-1 max-h-52 overflow-y-auto">
+                      {paiementResultats.map((r, i) => (
+                        <button key={i} onClick={() => { if (r.membre) { setPaiementMembre(r.membre); setPaiementFoyer(foyers.find(f => f.id === r.membre!.foyer_id) || null); } else { setPaiementFoyer(r.foyer!); setPaiementMembre(null); } setPaiementSearch(''); }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 border-b border-slate-50 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs shrink-0">{r.label.charAt(0)}</div>
+                          <div><p className="text-sm font-semibold text-slate-800">{r.label}</p><p className="text-xs text-slate-400">{r.sub}</p></div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Montant */}
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">
+                Montant (Ar) *
+                {paiementCampagne.autoriser_partiel && <span className="ml-2 text-purple-600 normal-case font-normal">· Paiement partiel autorisé</span>}
+              </label>
+              <input
+                type="number"
+                value={paiementMontant}
+                onChange={e => setPaiementMontant(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
+                max={paiementCampagne.montant}
+                readOnly={!paiementCampagne.autoriser_partiel}
+              />
+              {paiementCampagne.montant_min_versement && (
+                <p className="text-[11px] text-slate-400 mt-1">Minimum par versement : {fmt(paiementCampagne.montant_min_versement)}</p>
+              )}
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+              ⚠ L'opération sera transmise à la <strong>Caisse</strong> pour encaissement. Rendez-vous dans <strong>Finances → Caisse</strong> pour valider le paiement et générer le reçu.
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setPaiementCampagne(null)} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600">Annuler</button>
+              <button onClick={envoyerPaiementCaisse} disabled={paiementSubmitting} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2">
+                {paiementSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                {paiementSubmitting ? 'Envoi…' : 'Envoyer à la Caisse'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Formulaire */}
       {showForm && (
