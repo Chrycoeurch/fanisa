@@ -328,6 +328,31 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
           .eq('periode', op.metadata.periode);
         if (errUpdateCot) { console.error('Erreur mise à jour cotisations:', errUpdateCot); alert(`Le paiement a été validé mais la mise à jour de la cotisation a échoué.\n\n${errUpdateCot.message}\n\nContactez le support technique.`); }
       }
+
+      // Mise à jour campagne_menages après paiement + créance si partiel
+      const campagnesOps = operationsSelectionnees.filter(o => o.module_origine === 'Campagnes' && o.metadata?.campagne_menage_id);
+      for (const op of campagnesOps) {
+        const { data: menage } = await supabase.from('campagne_menages').select('*').eq('id', op.metadata.campagne_menage_id).single();
+        if (menage) {
+          const nouveauPaye = (menage.montant_paye || 0) + op.montant;
+          const soldeFinal = menage.montant_du - nouveauPaye;
+          const nouveauStatut = soldeFinal <= 0 ? 'Payé' : 'Partiel';
+          await supabase.from('campagne_menages').update({ montant_paye: nouveauPaye, statut: nouveauStatut, updated_at: new Date().toISOString() }).eq('id', menage.id);
+          // Si paiement partiel → créer une créance pour le solde restant
+          if (soldeFinal > 0) {
+            await supabase.from('creances').insert({
+              nom_debiteur: usagerNom,
+              foyer_id: op.foyer_id || null,
+              membre_id: op.membre_id || null,
+              montant: soldeFinal,
+              motif: `Solde campagne : ${op.metadata.campagne_nom || op.type_prestation}`,
+              date_limite: null,
+              responsable: agent,
+              statut: 'Non soldée',
+            });
+          }
+        }
+      }
       await supabase.from('journal_caisse').insert({
         type_evenement: 'validation_paiement', transaction_id: transaction.id, utilisateur: agent,
         details: { numero_recu: numeroRecu, montant: totalAPayer, nb_operations: ids.length, poste: navigator.userAgent.slice(0, 60) },
