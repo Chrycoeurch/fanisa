@@ -102,6 +102,10 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const [lieu_naissance, setLieuNaissance] = useState(membre?.lieu_naissance || '');
   const [cin, setCin] = useState(membre?.cin || '');
   const [date_cin, setDateCin] = useState(membre?.date_cin || '');
+  const [cin_est_duplicata, setCinEstDuplicata] = useState<boolean>(membre?.cin_est_duplicata || false);
+  const [cin_duplicata_date, setCinDuplicataDate] = useState(membre?.cin_duplicata_date || '');
+  const [situation_matrimoniale, setSituationMatrimoniale] = useState(membre?.situation_matrimoniale || '');
+  const [religion, setReligion] = useState(membre?.religion || '');
   const [telephone, setTelephone] = useState(membre?.telephone || '');
   const [email, setEmail] = useState(membre?.email || '');
   const [statut, setStatut] = useState<Membre['statut']>(membre?.statut || 'Actif');
@@ -128,6 +132,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
   // Éducation
   const [niveau_etude, setNiveauEtude] = useState(membre?.niveau_etude || 'Secondaire');
+  const [niveau_instruction_detail, setNiveauInstructionDetail] = useState(membre?.niveau_instruction_detail || '');
   const [filiere_etudes, setFiliereEtudes] = useState(membre?.filiere_etudes || '');
   const [diplome, setDiplome] = useState(membre?.diplome || '');
   const [profession, setProfession] = useState(membre?.profession || '');
@@ -296,6 +301,18 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nom.trim() || !prenom.trim()) return;
+    // Validation CIN : le 6ème chiffre doit correspondre au sexe
+    if (cin && cin.length >= 6) {
+      const sixiemeChiffre = cin[5];
+      if (sexe === 'M' && sixiemeChiffre !== '1') {
+        alert(`❌ Numéro CIN invalide : le 6ème chiffre doit être "1" pour un homme (actuel : "${sixiemeChiffre}").\nVérifiez le numéro CIN saisi.`);
+        return;
+      }
+      if (sexe === 'F' && sixiemeChiffre !== '2') {
+        alert(`❌ Numéro CIN invalide : le 6ème chiffre doit être "2" pour une femme (actuel : "${sixiemeChiffre}").\nVérifiez le numéro CIN saisi.`);
+        return;
+      }
+    }
     setSaving(true);
     await onSave({
       foyer_id: foyer.id,
@@ -306,6 +323,11 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
       lieu_naissance: lieu_naissance || undefined,
       cin: cin || undefined,
       date_cin: date_cin || undefined,
+      cin_est_duplicata: cin_est_duplicata || false,
+      cin_duplicata_date: cin_est_duplicata && cin_duplicata_date ? cin_duplicata_date : undefined,
+      situation_matrimoniale: situation_matrimoniale || undefined,
+      religion: religion || undefined,
+      niveau_instruction_detail: niveau_instruction_detail || undefined,
       telephone: telephone || undefined,
       email: email || undefined,
       photo_url: photo_url || undefined,
@@ -489,6 +511,38 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   </div>
                 </div>
 
+                {/* Situation matrimoniale */}
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Situation matrimoniale</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf/Veuve', 'En union libre', 'Autre'].map(s => (
+                      <label key={s} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${situation_matrimoniale === s || (s === 'Autre' && !['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf/Veuve', 'En union libre', 'Autre', ''].includes(situation_matrimoniale) && s === 'Autre') ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <input type="radio" className="hidden" checked={situation_matrimoniale === s} onChange={() => setSituationMatrimoniale(s)} />
+                        {s}
+                      </label>
+                    ))}
+                  </div>
+                  {situation_matrimoniale === 'Autre' && (
+                    <input onChange={e => setSituationMatrimoniale(e.target.value)} placeholder="Précisez la situation..." className="mt-2 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none" />
+                  )}
+                </div>
+
+                {/* Religion */}
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Religion</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['Catholique', 'Protestant', 'Adventiste', 'Islam', 'Témoins de Jéhovah', 'Traditionnel', 'Autre'].map(r => (
+                      <label key={r} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${religion === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        <input type="radio" className="hidden" checked={religion === r} onChange={() => setReligion(r)} />
+                        {r}
+                      </label>
+                    ))}
+                  </div>
+                  {religion === 'Autre' && (
+                    <input onChange={e => setReligion(e.target.value)} placeholder="Précisez la religion..." className="mt-2 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none" />
+                  )}
+                </div>
+
                 {/* Naissance */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -503,15 +557,32 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
 
                 {/* CIN — masqué pour les moins de 18 ans */}
                 {isAdulte && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Numéro CIN</label>
-                      <input value={cin} onChange={e => setCin(e.target.value)} placeholder="12 chiffres" maxLength={12} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-mono" />
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Numéro CIN</label>
+                        <input value={cin} onChange={e => setCin(e.target.value)} placeholder="12 chiffres" maxLength={12} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none font-mono" />
+                        {cin.length >= 6 && (
+                          <p className={`text-[10px] mt-0.5 ${(sexe === 'M' && cin[5] === '1') || (sexe === 'F' && cin[5] === '2') ? 'text-emerald-600' : 'text-red-500 font-bold'}`}>
+                            {(sexe === 'M' && cin[5] === '1') || (sexe === 'F' && cin[5] === '2') ? '✓ 6ème chiffre conforme' : `⚠ 6ème chiffre "${cin[5]}" — attendu "${sexe === 'M' ? '1' : '2'}" pour ${sexe === 'M' ? 'Masculin' : 'Féminin'}`}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Date CIN</label>
+                        <input type="date" value={date_cin} onChange={e => setDateCin(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Date CIN</label>
-                      <input type="date" value={date_cin} onChange={e => setDateCin(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input type="checkbox" checked={cin_est_duplicata} onChange={e => setCinEstDuplicata(e.target.checked)} className="accent-indigo-600 w-4 h-4" />
+                      <span className="font-semibold text-slate-700">CIN Duplicata</span>
+                    </label>
+                    {cin_est_duplicata && (
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Date du duplicata</label>
+                        <input type="date" value={cin_duplicata_date} onChange={e => setCinDuplicataDate(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -645,6 +716,12 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                         </label>
                       ))}
                     </div>
+                    {['Primaire', 'Secondaire', 'Collège', 'Lycée'].includes(niveau_etude) && (
+                      <div className="mt-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Préciser la classe *</label>
+                        <input value={niveau_instruction_detail} onChange={e => setNiveauInstructionDetail(e.target.value)} placeholder={niveau_etude === 'Primaire' ? 'Ex: 11ème, 10ème, 9ème, 8ème...' : 'Ex: 6ème, 5ème, 4ème, 3ème, 2nde, 1ère, Tle...'} className="w-full border border-indigo-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none bg-indigo-50/30" />
+                      </div>
+                    )}
                   </div>
                   {!isTresPetit && (
                     <>

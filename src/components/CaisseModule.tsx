@@ -320,13 +320,18 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
         if (errUpdateDemandes) { console.error('Erreur mise à jour demandes_documents:', errUpdateDemandes); alert(`Le paiement a été validé mais la mise à jour des demandes de documents a échoué.\n\n${errUpdateDemandes.message}\n\nContactez le support technique.`); }
       }
       // Mettre à jour les cotisations liées (module Cotisations) — passage en statut "À jour"
-      const cotisationsAMettreAJour = operationsSelectionnees.filter(o => o.module_origine === 'Cotisations' && o.foyer_id && o.metadata?.periode);
-      for (const op of cotisationsAMettreAJour) {
-        const { error: errUpdateCot } = await supabase.from('cotisations')
-          .update({ statut: 'À jour', montant_paye: op.montant * (op.quantite || 1), date_paiement: new Date().toISOString() })
-          .eq('foyer_id', op.foyer_id)
-          .eq('periode', op.metadata.periode);
-        if (errUpdateCot) { console.error('Erreur mise à jour cotisations:', errUpdateCot); alert(`Le paiement a été validé mais la mise à jour de la cotisation a échoué.\n\n${errUpdateCot.message}\n\nContactez le support technique.`); }
+      // Mise à jour cotisations — gère aussi le multi-mois (metadata.periodes = tableau)
+      const cotisationsOps = operationsSelectionnees.filter(o => o.module_origine === 'Cotisations' && o.foyer_id);
+      for (const op of cotisationsOps) {
+        const periodes: string[] = op.metadata?.periodes || (op.metadata?.periode ? [op.metadata.periode] : []);
+        const montantParMois = op.montant; // montant unitaire = 1 mois
+        for (const periode of periodes) {
+          const { error: errUpdateCot } = await supabase.from('cotisations')
+            .update({ statut: 'À jour', montant_paye: montantParMois, date_paiement: new Date().toISOString() })
+            .eq('foyer_id', op.foyer_id)
+            .eq('periode', periode);
+          if (errUpdateCot) console.error('Erreur mise à jour cotisation:', periode, errUpdateCot);
+        }
       }
 
       // Mise à jour campagne_menages après paiement + créance si partiel

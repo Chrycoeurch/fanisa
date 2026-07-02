@@ -166,6 +166,15 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
                   </div>
                 </div>
               )}
+              {code === 'CCR' && (
+                <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-blue-700 uppercase">Informations du changement de résidence</p>
+                  <div>
+                    <label className="text-xs text-slate-500 block mb-1">Ancienne adresse *</label>
+                    <input value={extraData.ancienneAdresse || ''} onChange={e => setExtraData((p: any) => ({ ...p, ancienneAdresse: e.target.value }))} placeholder="Ex: LOT 12 Rue de la Paix, Fokontany Morafeno..." className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400" />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -192,13 +201,19 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
           {step === 3 && (
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-slate-700">Étape 3 — Motif de la demande</h3>
-              <div className="grid grid-cols-2 gap-2">
-                {MOTIFS_DEMANDE.map(m => (
-                  <button key={m} onClick={() => setMotif(m)} className={`py-2.5 rounded-lg border text-xs font-semibold transition ${motif === m ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{m}</button>
-                ))}
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Motif *</label>
+                <select value={motif} onChange={e => setMotif(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white outline-none focus:border-indigo-500">
+                  <option value="">— Sélectionner un motif —</option>
+                  {MOTIFS_DEMANDE.filter(m => m !== 'Autre').map(m => <option key={m} value={m}>{m}</option>)}
+                  <option value="Autre">Autre (à préciser)</option>
+                </select>
               </div>
               {motif === 'Autre' && (
-                <input value={motifAutre} onChange={e => setMotifAutre(e.target.value)} placeholder="Précisez le motif..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1.5">Précisez le motif *</label>
+                  <input value={motifAutre} onChange={e => setMotifAutre(e.target.value)} placeholder="Décrivez le motif de la demande..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500" autoFocus />
+                </div>
               )}
               <p className="text-[11px] text-slate-400">Ce motif sera enregistré dans l'historique du document.</p>
               <div className="pt-2 border-t border-slate-100">

@@ -63,6 +63,57 @@ export default function FinancesModule({ foyers, membres }: Props) {
   const [showAnneePicker, setShowAnneePicker] = useState(false);
   const [anneePickerBase, setAnneePickerBase] = useState(ANNEE_COURANTE - 3);
   const [savingCot, setSavingCot] = useState<string | null>(null);
+  const [moisSelectionnes, setMoisSelectionnes] = useState<Map<string, number[]>>(new Map()); // foyer_id -> [moisNums]
+  const [envoyantGroupe, setEnvoyantGroupe] = useState<string | null>(null);
+
+  const toggleMoisSelectionne = (foyerId: string, moisNum: number) => {
+    setMoisSelectionnes(prev => {
+      const next = new Map(prev);
+      const current = next.get(foyerId) || [];
+      if (current.includes(moisNum)) {
+        const filtered = current.filter(m => m !== moisNum);
+        if (filtered.length === 0) next.delete(foyerId); else next.set(foyerId, filtered);
+      } else {
+        next.set(foyerId, [...current, moisNum].sort());
+      }
+      return next;
+    });
+  };
+
+  const envoyerMoisGroupesACaisse = async (foyer: Foyer) => {
+    const mois = moisSelectionnes.get(foyer.id) || [];
+    if (mois.length === 0) return;
+    setEnvoyantGroupe(foyer.id);
+    const montant = config.cotisation_mensuelle || 5000;
+    const chef = membres.find(m => m.foyer_id === foyer.id && m.is_chef);
+    const nomBenef = chef ? `${chef.nom} ${chef.prenom}` : foyer.code_menage;
+    const periodes = mois.map(m => `${MOIS[m - 1]} ${anneeSelCot}`);
+
+    // Une seule opération en Caisse pour tous les mois
+    const label = mois.length === 1
+      ? `Cotisation — ${periodes[0]}`
+      : `Cotisations — ${mois.length} mois (${MOIS[mois[0] - 1].slice(0,3)} à ${MOIS[mois[mois.length - 1] - 1].slice(0,3)} ${anneeSelCot})`;
+
+    await supabase.from('operations_caisse').insert({
+      module_origine: 'Cotisations',
+      type_prestation: label,
+      foyer_id: foyer.id,
+      nom_beneficiaire: nomBenef,
+      montant,
+      quantite: mois.length,
+      statut: 'En attente de paiement',
+      metadata: { periodes, type_cotisation: 'Mensuelle', mois_nums: mois, annee: anneeSelCot },
+    });
+
+    // Marquer chaque mois en attente
+    for (const periode of periodes) {
+      await supabase.from('cotisations').insert({ foyer_id: foyer.id, type_cotisation: 'Mensuelle', periode, montant_du: montant, montant_paye: 0, statut: 'En attente de paiement' });
+    }
+
+    setMoisSelectionnes(prev => { const next = new Map(prev); next.delete(foyer.id); return next; });
+    await loadAll();
+    setEnvoyantGroupe(null);
+  };
   const [searchCot, setSearchCot] = useState('');
   const [filtreCot, setFiltreCot] = useState<'tous' | 'payes' | 'non_payes'>('tous');
 
@@ -507,8 +558,18 @@ export default function FinancesModule({ foyers, membres }: Props) {
                                     <Clock className="h-4 w-4 text-white" />
                                   </button>
                                 ) : (
-                                  <button onClick={() => handleCocherCot(foyer, moisNum)} title="Encaisser" className={`w-8 h-8 rounded-lg inline-flex items-center justify-center transition border ${isMoisCourant ? 'bg-emerald-100 border-emerald-300 hover:bg-emerald-500 hover:border-emerald-500' : 'bg-slate-100 border-slate-200 hover:bg-emerald-100 hover:border-emerald-300'}`}>
-                                    <span className={`font-bold text-sm leading-none ${isMoisCourant ? 'text-emerald-600' : 'text-slate-400'}`}>+</span>
+                                  <button
+                                    onClick={() => toggleMoisSelectionne(foyer.id, moisNum)}
+                                    title="Cliquer pour sélectionner — puis envoyer plusieurs mois en une fois"
+                                    className={`w-8 h-8 rounded-lg inline-flex items-center justify-center transition border ${
+                                      (moisSelectionnes.get(foyer.id) || []).includes(moisNum)
+                                        ? 'bg-indigo-500 border-indigo-500 text-white'
+                                        : isMoisCourant ? 'bg-emerald-100 border-emerald-300 hover:bg-indigo-200' : 'bg-slate-100 border-slate-200 hover:bg-indigo-100'
+                                    }`}>
+                                    {(moisSelectionnes.get(foyer.id) || []).includes(moisNum)
+                                      ? <CheckCircle className="h-4 w-4 text-white" />
+                                      : <span className={`font-bold text-sm leading-none ${isMoisCourant ? 'text-emerald-600' : 'text-slate-400'}`}>+</span>
+                                    }
                                   </button>
                                 )}
                               </td>
@@ -518,7 +579,12 @@ export default function FinancesModule({ foyers, membres }: Props) {
                             <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${nbPayes === 12 ? 'bg-emerald-100 text-emerald-700' : nbPayes > 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>{nbPayes}/12</span>
                           </td>
                           <td className="p-2 text-center">
-                            {reste > 0 ? (
+                            {(moisSelectionnes.get(foyer.id) || []).length > 0 ? (
+                              <button onClick={() => envoyerMoisGroupesACaisse(foyer)} disabled={envoyantGroupe === foyer.id} className="flex items-center gap-1 px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg mx-auto transition">
+                                {envoyantGroupe === foyer.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wallet className="h-3 w-3" />}
+                                {envoyantGroupe === foyer.id ? '…' : `${(moisSelectionnes.get(foyer.id) || []).length} mois → Caisse`}
+                              </button>
+                            ) : reste > 0 ? (
                               <span className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">{fmt(reste)}</span>
                             ) : (
                               <span className="text-[11px] font-bold text-emerald-600">—</span>

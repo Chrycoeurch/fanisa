@@ -159,6 +159,9 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   const [nombre_etages, setNombreEtages] = useState(foyer?.nombre_etages?.toString() || '1');
   const [materiaux_toiture, setMateriauxToiture] = useState<string[]>(foyer?.materiaux_toiture || (foyer?.materiau_toiture ? [foyer.materiau_toiture] : []));
   const [materiaux_mur, setMateriauxMur] = useState<string[]>(foyer?.materiaux_mur || (foyer?.materiau_mur ? [foyer.materiau_mur] : []));
+  const [materiau_mur_autre, setMateriauMurAutre] = useState(foyer?.materiau_mur_autre || '');
+  const [note_agent_incomplete, setNoteAgentIncomplete] = useState(foyer?.note_agent_incomplete || '');
+  const [formations_pro_autre, setFormationsProAutre] = useState(foyer?.formations_pro_autre || '');
   const [materiaux_plancher, setMateriauxPlancher] = useState<string[]>(foyer?.materiaux_plancher || (foyer?.materiau_plancher ? [foyer.materiau_plancher] : []));
   const [nombre_pieces, setNombrePieces] = useState(foyer?.nombre_pieces?.toString() || '');
   const [superficie_maison, setSuperficie] = useState(foyer?.superficie_maison?.toString() || '');
@@ -348,7 +351,10 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
       materiaux_toiture, materiaux_mur, materiaux_plancher,
       materiau_toiture: materiaux_toiture[0] || undefined,
       materiau_mur: materiaux_mur[0] || undefined,
+      materiau_mur_autre: materiaux_mur.includes('Autres') ? (materiau_mur_autre || undefined) : undefined,
       materiau_plancher: materiaux_plancher[0] || undefined,
+      note_agent_incomplete: note_agent_incomplete || undefined,
+      formations_pro_autre: formations_pro_autre || undefined,
       nombre_pieces: nombre_pieces ? parseInt(nombre_pieces) : undefined, superficie_maison: superficie_maison ? parseFloat(superficie_maison) : undefined,
       photo_maison_url: photo_maison_url || undefined,
       statut_occupant,
@@ -542,7 +548,12 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
                 </div>
 
                 <CheckGroup label="Matériau(x) de toiture" options={MATERIAUX_TOITURE} values={materiaux_toiture} onToggle={v => setMateriauxToiture(prev => toggleArr(prev, v))} />
-                <CheckGroup label="Matériau(x) de mur" options={MATERIAUX_MUR} values={materiaux_mur} onToggle={v => setMateriauxMur(prev => toggleArr(prev, v))} />
+                <div>
+                  <CheckGroup label="Matériau(x) de mur" options={MATERIAUX_MUR} values={materiaux_mur} onToggle={v => setMateriauxMur(prev => toggleArr(prev, v))} />
+                  {materiaux_mur.includes('Autres') && (
+                    <input value={materiau_mur_autre} onChange={e => setMateriauMurAutre(e.target.value)} placeholder="Précisez le matériau de mur..." className="mt-2 w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none bg-indigo-50/30" />
+                  )}
+                </div>
                 <CheckGroup label="Matériau(x) de plancher" options={MATERIAUX_PLANCHER} values={materiaux_plancher} onToggle={v => setMateriauxPlancher(prev => toggleArr(prev, v))} />
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="text-xs font-bold text-slate-600 uppercase block mb-1">Nombre de pièces</label><input value={nombre_pieces} onChange={e => setNombrePieces(e.target.value)} placeholder="Ex: 3" type="number" min="1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" /></div>
@@ -756,6 +767,11 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
 
                 <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">6. Priorité du ménage</h3>
                 <UrgencyButtons label="Niveau global de vulnérabilité" value={niveau_vulnerabilite_global} onChange={setNiveauVulnerabiliteGlobal} />
+                <div>
+                  <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Note agent — Foyer incomplet / à revoir</label>
+                  <textarea value={note_agent_incomplete} onChange={e => setNoteAgentIncomplete(e.target.value)} rows={2} placeholder="Ex: famille incomplète, à revisiter, données manquantes..." className="w-full border border-amber-200 rounded-lg px-3 py-2.5 text-sm focus:border-amber-400 outline-none resize-none bg-amber-50/30" />
+                  <p className="text-[11px] text-amber-600 mt-1">⚠ Si renseigné, le foyer sera marqué "Incomplet" avec le taux de complétion dans la fiche.</p>
+                </div>
                 <div>
                   <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Observations complémentaires</label>
                   <textarea value={observations_complementaires} onChange={e => setObservationsComplementaires(e.target.value)} rows={3} placeholder="Notes additionnelles..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none resize-none" />

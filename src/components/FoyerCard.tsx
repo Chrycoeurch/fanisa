@@ -13,8 +13,24 @@ export default function FoyerCard({ foyer, membres, onClick }: Props) {
   const vulnerables = membres.filter(m => m.est_vulnerable).length;
   const alertes = membres.filter(m => m.hypertension !== 'Normal' || m.diabete !== 'Normal').length;
 
+  // Calcul du taux de complétion du foyer
+  const champsTotal = 10;
+  let champRemplis = 0;
+  if (foyer.adresse) champRemplis++;
+  if (foyer.fokontany) champRemplis++;
+  if (foyer.statut_occupant) champRemplis++;
+  if (foyer.materiau_mur || (foyer as any).materiaux_mur?.length) champRemplis++;
+  if ((foyer as any).materiaux_toiture?.length) champRemplis++;
+  if (foyer.source_eau_principale) champRemplis++;
+  if (foyer.source_energie_cuisine) champRemplis++;
+  if (foyer.nombre_membres && foyer.nombre_membres > 0) champRemplis++;
+  if (chef) champRemplis++;
+  if (foyer.type_logement) champRemplis++;
+  const tauxCompletion = Math.round((champRemplis / champsTotal) * 100);
+  const estIncomplet = !!(foyer as any).note_agent_incomplete;
+
   return (
-    <div onClick={onClick} className="bg-white rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-md transition cursor-pointer group">
+    <div onClick={onClick} className={`bg-white rounded-xl border hover:shadow-md transition cursor-pointer group ${estIncomplet ? 'border-amber-300' : 'border-slate-200 hover:border-indigo-300'}`}>
       {/* Header foyer */}
       <div className="p-4 border-b border-slate-100">
         <div className="flex items-start justify-between gap-3">
@@ -26,6 +42,7 @@ export default function FoyerCard({ foyer, membres, onClick }: Props) {
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{foyer.code_menage}</span>
                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${foyer.statut === 'Actif' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : foyer.statut === 'Dissous' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{foyer.statut}</span>
+                {estIncomplet && <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">⚠ Incomplet</span>}
               </div>
               <p className="text-sm font-bold text-slate-800 mt-0.5">{chef ? `${chef.nom} ${chef.prenom}` : 'Chef non défini'}</p>
             </div>
@@ -75,6 +92,20 @@ export default function FoyerCard({ foyer, membres, onClick }: Props) {
             {membres.length > 5 && <span className="text-[10px] text-slate-400 px-2 py-1">+{membres.length - 5}</span>}
           </div>
         )}
+
+        {/* Taux de complétion */}
+        <div className="pt-2 border-t border-slate-50">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-slate-400 font-semibold">Complétion du dossier</span>
+            <span className={`text-[10px] font-bold ${tauxCompletion >= 80 ? 'text-emerald-600' : tauxCompletion >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{tauxCompletion}%</span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-1.5">
+            <div className={`h-1.5 rounded-full transition-all ${tauxCompletion >= 80 ? 'bg-emerald-500' : tauxCompletion >= 50 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${tauxCompletion}%` }} />
+          </div>
+          {estIncomplet && (
+            <p className="text-[10px] text-amber-600 mt-1 italic truncate">⚑ {(foyer as any).note_agent_incomplete}</p>
+          )}
+        </div>
       </div>
     </div>
   );

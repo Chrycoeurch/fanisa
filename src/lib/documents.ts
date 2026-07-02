@@ -487,6 +487,29 @@ export async function genererCVI(membre: Membre, foyer: Foyer, config: ConfigFok
   return await pdf.save();
 }
 
+// CCR — Certificat de Changement de Résidence (A5 Portrait officiel)
+export async function genererCCR(membre: Membre, foyer: Foyer, config: ConfigFokontany, ancienneAdresse?: string): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const { reference, numero } = await genererReference('CCR', config);
+  const validite = new Date(Date.now() + 90*24*60*60*1000).toLocaleDateString('fr-FR');
+  const nouvelleAdresse = foyer.adresse
+    ? `${foyer.adresse} — Fokontany ${clean(config.nom_fokontany)}`
+    : `Fokontany ${clean(config.nom_fokontany)} - ${clean(config.nom_district)}`;
+  const intro = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)}, Quartier ${clean(config.nom_quartier)}, certifie que la personne dont l'identite est mentionnee ci-dessous a change de residence et reside desormais dans le ressort du Fokontany.`;
+  await genererCertificatA5(pdf, bold, reg, config, 'CCR', 'CERTIFICAT DE CHANGEMENT DE RESIDENCE', reference, numero, membre, foyer,
+    [
+      { l: 'ANCIENNE ADRESSE:', v: ancienneAdresse || 'Non précisée' },
+      { l: 'NOUVELLE ADRESSE:', v: nouvelleAdresse },
+      { l: 'CODE MENAGE:', v: foyer.code_menage },
+    ],
+    intro, undefined, undefined, validite
+  );
+  await enregistrerDocument('CCR', reference, numero, membre.id, foyer.id);
+  return await pdf.save();
+}
+
 // CEL — Certificat de Celibat (A5 Portrait officiel)
 export async function genererCEL(membre: Membre, foyer: Foyer, config: ConfigFokontany): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -1079,6 +1102,7 @@ export async function genererDocumentParCode(
   const { membre, foyer, membresDuFoyer, parcelle, detenteur, titulaire, batiments, batiment, valeur, extraData } = ctx;
   switch (code) {
     case 'CR':  return await genererCR(membre!, foyer!, config);
+    case 'CCR': return await genererCCR(membre!, foyer!, config, ctx.extraData?.ancienneAdresse);
     case 'CVI': return await genererCVI(membre!, foyer!, config);
     case 'CVC': return await genererCVC(foyer!, membresDuFoyer || [], config);
     case 'CEL': return await genererCEL(membre!, foyer!, config);
@@ -1102,16 +1126,17 @@ export async function genererDocumentParCode(
 }
 
 export const DOCUMENTS_ADMIN = [
-  { code: 'CR',  nom: 'Certificat de Résidence',       description: "Atteste la résidence",                 icon: '🏠', niveau: 'membre', format: 'A5 Paysage' },
-  { code: 'CVI', nom: 'Certificat de Vie Individuelle', description: "Atteste qu'une personne est en vie",   icon: '✅', niveau: 'membre', format: 'A5 Paysage' },
-  { code: 'CVC', nom: 'Certificat de Vie Collective',   description: "Atteste qu'un ménage vit ensemble",    icon: '👨‍👩‍👧‍👦', niveau: 'foyer', format: 'A4 Portrait' },
-  { code: 'CEL', nom: 'Certificat de Célibat',          description: "Atteste le célibat",                   icon: '💍', niveau: 'membre', format: 'A5 Paysage' },
-  { code: 'BC',  nom: 'Certificat de Bonne Conduite',   description: "Atteste la bonne moralité",            icon: '⭐', niveau: 'membre', format: 'A5 Paysage' },
-  { code: 'CM',  nom: 'Composition du Ménage',          description: "Liste officielle des membres",         icon: '📋', niveau: 'foyer', format: 'A4 Portrait' },
-  { code: 'FM',  nom: 'Fiche Ménage',                   description: "Fiche détaillée du ménage",            icon: '📄', niveau: 'foyer', format: 'A4 Portrait' },
-  { code: 'FFD', nom: 'Déclaration de Décès',           description: "Fanambarana Fahafatesana",             icon: '🕊️', niveau: 'membre', format: 'A4 Portrait' },
-  { code: 'FAS', nom: 'Attestation de Travail',         description: "Fanamarinana Asa",                     icon: '💼', niveau: 'membre', format: 'A5 Paysage' },
-  { code: 'PCG', nom: 'Prise en Charge et Garde',       description: "Atteste la garde d'une personne",      icon: '🤝', niveau: 'membre', format: 'A4 Portrait' },
+  { code: 'CR',  nom: 'Certificat de Résidence',            description: "Atteste la résidence",                 icon: '🏠', niveau: 'membre', format: 'A5 Paysage' },
+  { code: 'CCR', nom: 'Certificat de Changement de Résidence', description: "Atteste le changement d'adresse",   icon: '🔄', niveau: 'membre', format: 'A5 Paysage' },
+  { code: 'CVI', nom: 'Certificat de Vie Individuelle',     description: "Atteste qu'une personne est en vie",   icon: '✅', niveau: 'membre', format: 'A5 Paysage' },
+  { code: 'CVC', nom: 'Certificat de Vie Collective',       description: "Atteste qu'un ménage vit ensemble",    icon: '👨‍👩‍👧‍👦', niveau: 'foyer', format: 'A4 Portrait' },
+  { code: 'CEL', nom: 'Certificat de Célibat',              description: "Atteste le célibat",                   icon: '💍', niveau: 'membre', format: 'A5 Paysage' },
+  { code: 'BC',  nom: 'Certificat de Bonne Conduite',       description: "Atteste la bonne moralité",            icon: '⭐', niveau: 'membre', format: 'A5 Paysage' },
+  { code: 'CM',  nom: 'Composition du Ménage',              description: "Liste officielle des membres",         icon: '📋', niveau: 'foyer', format: 'A4 Portrait' },
+  { code: 'FM',  nom: 'Fiche Ménage',                       description: "Fiche détaillée du ménage",            icon: '📄', niveau: 'foyer', format: 'A4 Portrait' },
+  { code: 'FFD', nom: 'Déclaration de Décès',               description: "Fanambarana Fahafatesana",             icon: '🕊️', niveau: 'membre', format: 'A4 Portrait' },
+  { code: 'FAS', nom: 'Attestation de Travail',             description: "Fanamarinana Asa",                     icon: '💼', niveau: 'membre', format: 'A5 Paysage' },
+  { code: 'PCG', nom: 'Prise en Charge et Garde',           description: "Atteste la garde d'une personne",      icon: '🤝', niveau: 'membre', format: 'A4 Portrait' },
 ] as const;
 
 export const DOCUMENTS_FONCIERS = [
