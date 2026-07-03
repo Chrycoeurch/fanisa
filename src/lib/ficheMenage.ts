@@ -192,9 +192,9 @@ export async function genererFicheMenage(foyer: Foyer, membres: Membre[]): Promi
   // Badges
   let bx = ix;
   const by = cy + 50;
-  bx += badge(page, '● Actif', bx, by, C.vert, C.blanc, bold);
-  if ((foyer as any).note_agent_incomplete) bx += badge(page, '● A suivre', bx, by, C.orange, C.blanc, bold);
-  bx += badge(page, cotAJour ? '● Cotisation a jour' : '● Cotisation en retard', bx, by, cotAJour ? C.cyan : C.orange, C.blanc, bold);
+  bx += badge(page, '* Actif', bx, by, C.vert, C.blanc, bold);
+  if ((foyer as any).note_agent_incomplete) bx += badge(page, '* A suivre', bx, by, C.orange, C.blanc, bold);
+  bx += badge(page, cotAJour ? '* Cotisation a jour' : '* Cotisation en retard', bx, by, cotAJour ? C.cyan : C.orange, C.blanc, bold);
 
   // Score
   const sx = A4W - M - 4, sw = 42, sh = 50;
@@ -345,7 +345,7 @@ export async function genererFicheMenage(foyer: Foyer, membres: Membre[]): Promi
     cy += 16;
   } else {
     historique.slice(0, 6).forEach(evt => {
-      text(page, '●', M + 4, cy + 4, bold, 10, C.bleu);
+      text(page, '-', M + 4, cy + 4, bold, 10, C.bleu);
       text(page, evt.date, M + 16, cy + 4, bold, 8, C.grisF);
       text(page, evt.label, M + 60, cy + 4, reg, 8, C.grisF, 'left', CW - 70);
       cy += 13;
