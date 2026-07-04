@@ -77,6 +77,7 @@ const CHAMPS: ChampDef[] = [
   { id: 'membre_prenom',     label: 'Prénom',                categorie: 'Membres', type: 'texte',   source: 'membres',  champ: 'prenom' },
   { id: 'membre_cin',        label: 'CIN',                   categorie: 'Membres', type: 'texte',   source: 'membres',  champ: 'cin' },
   { id: 'membre_telephone',  label: 'Téléphone',             categorie: 'Membres', type: 'texte',   source: 'membres',  champ: 'telephone' },
+  { id: 'membre_age',        label: 'Âge (années)',          categorie: 'Membres', type: 'nombre',  source: 'membres',  champ: '__age__' },
   { id: 'membre_sexe',       label: 'Sexe',                  categorie: 'Membres', type: 'enum',    source: 'membres',  champ: 'sexe', enumValues: ['M', 'F'] },
   { id: 'membre_statut',     label: 'Statut membre',         categorie: 'Membres', type: 'enum',    source: 'membres',  champ: 'statut', enumValues: ['Actif', 'Inactif', 'Décédé', 'Parti'] },
   { id: 'membre_profession', label: 'Profession',            categorie: 'Membres', type: 'texte',   source: 'membres',  champ: 'profession' },
@@ -88,8 +89,12 @@ const CHAMPS: ChampDef[] = [
   { id: 'membre_handicap',   label: 'Handicap',              categorie: 'Santé',   type: 'booleen', source: 'membres',  champ: 'handicap_oui' },
   { id: 'membre_grossesse',  label: 'Grossesse en cours',    categorie: 'Santé',   type: 'booleen', source: 'membres',  champ: 'grossesse_cours' },
   { id: 'membre_suivi',      label: 'Suivi médical',         categorie: 'Santé',   type: 'booleen', source: 'membres',  champ: 'suivi_medical' },
+  { id: 'membre_groupe_sang',label: 'Groupe sanguin',        categorie: 'Santé',   type: 'texte',   source: 'membres',  champ: 'groupe_sanguin' },
+  { id: 'membre_poids',      label: 'Poids (kg)',            categorie: 'Santé',   type: 'nombre',  source: 'membres',  champ: 'poids' },
+  { id: 'membre_taille',     label: 'Taille (cm)',           categorie: 'Santé',   type: 'nombre',  source: 'membres',  champ: 'taille' },
   { id: 'membre_revenu',     label: 'Revenu estimé (Ar)',    categorie: 'Économie',type: 'nombre',  source: 'membres',  champ: 'revenu_estime' },
   { id: 'membre_emploi',     label: 'Situation d\'emploi',   categorie: 'Économie',type: 'texte',   source: 'membres',  champ: 'situation_emploi' },
+  { id: 'membre_nationalite',label: 'Nationalité',           categorie: 'Membres', type: 'texte',   source: 'membres',  champ: 'nationalite' },
   // Cotisations
   { id: 'cot_statut',        label: 'Statut cotisation',     categorie: 'Cotisations', type: 'enum', source: 'cotisations', champ: 'statut', enumValues: ['À jour', 'En attente de paiement', 'En retard'] },
   { id: 'cot_montant',       label: 'Montant payé (Ar)',     categorie: 'Cotisations', type: 'nombre', source: 'cotisations', champ: 'montant_paye' },
@@ -352,7 +357,16 @@ export default function CRAADModule({ foyers, membres }: Props) {
   function testerFiltre(obj: Record<string, any>, f: Filtre): boolean {
     const champ = CHAMPS.find(c => c.id === f.champ_id);
     if (!champ) return true;
-    const val = obj[champ.champ];
+
+    // Champ virtuel : âge calculé depuis date_naissance
+    let val: any;
+    if (champ.champ === '__age__') {
+      const dn = obj['date_naissance'];
+      val = dn ? new Date().getFullYear() - new Date(dn).getFullYear() : null;
+    } else {
+      val = obj[champ.champ];
+    }
+
     const cible = f.valeur;
 
     switch (f.operateur) {
