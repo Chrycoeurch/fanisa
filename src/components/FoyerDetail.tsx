@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Foyer, Membre } from '../types';
 import { X, Home, MapPin, Users, UserCheck, PlusCircle, Edit2, Trash2, AlertTriangle, Phone, Mail, CreditCard, ChevronDown, ChevronUp, FileText, Printer, Loader2 } from 'lucide-react';
 import MembreProfil360 from './MembreProfil360';
-import { imprimerFicheMenage } from '../lib/ficheMenage';
+import { imprimerFicheMenage } from '../lib/ficheMenagePDF';
 
 interface Props {
   foyer: Foyer;
