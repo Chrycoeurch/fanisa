@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Membre, Foyer } from '../types';
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib';
-import { X, Download, Loader2, FileText, User, Home as HomeIcon, GraduationCap, HeartPulse, ShieldAlert, Building2, Check } from 'lucide-react';
+import { X, Download, Loader2, FileText, User, Home as HomeIcon, GraduationCap, HeartPulse, ShieldAlert, Building2, Check, Printer } from 'lucide-react';
+import { imprimerFicheIndividuelle } from '../lib/ficheIndividuelle';
 
 interface Props {
   membre: Membre;
@@ -293,6 +294,7 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[], s
 
 export default function MembreProfil360({ membre, foyer, allMembres, onClose }: Props) {
   const [loading, setLoading] = useState(false);
+  const [loadingFiche, setLoadingFiche] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [selected, setSelected] = useState<Set<SectionKey>>(new Set(SECTIONS.filter(s => s.defaultOn).map(s => s.key)));
 
@@ -302,6 +304,13 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  };
+
+  const handleFicheOfficielle = async () => {
+    setLoadingFiche(true);
+    try { await imprimerFicheIndividuelle(membre, foyer); }
+    catch (e) { alert('Erreur génération fiche : ' + e); }
+    setLoadingFiche(false);
   };
 
   const handleDownload = async () => {
@@ -458,7 +467,13 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
               <p className="text-xs text-slate-500">{membre.nom} {membre.prenom} · {foyer.code_menage}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleFicheOfficielle} disabled={loadingFiche} title="Fiche individuelle officielle PDF" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white text-xs font-bold rounded-lg transition">
+              {loadingFiche ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+              {loadingFiche ? 'Génération…' : 'Fiche officielle'}
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">

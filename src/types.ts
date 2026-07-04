@@ -119,12 +119,31 @@ export interface Membre {
   sexe: Sexe;
   date_naissance?: string;
   lieu_naissance?: string;
+  nationalite?: string;
   cin?: string;
   date_cin?: string;
+  cin_est_duplicata?: boolean;
+  cin_duplicata_date?: string;
+  situation_matrimoniale?: string;
+  religion?: string;
   telephone?: string;
   email?: string;
   photo_url?: string;
   statut: StatutMembre;
+  // Économie (compléments)
+  compte_bancaire?: boolean;
+  e_poketra?: boolean;
+  regime_emploi?: string;
+  // Social
+  aide_sociale?: string;
+  assurance?: string;
+  acces_eau_individuel?: string;
+  acces_internet_individuel?: boolean;
+  // Participation communautaire
+  cotisation_a_jour?: boolean;
+  role_communautaire?: string;
+  reunion_presences?: string;
+  dernier_evenement?: string;
   // Relation
   relation_chef: RelationChef;
   is_chef: boolean;
