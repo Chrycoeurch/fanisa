@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Foyer, Membre } from '../types';
 import { X, Home, MapPin, Users, UserCheck, PlusCircle, Edit2, Trash2, AlertTriangle, Phone, Mail, CreditCard, ChevronDown, ChevronUp, FileText, Printer, Loader2 } from 'lucide-react';
 import MembreProfil360 from './MembreProfil360';
-import { imprimerFicheMenage } from '../lib/ficheMenagePDF';
+import { genererFicheMenage } from '../lib/ficheMenagePDF';
+import { telechargerPDF } from '../lib/documents';
+import ModalApercu from './ModalApercu';
 
 interface Props {
   foyer: Foyer;
@@ -248,13 +250,41 @@ function MembreRow({ membre, allMembres, foyer, onEdit, onDelete }: {
 
 export default function FoyerDetail({ foyer, membres, onClose, onEditFoyer, onDeleteFoyer, onAddMembre, onEditMembre, onDeleteMembre }: Props) {
   const chef = membres.find(m => m.is_chef);
-  const [printingFiche, setPrintingFiche] = useState(false);
+  const [generatingFiche, setGeneratingFiche] = useState(false);
+  const [apercuFiche, setApercuFiche] = useState<{ url: string; bytes: Uint8Array } | null>(null);
 
   const handleFicheMenage = async () => {
-    setPrintingFiche(true);
-    try { await imprimerFicheMenage(foyer, membres); }
-    catch (e) { alert('Erreur génération fiche : ' + e); }
-    setPrintingFiche(false);
+    setGeneratingFiche(true);
+    try {
+      const { pdf } = await import('@react-pdf/renderer');
+      const React2 = await import('react');
+      const { FicheMenageDocExport } = await import('../lib/ficheMenagePDF');
+      const { supabase } = await import('../lib/supabase');
+
+      const [{ data: docs }, { data: cots }, { loadHistorique }] = await Promise.all([
+        supabase.from('demandes_documents').select('nom_document,created_at').eq('foyer_id', foyer.id).in('statut', ['Payé', 'Archivé']).order('created_at', { ascending: false }),
+        supabase.from('cotisations').select('statut,periode').eq('foyer_id', foyer.id),
+        import('../lib/ficheMenagePDF'),
+      ]);
+      const cotAJour = (cots || []).some((c: any) => c.statut === 'A jour' || c.statut === 'À jour');
+      const hist = await loadHistorique(foyer.id);
+
+      const blob = await pdf(React2.default.createElement(FicheMenageDocExport, { foyer, membres, cotAJour, docs: docs || [], hist })).toBlob();
+      const url = URL.createObjectURL(blob);
+      const buf = await blob.arrayBuffer();
+      setApercuFiche({ url, bytes: new Uint8Array(buf) });
+    } catch (e) { alert('Erreur génération fiche : ' + e); }
+    setGeneratingFiche(false);
+  };
+
+  const handleTelechargerFiche = async () => {
+    if (!apercuFiche) return;
+    await telechargerPDF(apercuFiche.bytes, `FICHE_MENAGE_${foyer.code_menage}.pdf`);
+  };
+
+  const fermerApercu = () => {
+    if (apercuFiche) URL.revokeObjectURL(apercuFiche.url);
+    setApercuFiche(null);
   };
 
   return (
@@ -284,14 +314,27 @@ export default function FoyerDetail({ foyer, membres, onClose, onEditFoyer, onDe
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleFicheMenage} disabled={printingFiche} title="Générer la fiche ménage officielle PDF" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white text-xs font-bold rounded-lg transition">
-              {printingFiche ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
-              {printingFiche ? 'Génération…' : 'Fiche ménage'}
+            <button onClick={handleFicheMenage} disabled={generatingFiche} title="Aperçu de la fiche ménage officielle PDF" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white text-xs font-bold rounded-lg transition">
+              {generatingFiche ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+              {generatingFiche ? 'Génération…' : 'Fiche ménage'}
             </button>
             <button onClick={onEditFoyer} className="p-2 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600"><Edit2 className="h-4 w-4" /></button>
             <button onClick={onDeleteFoyer} className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>
           </div>
+
+          {/* Modale aperçu fiche ménage */}
+          {apercuFiche && (
+            <ModalApercu
+              titre={`Fiche ménage — ${foyer.code_menage}`}
+              sous_titre={`${membres.length} membre${membres.length > 1 ? 's' : ''} · ${foyer.fokontany || ''}`}
+              pdfUrl={apercuFiche.url}
+              loading={false}
+              nomFichier={`FICHE_MENAGE_${foyer.code_menage}.pdf`}
+              onClose={fermerApercu}
+              onTelecharger={handleTelechargerFiche}
+            />
+          )}
         </div>
 
         {/* Stats */}

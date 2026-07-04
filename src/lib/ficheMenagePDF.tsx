@@ -352,8 +352,10 @@ function FicheMenageDoc({ foyer, membres, cotAJour, docs, hist }: {
   );
 }
 
-// ── Chargement données ────────────────────────────────────────────
-async function loadHistorique(foyerId: string): Promise<{date:string;label:string}[]> {
+// ── Export pour usage externe ─────────────────────────────────────
+export { FicheMenageDoc as FicheMenageDocExport };
+
+export async function loadHistorique(foyerId: string): Promise<{date:string;label:string}[]> {
   const hist: {date:string;label:string;ts:string}[] = [];
   const {data:docs} = await supabase.from('demandes_documents').select('created_at,nom_document').eq('foyer_id',foyerId).in('statut',['Payé','Archivé']).order('created_at',{ascending:false}).limit(5);
   (docs||[]).forEach((d:any) => hist.push({ts:d.created_at,date:new Date(d.created_at).toLocaleDateString('fr-FR'),label:`${sf(d.nom_document)} - delivre`}));

@@ -3,6 +3,7 @@ import { Membre, Foyer } from '../types';
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib';
 import { X, Download, Loader2, FileText, User, Home as HomeIcon, GraduationCap, HeartPulse, ShieldAlert, Building2, Check, Printer } from 'lucide-react';
 import { imprimerFicheIndividuelle } from '../lib/ficheIndividuelle';
+import ModalApercu from './ModalApercu';
 
 interface Props {
   membre: Membre;
@@ -295,6 +296,7 @@ async function generatePDF(membre: Membre, foyer: Foyer, allMembres: Membre[], s
 export default function MembreProfil360({ membre, foyer, allMembres, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [loadingFiche, setLoadingFiche] = useState(false);
+  const [apercuFiche, setApercuFiche] = useState<{ url: string; bytes: Uint8Array } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [selected, setSelected] = useState<Set<SectionKey>>(new Set(SECTIONS.filter(s => s.defaultOn).map(s => s.key)));
 
@@ -308,9 +310,28 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
 
   const handleFicheOfficielle = async () => {
     setLoadingFiche(true);
-    try { await imprimerFicheIndividuelle(membre, foyer); }
-    catch (e) { alert('Erreur génération fiche : ' + e); }
+    try {
+      const { pdf } = await import('@react-pdf/renderer');
+      const React2 = await import('react');
+      const { FicheIndividuelleDocExport, loadHistMembre } = await import('../lib/ficheIndividuelle');
+      const hist = await loadHistMembre(membre.id, foyer.id);
+      const blob = await pdf(React2.default.createElement(FicheIndividuelleDocExport, { membre, foyer, hist })).toBlob();
+      const url = URL.createObjectURL(blob);
+      const buf = await blob.arrayBuffer();
+      setApercuFiche({ url, bytes: new Uint8Array(buf) });
+    } catch (e) { alert('Erreur génération fiche : ' + e); }
     setLoadingFiche(false);
+  };
+
+  const handleTelechargerFiche = async () => {
+    if (!apercuFiche) return;
+    const { telechargerPDF } = await import('../lib/documents');
+    await telechargerPDF(apercuFiche.bytes, `FICHE_${membre.nom.toUpperCase()}_${membre.prenom}.pdf`);
+  };
+
+  const fermerApercu = () => {
+    if (apercuFiche) URL.revokeObjectURL(apercuFiche.url);
+    setApercuFiche(null);
   };
 
   const handleDownload = async () => {
@@ -456,6 +477,7 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
   // ── Vue Sélection de sections ────────────────────────────
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -530,5 +552,18 @@ export default function MembreProfil360({ membre, foyer, allMembres, onClose }: 
         </div>
       </div>
     </div>
+
+    {apercuFiche && (
+      <ModalApercu
+        titre={`Fiche individuelle — ${membre.nom} ${membre.prenom}`}
+        sous_titre={`${membre.relation_chef || ''} · Foyer ${foyer.code_menage}`}
+        pdfUrl={apercuFiche.url}
+        loading={false}
+        nomFichier={`FICHE_${membre.nom.toUpperCase()}_${membre.prenom}.pdf`}
+        onClose={fermerApercu}
+        onTelecharger={handleTelechargerFiche}
+      />
+    )}
+    </>
   );
 }

@@ -332,7 +332,7 @@ function FicheIndividuelleDoc({ membre, foyer, hist }: {
 }
 
 // ── Chargement historique individuel ─────────────────────────────
-async function loadHistMembre(membreId: string, foyerId: string) {
+export async function loadHistMembre(membreId: string, foyerId: string) {
   const hist: { date: string; label: string; ts: string }[] = [];
 
   const { data: docs } = await supabase.from('demandes_documents')
@@ -350,6 +350,8 @@ async function loadHistMembre(membreId: string, foyerId: string) {
   hist.sort((a, b) => b.ts.localeCompare(a.ts));
   return hist.slice(0, 8).map(h => ({ date: h.date, label: h.label }));
 }
+
+export { FicheIndividuelleDoc as FicheIndividuelleDocExport };
 
 // ── Export ────────────────────────────────────────────────────────
 export async function imprimerFicheIndividuelle(membre: Membre, foyer: Foyer) {
