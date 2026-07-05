@@ -226,7 +226,6 @@ export default function App() {
             ['statistics', HeartPulse, 'Statistiques'],
             ['craad', BarChart2, 'CRAAD'],
             ['vie_comm', Users, 'Vie Communautaire'],
-            ['vie_comm', Users, 'Vie Communautaire'],
             ['finances', Landmark, 'Finances'],
             ['materials', Package, 'Matériels'],
             ['land', Building, 'Foncier'],
@@ -299,7 +298,6 @@ export default function App() {
         {activeTab === 'documents' && <DocumentsModule foyers={foyers} membres={membres} />}
         {activeTab === 'statistics' && <StatsView habitants={habitants} foyers={foyers} membres={membres} />}
         {activeTab === 'craad' && <CRAADModule foyers={foyers} membres={membres} />}
-        {activeTab === 'vie_comm' && <VieCommunautaireModule foyers={foyers} membres={membres} />}
         {activeTab === 'vie_comm' && <VieCommunautaireModule foyers={foyers} membres={membres} />}
         {activeTab === 'finances' && <FinancesModule foyers={foyers} membres={membres} />}
         {activeTab === 'materials' && (
