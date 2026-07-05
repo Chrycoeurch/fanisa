@@ -13,6 +13,7 @@ import FoncierModule from './components/FoncierModule';
 import PatrimoineModule from './components/PatrimoineModule';
 import StatsView from './components/StatsView';
 import CRAADModule from './components/CRAADModule';
+import VieCommunautaireModule from './components/VieCommunautaireModule';
 import { FOKONTANY_LIST } from './seedData';
 import {
   FolderLock, Users, HeartPulse, History, PlusCircle, Search,
@@ -29,7 +30,7 @@ export default function App() {
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'finances'|'materials'|'logs'|'land'|'patrimoine'>('annuaire');
+  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'logs'|'land'|'patrimoine'>('annuaire');
   const [searchQuery, setSearchQuery] = useState('');
   const [fokontanyFilter, setFokontanyFilter] = useState('Tous');
   const [statutFilter, setStatutFilter] = useState('Tous');
@@ -224,6 +225,8 @@ export default function App() {
             ['documents', FileSignature, 'Actes & Docs'],
             ['statistics', HeartPulse, 'Statistiques'],
             ['craad', BarChart2, 'CRAAD'],
+            ['vie_comm', Users, 'Vie Communautaire'],
+            ['vie_comm', Users, 'Vie Communautaire'],
             ['finances', Landmark, 'Finances'],
             ['materials', Package, 'Matériels'],
             ['land', Building, 'Foncier'],
@@ -296,6 +299,8 @@ export default function App() {
         {activeTab === 'documents' && <DocumentsModule foyers={foyers} membres={membres} />}
         {activeTab === 'statistics' && <StatsView habitants={habitants} foyers={foyers} membres={membres} />}
         {activeTab === 'craad' && <CRAADModule foyers={foyers} membres={membres} />}
+        {activeTab === 'vie_comm' && <VieCommunautaireModule foyers={foyers} membres={membres} />}
+        {activeTab === 'vie_comm' && <VieCommunautaireModule foyers={foyers} membres={membres} />}
         {activeTab === 'finances' && <FinancesModule foyers={foyers} membres={membres} />}
         {activeTab === 'materials' && (
           <MaterialsModule materiels={materiels}
