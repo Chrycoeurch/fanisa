@@ -43,18 +43,42 @@ export default function App() {
   const [editingMembre, setEditingMembre] = useState<Membre | undefined>();
   const [logSearch, setLogSearch] = useState('');
 
+  const [cotisationsMap, setCotisationsMap] = useState<Record<string, string>>({});
+  const [presencesMap, setPresencesMap] = useState<Record<string, {presents: number; total: number}>>({});
+
   // ── Chargement ───────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [{ data: f }, { data: m }, { data: l }] = await Promise.all([
+      const [{ data: f }, { data: m }, { data: l }, { data: cots }, { data: parts }] = await Promise.all([
         supabase.from('foyers').select('*').order('created_at', { ascending: false }),
         supabase.from('membres').select('*').order('created_at'),
         supabase.from('logs').select('*').order('date', { ascending: false }).limit(200),
+        supabase.from('cotisations').select('foyer_id, statut'),
+        supabase.from('evenements_participants').select('foyer_id, present'),
       ]);
       setFoyers((f as Foyer[]) || []);
       setMembres((m as Membre[]) || []);
       setLogs((l as Log[]) || []);
+
+      // Statut cotisation par foyer : À jour si au moins 1 cotisation à jour ce mois
+      const cotMap: Record<string, string> = {};
+      const moisCourant = new Date().toISOString().slice(0, 7);
+      (cots || []).forEach((c: any) => {
+        if (!cotMap[c.foyer_id]) cotMap[c.foyer_id] = 'En retard';
+        if (c.statut === 'À jour') cotMap[c.foyer_id] = 'À jour';
+      });
+      setCotisationsMap(cotMap);
+
+      // Présences réunion par foyer
+      const presMap: Record<string, {presents: number; total: number}> = {};
+      (parts || []).forEach((p: any) => {
+        if (!presMap[p.foyer_id]) presMap[p.foyer_id] = { presents: 0, total: 0 };
+        presMap[p.foyer_id].total++;
+        if (p.present) presMap[p.foyer_id].presents++;
+      });
+      setPresencesMap(presMap);
+
       setLoading(false);
     }
     load();
@@ -278,6 +302,8 @@ export default function App() {
                     key={f.id}
                     foyer={f}
                     membres={membres.filter(m => m.foyer_id === f.id)}
+                    cotisationStatut={cotisationsMap[f.id]}
+                    presenceReunion={presencesMap[f.id]}
                     onClick={() => setSelectedFoyer(f)}
                   />
                 ))}

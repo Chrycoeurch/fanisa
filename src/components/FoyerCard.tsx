@@ -5,10 +5,12 @@ import { Home, Users, MapPin, ChevronRight, UserCheck, AlertTriangle } from 'luc
 interface Props {
   foyer: Foyer;
   membres: Membre[];
+  cotisationStatut?: string;
+  presenceReunion?: { presents: number; total: number };
   onClick: () => void;
 }
 
-export default function FoyerCard({ foyer, membres, onClick }: Props) {
+export default function FoyerCard({ foyer, membres, cotisationStatut, presenceReunion, onClick }: Props) {
   const chef = membres.find(m => m.is_chef);
   const vulnerables = membres.filter(m => m.est_vulnerable).length;
   const alertes = membres.filter(m => m.hypertension !== 'Normal' || m.diabete !== 'Normal').length;
@@ -42,6 +44,18 @@ export default function FoyerCard({ foyer, membres, onClick }: Props) {
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{foyer.code_menage}</span>
                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${foyer.statut === 'Actif' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : foyer.statut === 'Dissous' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{foyer.statut}</span>
+                {/* Badge cotisation */}
+                {cotisationStatut && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cotisationStatut === 'À jour' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-red-100 text-red-700 border-red-300'}`}>
+                    {cotisationStatut === 'À jour' ? '✓ Cotis.' : '✗ Cotis.'}
+                  </span>
+                )}
+                {/* Badge présence réunion */}
+                {presenceReunion && presenceReunion.total > 0 && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${presenceReunion.presents >= presenceReunion.total * 0.5 ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
+                    {presenceReunion.presents}/{presenceReunion.total} réun.
+                  </span>
+                )}
                 {estIncomplet && <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">⚠ Incomplet</span>}
               </div>
               <p className="text-sm font-bold text-slate-800 mt-0.5">{chef ? `${chef.nom} ${chef.prenom}` : 'Chef non défini'}</p>

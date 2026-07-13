@@ -74,9 +74,9 @@ function PriorityButtons({ label, value, onChange }: { label: string; value: str
   return (
     <div>
       <label className="text-xs font-bold text-slate-500 uppercase block mb-2">{label}</label>
-      <div className="flex gap-3">
-        {(['Normal', 'Surveillance', 'Prioritaire']).map(v => (
-          <label key={v} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${value === v ? (v === 'Prioritaire' ? 'bg-red-600 text-white border-red-600' : v === 'Surveillance' ? 'bg-amber-500 text-white border-amber-500' : 'bg-emerald-600 text-white border-emerald-600') : 'bg-white text-slate-600 border-slate-200'}`}>
+      <div className="flex gap-2 flex-wrap">
+        {(['Normal', 'Surveillance', 'Prioritaire', 'Non applicable']).map(v => (
+          <label key={v} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${value === v ? (v === 'Prioritaire' ? 'bg-red-600 text-white border-red-600' : v === 'Surveillance' ? 'bg-amber-500 text-white border-amber-500' : v === 'Non applicable' ? 'bg-slate-400 text-white border-slate-400' : 'bg-emerald-600 text-white border-emerald-600') : 'bg-white text-slate-600 border-slate-200'}`}>
             <input type="radio" className="hidden" checked={value === v} onChange={() => onChange(v)} />{v}
           </label>
         ))}
@@ -603,16 +603,32 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   <p className="text-[11px] text-slate-400 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">Téléphone et email disponibles à partir de 16 ans.</p>
                 )}
 
-                {/* Poids & Taille */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Poids (kg)</label>
-                    <input type="number" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 65" step="0.1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                {/* Poids & Taille & IMC */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Poids (kg)</label>
+                      <input type="number" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 65" step="0.1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Taille (cm)</label>
+                      <input type="number" value={taille} onChange={e => setTaille(e.target.value)} placeholder="Ex: 170" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Taille (cm)</label>
-                    <input type="number" value={taille} onChange={e => setTaille(e.target.value)} placeholder="Ex: 170" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                  </div>
+                  {poids && taille && parseFloat(taille) > 0 && (() => {
+                    const imc = parseFloat(poids) / Math.pow(parseFloat(taille) / 100, 2);
+                    const cat = imc < 18.5 ? { label: 'Insuffisance pondérale', color: 'text-blue-600 bg-blue-50 border-blue-200' }
+                      : imc < 25 ? { label: 'Poids normal', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' }
+                      : imc < 30 ? { label: 'Surpoids', color: 'text-amber-600 bg-amber-50 border-amber-200' }
+                      : { label: 'Obésité', color: 'text-red-600 bg-red-50 border-red-200' };
+                    return (
+                      <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${cat.color}`}>
+                        <span className="text-xs font-bold uppercase">IMC</span>
+                        <span className="text-lg font-black">{imc.toFixed(1)}</span>
+                        <span className="text-xs font-semibold">{cat.label}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Statut */}
@@ -996,15 +1012,31 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Poids (kg)</label>
-                    <input type="number" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 65" step="0.1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                <div className="space-y-2 border-t border-slate-100 pt-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Poids (kg)</label>
+                      <input type="number" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 65" step="0.1" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Taille (cm)</label>
+                      <input type="number" value={taille} onChange={e => setTaille(e.target.value)} placeholder="Ex: 170" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Taille (cm)</label>
-                    <input type="number" value={taille} onChange={e => setTaille(e.target.value)} placeholder="Ex: 170" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                  </div>
+                  {poids && taille && parseFloat(taille) > 0 && (() => {
+                    const imc = parseFloat(poids) / Math.pow(parseFloat(taille) / 100, 2);
+                    const cat = imc < 18.5 ? { label: 'Insuffisance pondérale', color: 'text-blue-600 bg-blue-50 border-blue-200' }
+                      : imc < 25 ? { label: 'Poids normal', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' }
+                      : imc < 30 ? { label: 'Surpoids', color: 'text-amber-600 bg-amber-50 border-amber-200' }
+                      : { label: 'Obésité', color: 'text-red-600 bg-red-50 border-red-200' };
+                    return (
+                      <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${cat.color}`}>
+                        <span className="text-xs font-bold uppercase">IMC</span>
+                        <span className="text-lg font-black">{imc.toFixed(1)}</span>
+                        <span className="text-xs font-semibold">{cat.label}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">9. Contact d'urgence</h3>

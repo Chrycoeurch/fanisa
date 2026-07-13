@@ -349,12 +349,27 @@ export default function FinancesModule({ foyers, membres }: Props) {
     </div>
   );
 
-  // ── Tableau de bord (essentiel uniquement) ──────────────────
+  // ── Tableau de bord enrichi ──────────────────────────────────
+  const today = new Date().toISOString().split('T')[0];
+  const moisCourant = new Date().toISOString().slice(0, 7);
+  const anneeCourante = new Date().getFullYear().toString();
   const transactionsValideesAll = transactionsCaisse.filter(t => t.statut === 'Validée');
+  const txJour     = transactionsValideesAll.filter(t => t.created_at?.startsWith(today));
+  const txMois     = transactionsValideesAll.filter(t => t.created_at?.startsWith(moisCourant));
+  const txAnnee    = transactionsValideesAll.filter(t => t.created_at?.startsWith(anneeCourante));
+  const totalJour  = txJour.reduce((s, t) => s + (t.montant_total || 0), 0);
+  const totalMois  = txMois.reduce((s, t) => s + (t.montant_total || 0), 0);
+  const totalAnnee = txAnnee.reduce((s, t) => s + (t.montant_total || 0), 0);
   const totalEncaisseDash = transactionsValideesAll.reduce((s, t) => s + (t.montant_total || 0), 0);
   const totalMvola = transactionsValideesAll.filter(t => t.mode_paiement === 'Mobile Money').reduce((s, t) => s + (t.montant_total || 0), 0);
   const totalResteACredit = creances.filter(c => c.statut === 'Non soldée').reduce((s, c) => s + (c.montant || 0), 0);
   const nbCreancesNonSoldees = creances.filter(c => c.statut === 'Non soldée').length;
+  // Recettes par catégorie (module_origine)
+  const parCategorie: Record<string, number> = {};
+  transactionsValideesAll.forEach(t => {
+    const mod = (t as any).module_origine || 'Autres';
+    parCategorie[mod] = (parCategorie[mod] || 0) + (t.montant_total || 0);
+  });
 
   const MENUS: { key: SubMenu; label: string; icon: any }[] = [
     { key: 'dashboard',   label: 'Tableau de bord', icon: BarChart2 },
@@ -394,32 +409,72 @@ export default function FinancesModule({ foyers, membres }: Props) {
 
           {/* ── TABLEAU DE BORD ── */}
           {subMenu === 'dashboard' && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="bg-white border-2 border-emerald-200 rounded-xl p-4">
-                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Encaissements</p>
-                <p className="text-xl font-black text-emerald-600">{fmt(totalEncaisseDash)}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{transactionsValideesAll.length} transaction{transactionsValideesAll.length > 1 ? 's' : ''}</p>
+            <div className="space-y-4">
+              {/* Ligne 1 : temps réel */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white border-2 border-emerald-200 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Recettes du jour</p>
+                  <p className="text-xl font-black text-emerald-600">{fmt(totalJour)}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{txJour.length} reçu{txJour.length > 1 ? 's' : ''}</p>
+                </div>
+                <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Recettes du mois</p>
+                  <p className="text-xl font-black text-blue-600">{fmt(totalMois)}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{txMois.length} reçu{txMois.length > 1 ? 's' : ''}</p>
+                </div>
+                <div className="bg-white border-2 border-indigo-200 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Recettes annuelles</p>
+                  <p className="text-xl font-black text-indigo-600">{fmt(totalAnnee)}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{txAnnee.length} transaction{txAnnee.length > 1 ? 's' : ''}</p>
+                </div>
+                <div className="bg-white border-2 border-slate-200 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total reçus émis</p>
+                  <p className="text-xl font-black text-slate-800">{transactionsValideesAll.length}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">depuis le début</p>
+                </div>
               </div>
-              <div className="bg-white border-2 border-red-200 rounded-xl p-4">
-                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Dépenses</p>
-                <p className="text-xl font-black text-red-600">{fmt(totalDep)}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{depenses.length} dépense{depenses.length > 1 ? 's' : ''}</p>
+              {/* Ligne 2 : crédits et autres */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white border-2 border-red-200 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Dépenses</p>
+                  <p className="text-xl font-black text-red-600">{fmt(totalDep)}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{depenses.length} dépense{depenses.length > 1 ? 's' : ''}</p>
+                </div>
+                <div className="bg-white border-2 border-amber-200 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Créances ({nbCreancesNonSoldees})</p>
+                  <p className="text-xl font-black text-amber-600">{fmt(totalResteACredit)}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">reste à payer</p>
+                </div>
+                <div className="bg-white border-2 border-purple-200 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Dons</p>
+                  <p className="text-xl font-black text-purple-600">{fmt(totalDons)}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{dons.length} don{dons.length > 1 ? 's' : ''}</p>
+                </div>
+                <div className="bg-white border-2 border-cyan-200 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Mobile Money</p>
+                  <p className="text-xl font-black text-cyan-600">{fmt(totalMvola)}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Mvola / Orange</p>
+                </div>
               </div>
-              <div className="bg-white border-2 border-purple-200 rounded-xl p-4">
-                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Dons</p>
-                <p className="text-xl font-black text-purple-600">{fmt(totalDons)}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{dons.length} don{dons.length > 1 ? 's' : ''}</p>
-              </div>
-              <div className="bg-white border-2 border-amber-200 rounded-xl p-4">
-                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Reste à payer (crédit)</p>
-                <p className="text-xl font-black text-amber-600">{fmt(totalResteACredit)}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{nbCreancesNonSoldees} créance{nbCreancesNonSoldees > 1 ? 's' : ''}</p>
-              </div>
-              <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
-                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Paiement Mvola</p>
-                <p className="text-xl font-black text-blue-600">{fmt(totalMvola)}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Mobile Money</p>
-              </div>
+              {/* Recettes par catégorie */}
+              {Object.keys(parCategorie).length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-xl p-5">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Recettes par catégorie</h3>
+                  <div className="space-y-2">
+                    {Object.entries(parCategorie).sort((a,b) => b[1]-a[1]).map(([cat, montant]) => (
+                      <div key={cat}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-semibold text-slate-700">{cat}</span>
+                          <span className="font-bold text-emerald-600">{fmt(montant)}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-1.5">
+                          <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${totalEncaisseDash > 0 ? (montant/totalEncaisseDash)*100 : 0}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
