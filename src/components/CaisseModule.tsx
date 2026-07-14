@@ -6,7 +6,7 @@ import {
   Wallet, Search, User, Home, Receipt, Trash2, CheckCircle,
   Loader2, X, Printer, ShoppingCart, Building2, FileText,
   CreditCard, Banknote, Smartphone, ChevronDown, ChevronLeft, ChevronRight, AlertCircle,
-  Package, BarChart2, Clock, Calendar, RotateCcw, Filter, Users, Hourglass
+  Package, BarChart2, Clock, Calendar, RotateCcw, Filter, Users, Hourglass, Download, Plus, Save
 } from 'lucide-react';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; onDataChange?: () => void; }
@@ -96,8 +96,16 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
   const [filtreRecu, setFiltreRecu] = useState('');
   const [filtreDateDebut, setFiltreDateDebut] = useState('');
   const [filtreDateFin, setFiltreDateFin] = useState('');
+  const [filtreDocType, setFiltreDocType] = useState(''); // filtre précis document
   const [transactionModules, setTransactionModules] = useState<Record<string, string[]>>({});
   const [transactionNbOps, setTransactionNbOps] = useState<Record<string, number>>({});
+  const [transactionOps, setTransactionOps] = useState<Record<string, any[]>>({}); // détails ops par transaction
+  const [expandedTx, setExpandedTx] = useState<Set<string>>(new Set()); // lignes expandées
+
+  // Paiement libre (légalisation, timbre, etc.)
+  const [showPaiementLibre, setShowPaiementLibre] = useState(false);
+  const [paiementLibreForm, setPaiementLibreForm] = useState({ libelle: '', montant: '', usager: '', agent: 'Agent Caisse', mode: 'Espèces' });
+  const [savingPaiementLibre, setSavingPaiementLibre] = useState(false);
 
   // Annulation
   const [showAnnulModal, setShowAnnulModal] = useState<TransactionCaisse | null>(null);
@@ -140,21 +148,27 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
     const { data } = await supabase.from('transactions_caisse').select('*').order('created_at', { ascending: false });
     const txs = (data || []) as TransactionCaisse[];
     setTransactions(txs);
-    // Charger les modules + nb opérations par transaction
+    // Charger les modules + nb opérations + détails par transaction
     if (txs.length > 0) {
       const ids = txs.map(t => t.id);
-      const { data: ops } = await supabase.from('operations_caisse').select('transaction_id, module_origine').in('transaction_id', ids);
+      const { data: ops } = await supabase.from('operations_caisse')
+        .select('transaction_id, module_origine, type_prestation, montant, quantite, metadata')
+        .in('transaction_id', ids);
       const modMap: Record<string, Set<string>> = {};
       const cntMap: Record<string, number> = {};
+      const opsMap: Record<string, any[]> = {};
       (ops || []).forEach((o: any) => {
         if (!modMap[o.transaction_id]) modMap[o.transaction_id] = new Set();
         modMap[o.transaction_id].add(o.module_origine);
         cntMap[o.transaction_id] = (cntMap[o.transaction_id] || 0) + 1;
+        if (!opsMap[o.transaction_id]) opsMap[o.transaction_id] = [];
+        opsMap[o.transaction_id].push(o);
       });
       const modResult: Record<string, string[]> = {};
       Object.entries(modMap).forEach(([k, v]) => { modResult[k] = [...v]; });
       setTransactionModules(modResult);
       setTransactionNbOps(cntMap);
+      setTransactionOps(opsMap);
     }
     setLoadingHisto(false);
   }, []);
@@ -452,6 +466,12 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
     if (filtreModule && !(transactionModules[t.id] || []).includes(filtreModule)) return false;
     if (filtreDateDebut && t.created_at < filtreDateDebut) return false;
     if (filtreDateFin && t.created_at > filtreDateFin + 'T23:59:59') return false;
+    // Filtre précis par type de prestation (document ou cotisation)
+    if (filtreDocType) {
+      const ops = transactionOps[t.id] || [];
+      const match = ops.some(o => (o.type_prestation || '').toLowerCase().includes(filtreDocType.toLowerCase()));
+      if (!match) return false;
+    }
     return true;
   });
   const totalPagesHisto = Math.max(1, Math.ceil(filteredTransactions.length / PAGE_SIZE));
@@ -459,8 +479,69 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
   const totalFiltre = filteredTransactions.filter(t => t.statut === 'Validée').reduce((s, t) => s + t.montant_total, 0);
 
   const resetFiltresHisto = () => {
-    setFiltreModule(''); setFiltreAgent(''); setFiltreMode(''); setFiltreUsager(''); setFiltreRecu('');
-    setFiltreDateDebut(''); setFiltreDateFin(''); setPageHisto(1);
+    setFiltreModule(''); setFiltreAgent(''); setFiltreMode(''); setFiltreUsager('');
+    setFiltreRecu(''); setFiltreDateDebut(''); setFiltreDateFin(''); setFiltreDocType(''); setPageHisto(1);
+  };
+
+  // ── Export Excel filtré ────────────────────────────────────────
+  const exportExcelHistorique = async () => {
+    const XLSX = await import('xlsx');
+    const rows = filteredTransactions.map(t => {
+      const ops = transactionOps[t.id] || [];
+      const prestations = ops.map(o => o.type_prestation).filter(Boolean).join(' + ');
+      return {
+        'N° Reçu': t.numero_recu,
+        'Date': new Date(t.created_at).toLocaleDateString('fr-FR'),
+        'Heure': new Date(t.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        'Usager': t.nom_usager,
+        'Prestations': prestations || (transactionModules[t.id] || []).join(', '),
+        'Nb opérations': transactionNbOps[t.id] || 1,
+        'Montant (Ar)': t.montant_total,
+        'Mode paiement': t.mode_paiement,
+        'Agent': t.agent,
+        'Statut': t.statut,
+        'Motif annulation': t.motif_annulation || '',
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Largeurs colonnes
+    ws['!cols'] = [{ wch: 18 }, { wch: 12 }, { wch: 8 }, { wch: 25 }, { wch: 35 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 10 }, { wch: 25 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Caisse');
+    const periode = filtreDateDebut && filtreDateFin ? `_${filtreDateDebut}_${filtreDateFin}` : '';
+    XLSX.writeFile(wb, `CAISSE_FANISA${periode}_${new Date().toLocaleDateString('fr-FR').replace(/\//g,'-')}.xlsx`);
+  };
+
+  // ── Paiement libre (légalisation, timbre, autres) ─────────────
+  const creerPaiementLibre = async () => {
+    if (!paiementLibreForm.libelle.trim() || !paiementLibreForm.montant || !paiementLibreForm.usager.trim()) {
+      alert('Libellé, montant et usager sont obligatoires.'); return;
+    }
+    setSavingPaiementLibre(true);
+    const montant = parseFloat(paiementLibreForm.montant);
+    const annee = new Date().getFullYear();
+    const { data: lastTx } = await supabase.from('transactions_caisse').select('numero_recu').order('created_at', { ascending: false }).limit(1);
+    const lastNum = lastTx?.[0]?.numero_recu ? parseInt(lastTx[0].numero_recu.split('-')[2] || '0') : 0;
+    const numero_recu = `RC-${annee}-${String(lastNum + 1).padStart(6, '0')}`;
+    await supabase.from('transactions_caisse').insert({
+      numero_recu, nom_usager: paiementLibreForm.usager, montant_total: montant,
+      mode_paiement: paiementLibreForm.mode, agent: paiementLibreForm.agent,
+      statut: 'Validée', type_paiement: 'Paiement libre',
+    });
+    setShowPaiementLibre(false);
+    setPaiementLibreForm({ libelle: '', montant: '', usager: '', agent: 'Agent Caisse', mode: 'Espèces' });
+    setSavingPaiementLibre(false);
+    await loadHistorique();
+    onDataChange?.();
+  };
+
+  // Toggle expand sous-détails
+  const toggleExpand = (id: string) => {
+    setExpandedTx(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -687,7 +768,15 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
         <div className="p-4 space-y-3 border-b border-slate-100">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Filter className="h-3.5 w-3.5" />Filtres</h3>
-            <button onClick={resetFiltresHisto} className="text-xs text-slate-400 hover:text-red-500 font-semibold flex items-center gap-1"><RotateCcw className="h-3 w-3" />Réinitialiser</button>
+            <div className="flex items-center gap-2">
+              <button onClick={resetFiltresHisto} className="text-xs text-slate-400 hover:text-red-500 font-semibold flex items-center gap-1"><RotateCcw className="h-3 w-3" />Réinitialiser</button>
+              <button onClick={exportExcelHistorique} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg">
+                <Download className="h-3.5 w-3.5" />Excel
+              </button>
+              <button onClick={() => setShowPaiementLibre(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg">
+                <Plus className="h-3.5 w-3.5" />Paiement libre
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <input value={filtreUsager} onChange={e => { setFiltreUsager(e.target.value); setPageHisto(1); }} placeholder="Usager..." className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
@@ -701,6 +790,7 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
               <option value="">Tous modules</option>
               {Object.keys(MODULE_COLORS).map(m => <option key={m} value={m}>{m}</option>)}
             </select>
+            <input value={filtreDocType} onChange={e => { setFiltreDocType(e.target.value); setPageHisto(1); }} placeholder="Type précis (ex: Certificat de résidence, cotisation...)" className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500 col-span-1 md:col-span-2" />
             <input type="date" value={filtreDateDebut} onChange={e => { setFiltreDateDebut(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
             <input type="date" value={filtreDateFin} onChange={e => { setFiltreDateFin(e.target.value); setPageHisto(1); }} className="border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-500" />
           </div>
@@ -726,28 +816,67 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
                 <th className="p-3 text-center text-slate-500">⋯</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {histoPage.map(t => (
-                  <tr key={t.id} className={`hover:bg-slate-50 ${t.statut === 'Annulée' ? 'opacity-50' : ''}`}>
-                    <td className="p-3 font-mono text-emerald-600 font-bold">{t.numero_recu}</td>
-                    <td className="p-3 text-slate-700">{t.nom_usager}</td>
-                    <td className="p-3"><div className="flex gap-1 flex-wrap">{(transactionModules[t.id] || []).map(m => <span key={m} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${moduleColor(m)}`}>{m}</span>)}</div></td>
-                    <td className="p-3 text-center text-slate-500">{transactionNbOps[t.id] || '-'}</td>
-                    <td className="p-3 text-right font-bold text-slate-900">{fmt(t.montant_total)}</td>
-                    <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${MODE_COLORS[t.mode_paiement] || 'bg-slate-100'}`}>{t.mode_paiement}</span></td>
-                    <td className="p-3 text-slate-500">{t.agent}</td>
-                    <td className="p-3 text-slate-400">{new Date(t.created_at).toLocaleDateString('fr-FR')} {new Date(t.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td className="p-3 text-center">
-                      {t.statut === 'Validée' ? <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Validée</span> : <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full" title={t.motif_annulation || ''}>Annulée</span>}
-                    </td>
-                    <td className="p-3 text-center">
-                      {t.statut === 'Validée' && (
-                        <button onClick={() => setShowAnnulModal(t)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition" title="Annuler cette transaction (statut uniquement, rien n'est supprimé)">
-                          <RotateCcw className="h-3.5 w-3.5" />Annuler
-                        </button>
+                {histoPage.map(t => {
+                  const nbOps = transactionNbOps[t.id] || 0;
+                  const isExpanded = expandedTx.has(t.id);
+                  const ops = transactionOps[t.id] || [];
+                  return (
+                    <React.Fragment key={t.id}>
+                      <tr className={`hover:bg-slate-50 ${t.statut === 'Annulée' ? 'opacity-50' : ''}`}>
+                        <td className="p-3 font-mono text-emerald-600 font-bold">{t.numero_recu}</td>
+                        <td className="p-3 text-slate-700">{t.nom_usager}</td>
+                        <td className="p-3"><div className="flex gap-1 flex-wrap">{(transactionModules[t.id] || []).map(m => <span key={m} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${moduleColor(m)}`}>{m}</span>)}</div></td>
+                        <td className="p-3 text-center">
+                          {nbOps > 0 ? (
+                            <button onClick={() => toggleExpand(t.id)} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition ${isExpanded ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50'}`}>
+                              {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                              {nbOps} op.
+                            </button>
+                          ) : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="p-3 text-right font-bold text-slate-900">{fmt(t.montant_total)}</td>
+                        <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${MODE_COLORS[t.mode_paiement] || 'bg-slate-100'}`}>{t.mode_paiement}</span></td>
+                        <td className="p-3 text-slate-500">{t.agent}</td>
+                        <td className="p-3 text-slate-400">{new Date(t.created_at).toLocaleDateString('fr-FR')} {new Date(t.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td className="p-3 text-center">
+                          {t.statut === 'Validée' ? <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Validée</span> : <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full" title={t.motif_annulation || ''}>Annulée</span>}
+                        </td>
+                        <td className="p-3 text-center">
+                          {t.statut === 'Validée' && (
+                            <button onClick={() => setShowAnnulModal(t)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition" title="Annuler cette transaction">
+                              <RotateCcw className="h-3.5 w-3.5" />Annuler
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {/* Sous-détails des opérations */}
+                      {isExpanded && ops.length > 0 && (
+                        <tr>
+                          <td colSpan={10} className="bg-indigo-50 border-l-4 border-l-indigo-400 px-0 py-0">
+                            <table className="w-full text-[11px]">
+                              <thead><tr className="bg-indigo-100">
+                                <th className="px-8 py-1.5 text-left text-indigo-600 font-bold">Prestation</th>
+                                <th className="px-3 py-1.5 text-left text-indigo-600 font-bold">Module</th>
+                                <th className="px-3 py-1.5 text-right text-indigo-600 font-bold">Montant</th>
+                                <th className="px-3 py-1.5 text-center text-indigo-600 font-bold">Qté</th>
+                              </tr></thead>
+                              <tbody>
+                                {ops.map((op, i) => (
+                                  <tr key={i} className="border-t border-indigo-100">
+                                    <td className="px-8 py-1.5 text-slate-700">{op.type_prestation || '—'}</td>
+                                    <td className="px-3 py-1.5 text-slate-500">{op.module_origine}</td>
+                                    <td className="px-3 py-1.5 text-right font-semibold text-slate-800">{fmt(op.montant * (op.quantite || 1))}</td>
+                                    <td className="px-3 py-1.5 text-center text-slate-500">×{op.quantite || 1}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                  </tr>
-                ))}
+                    </React.Fragment>
+                  );
+                })}
                 {histoPage.length === 0 && <tr><td colSpan={10} className="text-center text-slate-400 py-10">Aucune transaction trouvée</td></tr>}
               </tbody>
             </table>
@@ -823,6 +952,63 @@ export default function CaisseModule({ foyers, membres, onDataChange }: Props) {
               <button onClick={() => { setShowAnnulModal(null); setMotifAnnulation(''); }} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600">Fermer</button>
               <button onClick={handleAnnuler} disabled={annulingId === showAnnulModal.id || !motifAnnulation.trim()} className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2">
                 {annulingId === showAnnulModal.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}Confirmer l'annulation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODALE PAIEMENT LIBRE ── */}
+      {showPaiementLibre && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Paiement libre</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Légalisation, timbre, attestation non répertoriée, etc.</p>
+              </div>
+              <button onClick={() => setShowPaiementLibre(false)}><X className="h-5 w-5 text-slate-400" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Libellé / Objet *</label>
+                <input value={paiementLibreForm.libelle} onChange={e => setPaiementLibreForm(f => ({ ...f, libelle: e.target.value }))}
+                  placeholder="Ex: Légalisation de signature, Timbre fiscal, Attestation de vie..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Usager (nom du payeur) *</label>
+                <input value={paiementLibreForm.usager} onChange={e => setPaiementLibreForm(f => ({ ...f, usager: e.target.value }))}
+                  placeholder="Nom et prénom du payeur" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Montant (Ar) *</label>
+                  <input type="number" value={paiementLibreForm.montant} onChange={e => setPaiementLibreForm(f => ({ ...f, montant: e.target.value }))}
+                    placeholder="0" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Mode de paiement</label>
+                  <select value={paiementLibreForm.mode} onChange={e => setPaiementLibreForm(f => ({ ...f, mode: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white outline-none">
+                    {MODES_PAIEMENT.map(m => <option key={m.v} value={m.v}>{m.v}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Agent caissier</label>
+                <input value={paiementLibreForm.agent} onChange={e => setPaiementLibreForm(f => ({ ...f, agent: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-xs text-indigo-700">
+              ℹ️ Ce paiement sera enregistré directement comme transaction validée dans la Caisse. Un numéro de reçu sera généré automatiquement.
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowPaiementLibre(false)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600">Annuler</button>
+              <button onClick={creerPaiementLibre} disabled={savingPaiementLibre || !paiementLibreForm.libelle || !paiementLibreForm.montant || !paiementLibreForm.usager}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition">
+                {savingPaiementLibre ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Enregistrer & Générer reçu
               </button>
             </div>
           </div>

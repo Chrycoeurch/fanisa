@@ -18,7 +18,7 @@ import { FOKONTANY_LIST } from './seedData';
 import {
   FolderLock, Users, HeartPulse, History, PlusCircle, Search,
   RotateCcw, ShieldCheck, Building, FileSignature, Landmark,
-  Package, Loader2, Home, Filter, Award, BarChart2
+  Package, Loader2, Home, Filter, Award, BarChart2, Download
 } from 'lucide-react';
 
 export default function App() {
@@ -291,7 +291,58 @@ export default function App() {
                   </button>
                 )}
               </div>
-              <p className="text-xs text-slate-500"><strong className="text-indigo-600">{filteredFoyers.length}</strong> foyer{filteredFoyers.length > 1 ? 's' : ''} · <strong>{totalMembres}</strong> personnes enregistrées</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500"><strong className="text-indigo-600">{filteredFoyers.length}</strong> foyer{filteredFoyers.length > 1 ? 's' : ''} · <strong>{totalMembres}</strong> personnes enregistrées</p>
+                <button onClick={async () => {
+                  const XLSX = await import('xlsx');
+                  // Feuille 1 : Foyers
+                  const rowsFoyers = filteredFoyers.map(f => {
+                    const chef = membres.find(m => m.foyer_id === f.id && m.is_chef);
+                    return {
+                      'Code ménage': f.code_menage, 'Statut': f.statut,
+                      'Chef de ménage': chef ? `${chef.nom} ${chef.prenom}` : '—',
+                      'Adresse': f.adresse || '', 'Fokontany': f.fokontany || '',
+                      'Commune': f.commune || '', 'District': f.district || '',
+                      'Nb membres': f.nombre_membres || 0, 'Type logement': f.type_logement || '',
+                      'Matériau mur': f.materiau_mur || '', 'Eau': f.eau_source || '',
+                      'Électricité': f.a_electricite ? 'Oui' : 'Non',
+                      'Cotisation': cotisationsMap[f.id] || 'Non renseigné',
+                      'Année installation': f.annee_installation || '',
+                    };
+                  });
+                  // Feuille 2 : Membres
+                  const rowsMembres = filteredFoyers.flatMap(f =>
+                    membres.filter(m => m.foyer_id === f.id).map(m => {
+                      const age = m.date_naissance ? new Date().getFullYear() - new Date(m.date_naissance).getFullYear() : '';
+                      const imc = m.poids && m.taille ? (m.poids / Math.pow(m.taille/100, 2)).toFixed(1) : '';
+                      return {
+                        'Code ménage': f.code_menage, 'Nom': m.nom, 'Prénom': m.prenom,
+                        'Sexe': m.sexe, 'Âge': age, 'Date naissance': m.date_naissance || '',
+                        'Lien': m.relation_chef || (m.is_chef ? 'Chef' : ''),
+                        'CIN': m.cin || '', 'Téléphone': m.telephone || '',
+                        'Profession': m.profession || '', 'Niveau étude': m.niveau_etude || '',
+                        'Situation matrimoniale': m.situation_matrimoniale || '',
+                        'Nationalité': m.nationalite || '', 'Religion': m.religion || '',
+                        'Vulnérable': m.est_vulnerable ? 'Oui' : 'Non',
+                        'Statut': m.statut, 'Poids (kg)': m.poids || '',
+                        'Taille (cm)': m.taille || '', 'IMC': imc,
+                        'Hypertension': m.hypertension || '', 'Diabète': m.diabete || '',
+                        'Groupe sanguin': m.groupe_sanguin || '',
+                      };
+                    })
+                  );
+                  const wb = XLSX.utils.book_new();
+                  const wsFoyers = XLSX.utils.json_to_sheet(rowsFoyers);
+                  wsFoyers['!cols'] = [8,25,25,25,18,16,16,10,18,16,18,12,14,12].map(wch => ({ wch }));
+                  const wsMembres = XLSX.utils.json_to_sheet(rowsMembres);
+                  wsMembres['!cols'] = [10,15,18,6,5,14,12,14,14,18,16,20,12,12,10,8,8,8,8,14,12,12].map(wch => ({ wch }));
+                  XLSX.utils.book_append_sheet(wb, wsFoyers, 'Foyers');
+                  XLSX.utils.book_append_sheet(wb, wsMembres, 'Membres');
+                  XLSX.writeFile(wb, `FANISA_Export_${new Date().toLocaleDateString('fr-FR').replace(/\//g,'-')}.xlsx`);
+                }} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg transition">
+                  <Download className="h-3.5 w-3.5" />Export Excel
+                </button>
+              </div>
             </div>
 
             {/* Grid foyers */}

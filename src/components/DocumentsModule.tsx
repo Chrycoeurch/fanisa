@@ -162,7 +162,26 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
                   <div className="grid grid-cols-2 gap-3">
                     <div><label className="text-xs text-slate-500 block mb-1">Date du décès *</label><input type="date" value={extraData.dateDeces || ''} onChange={e => setExtraData((p: any) => ({ ...p, dateDeces: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
                     <div><label className="text-xs text-slate-500 block mb-1">Lieu du décès *</label><input value={extraData.lieuDeces || ''} onChange={e => setExtraData((p: any) => ({ ...p, lieuDeces: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
-                    <div className="col-span-2"><label className="text-xs text-slate-500 block mb-1">Déclarant</label><input value={extraData.declarant || ''} onChange={e => setExtraData((p: any) => ({ ...p, declarant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">Déclarant *</label>
+                      <select value={extraData.declarant || ''} onChange={e => setExtraData((p: any) => ({ ...p, declarant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-slate-400">
+                        <option value="">-- Choisir parmi les membres --</option>
+                        {membresDuFoyer.filter(m => m.id !== selectedMembre?.id).map(m => (
+                          <option key={m.id} value={`${m.nom} ${m.prenom}`}>{m.nom} {m.prenom} ({m.relation_chef || (m.is_chef ? 'Chef' : '—')})</option>
+                        ))}
+                        <option value="__autre__">Autre personne (saisie libre)</option>
+                      </select>
+                      {extraData.declarant === '__autre__' && (
+                        <input onChange={e => setExtraData((p: any) => ({ ...p, declarant: e.target.value }))} placeholder="Nom et prénom du déclarant..." className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" />
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">Lien avec le défunt</label>
+                      <select value={extraData.lienDeclarant || ''} onChange={e => setExtraData((p: any) => ({ ...p, lienDeclarant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-slate-400">
+                        <option value="">-- Lien --</option>
+                        {['Époux/Épouse','Fils/Fille','Père/Mère','Frère/Sœur','Grand-parent','Petit-enfant','Voisin(e)','Responsable légal','Autre'].map(l => <option key={l}>{l}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
