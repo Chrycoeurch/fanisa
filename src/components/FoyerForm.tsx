@@ -130,8 +130,8 @@ function UrgencyButtons({ label, value, onChange }: { label: string; value: stri
   );
 }
 
-type Tab = 'general' | 'logement' | 'eau_assainissement' | 'energie_dechets' | 'connectivite' | 'risques' | 'vulnerabilite';
-const TAB_ORDER: Tab[] = ['general', 'logement', 'eau_assainissement', 'energie_dechets', 'connectivite', 'risques', 'vulnerabilite'];
+type Tab = 'general' | 'logement' | 'eau_assainissement' | 'energie_dechets' | 'connectivite' | 'risques';
+const TAB_ORDER: Tab[] = ['general', 'logement', 'eau_assainissement', 'energie_dechets', 'connectivite', 'risques'];
 
 export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
@@ -316,13 +316,6 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
       if (catastrophe_subie === undefined) return 'Veuillez préciser si le ménage a subi une catastrophe.';
       if (!conditions_vie) return 'Les conditions de vie sont obligatoires.';
     }
-    if (tab === 'vulnerabilite') {
-      if (est_vulnerable === undefined) return 'Veuillez préciser si le ménage est vulnérable.';
-      if (difficulte_alimentaire === undefined) return 'Veuillez préciser les difficultés alimentaires.';
-      if (affecte_catastrophe === undefined) return 'Veuillez préciser si le ménage a été affecté par une catastrophe.';
-      if (logement_necessite_travaux === undefined) return 'Veuillez préciser si le logement nécessite des travaux.';
-      if (!niveau_vulnerabilite_global) return 'Le niveau global de vulnérabilité est obligatoire.';
-    }
     return null;
   };
 
@@ -402,7 +395,6 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
     { key: 'energie_dechets', label: 'Énergie & Déchets', icon: Trash2 },
     { key: 'connectivite', label: 'Connectivité', icon: Wifi },
     { key: 'risques', label: 'Risques & Vie', icon: AlertTriangle },
-    { key: 'vulnerabilite', label: 'Vulnérabilité', icon: HeartCrack },
   ] as const;
 
   return (
@@ -659,125 +651,6 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
               </div>
             )}
 
-            {/* ── VULNÉRABILITÉ DU MÉNAGE ── */}
-            {tab === 'vulnerabilite' && (
-              <div className="space-y-5">
-                <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg p-3">Module Vulnérabilité du ménage — rempli une seule fois, concerne l'ensemble du foyer.</p>
-
-                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">1. Situation de vulnérabilité</h3>
-                <YesNo label="Le ménage est-il considéré comme vulnérable ?" value={est_vulnerable} onChange={setEstVulnerable} />
-                {est_vulnerable && (
-                  <>
-                    <CheckGroup label="Raisons de vulnérabilité" options={VULNERABILITE_RAISONS} values={vulnerabilite_raisons} onToggle={v => setVulnerabiliteRaisons(prev => toggleArr(prev, v))} />
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Précision</label>
-                      <input value={vulnerabilite_precision} onChange={e => setVulnerabilitePrecision(e.target.value)} placeholder="Préciser..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                    </div>
-                  </>
-                )}
-
-                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">2. Personnes vulnérables dans le ménage</h3>
-                <div className="grid grid-cols-3 gap-3">
-                  <NumberInput label="Pers. âgées (60+)" value={nb_personnes_agees} onChange={setNbPersonnesAgees} />
-                  <NumberInput label="Pers. handicapées" value={nb_personnes_handicapees} onChange={setNbPersonnesHandicapees} />
-                  <NumberInput label="Orphelins" value={nb_orphelins} onChange={setNbOrphelins} />
-                  <NumberInput label="Enfants -5 ans" value={nb_enfants_moins5} onChange={setNbEnfantsMoins5} />
-                  <NumberInput label="Femmes enceintes" value={nb_femmes_enceintes} onChange={setNbFemmesEnceintes} />
-                  <NumberInput label="Maladies chroniques" value={nb_maladies_chroniques} onChange={setNbMaladiesChroniques} />
-                </div>
-
-                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">3. Sécurité alimentaire</h3>
-                <YesNo label="Le ménage rencontre-t-il des difficultés pour se nourrir ?" value={difficulte_alimentaire} onChange={setDifficulteAlimentaire} />
-                {difficulte_alimentaire && (
-                  <ChoiceGroup label="Fréquence des difficultés alimentaires" options={FREQUENCE_DIFFICULTE} value={frequence_difficulte_alim} onChange={setFrequenceDifficulteAlim} cols={3} />
-                )}
-                <ChoiceGroup label="Nombre moyen de repas par jour" options={REPAS_JOUR} value={nb_repas_jour} onChange={setNbRepasJour} cols={3} />
-
-                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">4. Exposition aux catastrophes naturelles</h3>
-                <YesNo label="Le ménage a-t-il été affecté par une catastrophe naturelle au cours des 5 dernières années ?" value={affecte_catastrophe} onChange={setAffecteCatastrophe} />
-                {affecte_catastrophe && (
-                  <>
-                    <CheckGroup label="Type de catastrophe" options={CATASTROPHES_NAT} values={catastrophe_nat_types} onToggle={v => setCatastropheNatTypes(prev => toggleArr(prev, v))} />
-                    <div className="grid grid-cols-2 gap-3">
-                      <NumberInput label="Année de la dernière catastrophe" value={annee_derniere_catastrophe} onChange={setAnneeDerniereCatastrophe} />
-                      <ChoiceGroup label="Niveau des dégâts subis" options={NIVEAUX_DEGATS} value={niveau_degats} onChange={setNiveauDegats} cols={2} />
-                    </div>
-
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                      <p className="text-xs font-bold text-slate-500 uppercase">4.1 Aides reçues après catastrophe</p>
-                      <YesNo label="Le ménage a-t-il déjà bénéficié d'une aide suite à une catastrophe naturelle ?" value={aide_recue} onChange={setAideRecue} />
-                      {aide_recue && (
-                        <>
-                          <ChoiceGroup label="Catastrophe concernée" options={CATASTROPHES_NAT} value={aide_catastrophe_concernee} onChange={setAideCatastropheConcernee} cols={3} />
-                          <NumberInput label="Année de l'intervention" value={aide_annee_intervention} onChange={setAideAnneeIntervention} />
-                          <CheckGroup label="Organisme ayant apporté l'aide" options={ORGANISMES_AIDE} values={aide_organismes} onToggle={v => setAideOrganismes(prev => toggleArr(prev, v))} />
-                          <div>
-                            <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Nom de l'organisme</label>
-                            <input value={aide_nom_organisme} onChange={e => setAideNomOrganisme(e.target.value)} placeholder="Nom" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none" />
-                          </div>
-                          <CheckGroup label="Type d'aide reçue" options={TYPES_AIDE} values={aide_types} onToggle={v => setAideTypes(prev => toggleArr(prev, v))} />
-                          <div>
-                            <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Précision sur l'aide reçue</label>
-                            <textarea value={aide_precision} onChange={e => setAidePrecision(e.target.value)} rows={2} placeholder="Détails..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none resize-none" />
-                          </div>
-                          <div>
-                            <label className="text-xs font-bold text-slate-600 uppercase block mb-2">L'aide reçue était-elle suffisante ?</label>
-                            <div className="flex gap-2 flex-wrap">
-                              {['Oui', 'Partiellement', 'Non'].map(s => (
-                                <label key={s} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${aide_suffisante === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
-                                  <input type="radio" className="hidden" checked={aide_suffisante === s} onChange={() => setAideSuffisante(s)} />{s}
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                          <YesNo label="Le ménage nécessite-t-il encore un appui aujourd'hui ?" value={necessite_appui} onChange={setNecessiteAppui} />
-                        </>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">5. État du logement</h3>
-                <YesNo label="La maison nécessite-t-elle des travaux ?" value={logement_necessite_travaux} onChange={setLogementNecessiteTravaux} />
-                {logement_necessite_travaux && (
-                  <>
-                    <CheckGroup label="Type d'intervention nécessaire" options={TRAVAUX_TYPES} values={travaux_types} onToggle={v => setTravauxTypes(prev => toggleArr(prev, v))} />
-                    <CheckGroup label="Partie concernée" options={TRAVAUX_PARTIES} values={travaux_parties} onToggle={v => setTravauxParties(prev => toggleArr(prev, v))} />
-                    <UrgencyButtons label="Niveau d'urgence" value={travaux_urgence} onChange={setTravauxUrgence} />
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Commentaire de l'agent recenseur</label>
-                      <textarea value={travaux_commentaire} onChange={e => setTravauxCommentaire(e.target.value)} rows={2} placeholder="Observations..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none resize-none" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Photo de la maison (optionnel)</label>
-                      {travaux_photo_url ? (
-                        <div className="relative rounded-xl overflow-hidden border border-slate-200 h-32">
-                          <img src={travaux_photo_url} alt="Travaux" className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => setTravauxPhotoUrl('')} className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5"><X className="h-3.5 w-3.5" /></button>
-                        </div>
-                      ) : (
-                        <label className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition ${uploadingTravauxPhoto ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300'}`}>
-                          <input type="file" accept="image/*" className="hidden" onChange={handleTravauxPhotoUpload} disabled={uploadingTravauxPhoto} />
-                          {uploadingTravauxPhoto ? <Loader2 className="h-5 w-5 text-indigo-600 animate-spin" /> : <Upload className="h-5 w-5 text-slate-300" />}
-                        </label>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-t border-slate-100 pt-4">6. Priorité du ménage</h3>
-                <UrgencyButtons label="Niveau global de vulnérabilité" value={niveau_vulnerabilite_global} onChange={setNiveauVulnerabiliteGlobal} />
-                <div>
-                  <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Note agent — Foyer incomplet / à revoir</label>
-                  <textarea value={note_agent_incomplete} onChange={e => setNoteAgentIncomplete(e.target.value)} rows={2} placeholder="Ex: famille incomplète, à revisiter, données manquantes..." className="w-full border border-amber-200 rounded-lg px-3 py-2.5 text-sm focus:border-amber-400 outline-none resize-none bg-amber-50/30" />
-                  <p className="text-[11px] text-amber-600 mt-1">⚠ Si renseigné, le foyer sera marqué "Incomplet" avec le taux de complétion dans la fiche.</p>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-600 uppercase block mb-1">Observations complémentaires</label>
-                  <textarea value={observations_complementaires} onChange={e => setObservationsComplementaires(e.target.value)} rows={3} placeholder="Notes additionnelles..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none resize-none" />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Footer */}

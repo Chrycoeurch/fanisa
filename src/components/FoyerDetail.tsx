@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Foyer, Membre } from '../types';
-import { X, Home, MapPin, Users, UserCheck, PlusCircle, Edit2, Trash2, AlertTriangle, Phone, Mail, CreditCard, ChevronDown, ChevronUp, FileText, Printer, Loader2 } from 'lucide-react';
+import { X, Home, MapPin, Users, UserCheck, PlusCircle, Edit2, Trash2, AlertTriangle, Phone, Mail, CreditCard, ChevronDown, ChevronUp, FileText, Printer, Loader2, Brain, BarChart2, CheckCircle, XCircle } from 'lucide-react';
 import MembreProfil360 from './MembreProfil360';
 import { genererFicheMenage } from '../lib/ficheMenagePDF';
 import { telechargerPDF } from '../lib/documents';
 import ModalApercu from './ModalApercu';
+import { analyserMenage, verifierCompletude, type AnalyseIntelligence } from '../lib/intelligenceEngine';
 
 interface Props {
   foyer: Foyer;
@@ -250,8 +251,23 @@ function MembreRow({ membre, allMembres, foyer, onEdit, onDelete }: {
 
 export default function FoyerDetail({ foyer, membres, onClose, onEditFoyer, onDeleteFoyer, onAddMembre, onEditMembre, onDeleteMembre }: Props) {
   const chef = membres.find(m => m.is_chef);
+  const [detailTab, setDetailTab] = useState<'vue360' | 'membres' | 'intelligence'>('vue360');
+  const [analyse, setAnalyse] = useState<AnalyseIntelligence | null>(null);
+  const [calculantAnalyse, setCalculantAnalyse] = useState(false);
   const [generatingFiche, setGeneratingFiche] = useState(false);
   const [apercuFiche, setApercuFiche] = useState<{ url: string; bytes: Uint8Array } | null>(null);
+
+  // Calcul automatique dès qu'on clique sur l'onglet Intelligence
+  useEffect(() => {
+    if (detailTab === 'intelligence' && !analyse) {
+      setCalculantAnalyse(true);
+      setTimeout(() => {
+        const result = analyserMenage(foyer, membres);
+        setAnalyse(result);
+        setCalculantAnalyse(false);
+      }, 600);
+    }
+  }, [detailTab]);
 
   const handleFicheMenage = async () => {
     setGeneratingFiche(true);
@@ -345,38 +361,193 @@ export default function FoyerDetail({ foyer, membres, onClose, onEditFoyer, onDe
           <div><p className="text-lg font-bold text-slate-800">{membres.filter(m => m.est_vulnerable).length}</p><p className="text-[10px] text-slate-500 uppercase font-semibold">Vulnérables</p></div>
         </div>
 
-        {/* Liste membres */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <Users className="h-4 w-4 text-indigo-600" />Membres du foyer
-            </h3>
-            <button onClick={onAddMembre} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition">
-              <PlusCircle className="h-3.5 w-3.5" />Ajouter un membre
+        {/* Navigation onglets */}
+        <div className="flex border-b border-slate-200 px-5 bg-white shrink-0">
+          {[
+            { key: 'vue360', label: '📋 Vue 360°' },
+            { key: 'membres', label: '👨‍👩‍👧 Membres' },
+            { key: 'intelligence', label: '🧠 Intelligence' },
+          ].map(t => (
+            <button key={t.key} onClick={() => setDetailTab(t.key as any)}
+              className={`py-3 px-4 text-xs font-bold border-b-2 transition whitespace-nowrap ${detailTab === t.key ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+              {t.label}
             </button>
-          </div>
+          ))}
+        </div>
 
-          {membres.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
-              <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-semibold">Aucun membre</p>
-              <p className="text-xs mt-1">Commencez par ajouter le chef de foyer.</p>
-              <button onClick={onAddMembre} className="mt-4 bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2 mx-auto">
-                <PlusCircle className="h-3.5 w-3.5" />Ajouter le chef
+        <div className="flex-1 overflow-y-auto p-5">
+
+        {/* ── VUE 360° ── */}
+        {detailTab === 'vue360' && (
+          <div className="space-y-4">
+            {/* Infos logement */}
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+              <h4 className="text-xs font-bold text-slate-500 uppercase">Logement</h4>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[['Type', foyer.type_logement], ['Statut occupation', foyer.statut_occupant], ['Murs', foyer.materiau_mur || (foyer.materiaux_mur || []).join(', ')], ['Eau', foyer.eau_source || foyer.source_eau_principale], ['Électricité', foyer.a_electricite ? 'Oui' : 'Non']].map(([k,v]) => v ? (
+                  <div key={k as string}><span className="text-slate-400">{k} : </span><span className="font-semibold text-slate-700">{v}</span></div>
+                ) : null)}
+              </div>
+            </div>
+            {foyer.observations_complementaires && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <p className="text-xs font-bold text-amber-700 uppercase mb-1">Observations</p>
+                <p className="text-xs text-amber-800">{foyer.observations_complementaires}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MEMBRES ── */}
+        {detailTab === 'membres' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <Users className="h-4 w-4 text-indigo-600" />Membres du foyer
+              </h3>
+              <button onClick={onAddMembre} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition">
+                <PlusCircle className="h-3.5 w-3.5" />Ajouter un membre
               </button>
             </div>
-          ) : (
-            [...membres.filter(m => m.is_chef), ...membres.filter(m => !m.is_chef)].map(m => (
-              <MembreRow
-                key={m.id}
-                membre={m}
-                allMembres={membres}
-                foyer={foyer}
-                onEdit={() => onEditMembre(m)}
-                onDelete={() => onDeleteMembre(m.id)}
-              />
-            ))
-          )}
+            {membres.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-semibold">Aucun membre</p>
+                <p className="text-xs mt-1">Commencez par ajouter le chef de foyer.</p>
+                <button onClick={onAddMembre} className="mt-4 bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2 mx-auto">
+                  <PlusCircle className="h-3.5 w-3.5" />Ajouter le chef
+                </button>
+              </div>
+            ) : (
+              [...membres.filter(m => m.is_chef), ...membres.filter(m => !m.is_chef)].map(m => (
+                <MembreRow
+                  key={m.id}
+                  membre={m}
+                  allMembres={membres}
+                  foyer={foyer}
+                  onEdit={() => onEditMembre(m)}
+                  onDelete={() => onDeleteMembre(m.id)}
+                />
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ── 🧠 INTELLIGENCE ── */}
+        {detailTab === 'intelligence' && (
+          <div className="space-y-4">
+            {calculantAnalyse ? (
+              <div className="text-center py-16">
+                <Brain className="h-10 w-10 text-indigo-500 animate-pulse mx-auto mb-3" />
+                <p className="text-sm font-semibold text-slate-600">Analyse en cours…</p>
+                <p className="text-xs text-slate-400 mt-1">Le moteur FANISA analyse les données du ménage</p>
+              </div>
+            ) : !analyse ? null : !analyse.peut_analyser ? (
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 text-center">
+                <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
+                <p className="font-bold text-amber-800 text-sm">Analyse indisponible</p>
+                <p className="text-xs text-amber-700 mt-1 mb-3">Le dossier du ménage est incomplet. Veuillez terminer le recensement avant de consulter l'analyse.</p>
+                <div className="bg-amber-100 rounded-xl p-3 text-left space-y-1">
+                  <p className="text-[11px] font-bold text-amber-700 uppercase">Informations manquantes :</p>
+                  {analyse.raison_blocage?.split(' · ').map((r, i) => (
+                    <p key={i} className="text-[11px] text-amber-800 flex items-center gap-1.5"><XCircle className="h-3 w-3 shrink-0" />{r}</p>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-amber-700 font-semibold">Complétude du dossier</span>
+                    <span className="font-bold text-amber-800">{analyse.completude}%</span>
+                  </div>
+                  <div className="w-full bg-amber-200 rounded-full h-2">
+                    <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${analyse.completude}%` }} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Score global */}
+                <div className="bg-white border-2 rounded-2xl p-6 text-center" style={{ borderColor: analyse.couleur }}>
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-2">Score de vulnérabilité FANISA</p>
+                  <div className="relative w-28 h-28 mx-auto mb-3">
+                    <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                      <circle cx="50" cy="50" r="42" fill="none" stroke="#E2E8F0" strokeWidth="8" />
+                      <circle cx="50" cy="50" r="42" fill="none" stroke={analyse.couleur} strokeWidth="8"
+                        strokeDasharray={`${analyse.score_global * 2.64} 264`} strokeLinecap="round" />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-3xl font-black" style={{ color: analyse.couleur }}>{analyse.score_global}</span>
+                      <span className="text-[10px] text-slate-400 font-semibold">/ 100</span>
+                    </div>
+                  </div>
+                  <p className="text-lg font-black" style={{ color: analyse.couleur }}>Vulnérabilité {analyse.niveau}</p>
+                  <p className="text-xs text-slate-400 mt-1">Complétude des données : {analyse.completude}%</p>
+                </div>
+
+                {/* Indices détaillés */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Détail des indices</h4>
+                  <div className="space-y-3">
+                    {analyse.indices.map(ind => (
+                      <div key={ind.nom}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-semibold text-slate-700">{ind.nom}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">Poids {ind.poids}%</span>
+                            <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${ind.score >= 70 ? 'bg-emerald-100 text-emerald-700' : ind.score >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>{ind.score}/100</span>
+                          </div>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-1.5">
+                          <div className={`h-1.5 rounded-full transition-all ${ind.score >= 70 ? 'bg-emerald-500' : ind.score >= 50 ? 'bg-amber-400' : 'bg-red-500'}`} style={{ width: `${ind.score}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Facteurs + Points forts */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <h4 className="text-xs font-bold text-red-700 uppercase mb-2">⚠ Facteurs de vulnérabilité</h4>
+                    {analyse.facteurs_vulnerabilite.length === 0
+                      ? <p className="text-xs text-slate-400">Aucun facteur identifié</p>
+                      : analyse.facteurs_vulnerabilite.map((f, i) => (
+                        <p key={i} className="text-xs text-red-800 flex items-start gap-1.5 mb-1.5">
+                          <XCircle className="h-3 w-3 shrink-0 mt-0.5 text-red-500" />{f}
+                        </p>
+                      ))}
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                    <h4 className="text-xs font-bold text-emerald-700 uppercase mb-2">✓ Points forts</h4>
+                    {analyse.points_forts.length === 0
+                      ? <p className="text-xs text-slate-400">Aucun point fort identifié</p>
+                      : analyse.points_forts.map((f, i) => (
+                        <p key={i} className="text-xs text-emerald-800 flex items-start gap-1.5 mb-1.5">
+                          <CheckCircle className="h-3 w-3 shrink-0 mt-0.5 text-emerald-500" />{f}
+                        </p>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Recommandations */}
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                  <h4 className="text-xs font-bold text-indigo-700 uppercase mb-2">🎯 Recommandations</h4>
+                  {analyse.recommandations.map((r, i) => (
+                    <p key={i} className="text-xs text-indigo-800 flex items-start gap-1.5 mb-2">
+                      <span className="font-black text-indigo-500 shrink-0">→</span>{r}
+                    </p>
+                  ))}
+                </div>
+
+                {/* Bouton recalculer */}
+                <button onClick={() => { setAnalyse(null); setCalculantAnalyse(true); setTimeout(() => { setAnalyse(analyserMenage(foyer, membres)); setCalculantAnalyse(false); }, 600); }}
+                  className="w-full py-2.5 border border-indigo-200 text-indigo-600 text-xs font-bold rounded-xl hover:bg-indigo-50 transition flex items-center justify-center gap-2">
+                  <Brain className="h-4 w-4" />Recalculer l'analyse
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         </div>
       </div>
     </div>

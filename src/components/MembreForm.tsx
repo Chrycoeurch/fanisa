@@ -87,7 +87,7 @@ function PriorityButtons({ label, value, onChange }: { label: string; value: str
 
 const VULNERABILITE_CATS = ['Grand âge', 'Handicap', 'Pauvreté extrême', 'Famille monoparentale', 'Maladie chronique', 'Déscolarisation', 'Malnutrition'];
 const AIDES = ['Vivres', 'Aide financière', 'Soins gratuits', 'Bourse', 'Logement social'];
-type Tab = 'identite' | 'famille' | 'education' | 'sante' | 'vulnerabilite';
+type Tab = 'identite' | 'famille' | 'education' | 'sante';
 
 export default function MembreForm({ foyer, membre, membres, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
@@ -285,7 +285,7 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
     setUploadingDoc(null);
   };
 
-  const TAB_ORDER: Tab[] = ['identite', 'famille', 'education', 'sante', 'vulnerabilite'];
+  const TAB_ORDER: Tab[] = ['identite', 'famille', 'education', 'sante'];
   const isLastTab = tab === TAB_ORDER[TAB_ORDER.length - 1];
 
   const handleNext = (e: React.FormEvent) => {
@@ -404,7 +404,6 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
     { key: 'famille', label: 'Famille', icon: User },
     { key: 'education', label: 'Éduc. & Éco.', icon: GraduationCap },
     { key: 'sante', label: 'Santé', icon: HeartPulse },
-    { key: 'vulnerabilite', label: 'Vulnérabilité', icon: ShieldAlert },
   ] as const;
 
   return (
@@ -1084,53 +1083,6 @@ export default function MembreForm({ foyer, membre, membres, onClose, onSave }: 
               </div>
             )}
 
-            {/* ── VULNÉRABILITÉ ── */}
-            {tab === 'vulnerabilite' && (
-              <div className="space-y-4">
-                <label className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition ${est_vulnerable ? 'border-rose-400 bg-rose-50' : 'border-slate-200 bg-white'}`}>
-                  <input type="checkbox" checked={est_vulnerable} onChange={e => setEstVulnerable(e.target.checked)} className="h-4 w-4 rounded" />
-                  <span className="font-semibold text-sm text-slate-800">Ce membre est en situation de vulnérabilité</span>
-                </label>
-                {est_vulnerable && (
-                  <>
-                    <div>
-                      <label className="text-xs font-bold text-rose-700 uppercase block mb-2">Niveau d'urgence</label>
-                      <div className="flex gap-3">
-                        {(['Aucun', 'Moyen', 'Critique'] as const).map(n => (
-                          <label key={n} className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${niveau_priorite === n ? (n === 'Critique' ? 'bg-red-600 text-white border-red-600' : n === 'Moyen' ? 'bg-amber-500 text-white border-amber-500' : 'bg-slate-400 text-white border-slate-400') : 'bg-white text-slate-600 border-slate-200'}`}>
-                            <input type="radio" className="hidden" checked={niveau_priorite === n} onChange={() => setNiveauPriorite(n)} />{n}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-rose-700 uppercase block mb-2">Catégories de risque</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {VULNERABILITE_CATS.map(c => (
-                          <label key={c} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition ${vulnerabilite_categories.includes(c) ? 'bg-rose-50 border-rose-300 text-rose-800 font-semibold' : 'bg-white border-slate-200 text-slate-600'}`}>
-                            <input type="checkbox" checked={vulnerabilite_categories.includes(c)} onChange={() => setVulnCats(prev => toggleArr(prev, c))} className="rounded" />{c}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-rose-700 uppercase block mb-2">Aides obtenues</label>
-                      <div className="flex flex-wrap gap-2">
-                        {AIDES.map(a => (
-                          <label key={a} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-xs font-semibold transition ${aides_obtenues.includes(a) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'}`}>
-                            <input type="checkbox" className="hidden" checked={aides_obtenues.includes(a)} onChange={() => setAides(prev => toggleArr(prev, a))} />{a}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-rose-700 uppercase block mb-1">Observations</label>
-                      <textarea value={vulnerabilite_description} onChange={e => setVulnDesc(e.target.value)} rows={3} placeholder="Situation précaire, besoins spécifiques..." className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-500 outline-none resize-none" />
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Footer */}
