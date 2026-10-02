@@ -491,7 +491,7 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   // 2. LOGO REPUBLIQUE — centré, grand (90×90), avec espace sous l'en-tête
   //    L'en-tête finit à hTop-55. On laisse ~18pts de gap puis on place le logo.
   // ══════════════════════════════════════════════════════════
-  const lgW = 88, lgH = 88;
+  const lgW = 88, lgH = 105;
   const lgX = W / 2 - lgW / 2;
   const lgY = hTop - 55 - 18 - lgH;
   page.drawImage(imgRepub, { x: lgX, y: lgY, width: lgW, height: lgH });
