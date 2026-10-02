@@ -500,9 +500,14 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   // 3. TITRE PRINCIPAL — directement sous le logo, centré, gras 14, tirets dessous
   // ══════════════════════════════════════════════════════════
   const titleY = lgY - 18;
-  page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 114, y: titleY, size: 14, font: bold, color: noir });
-  // Tirets sur toute la largeur du titre (conforme PDF original)
-  page.drawText('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', { x: W / 2 - 114, y: titleY - 11, size: 7, font: reg, color: gris });
+  const titleTxt = '[CR] CERTIFICAT DE RESIDENCE';
+  const titleW = bold.widthOfTextAtSize(titleTxt, 14);
+  const titleX = W / 2 - titleW / 2;
+  page.drawText(titleTxt, { x: titleX, y: titleY, size: 14, font: bold, color: noir });
+  // Ligne de tirets qui couvre exactement la largeur du titre
+  for (let dx = titleX; dx < titleX + titleW - 2; dx += 5) {
+    page.drawLine({ start: { x: dx, y: titleY - 5 }, end: { x: Math.min(dx + 3, titleX + titleW), y: titleY - 5 }, thickness: 0.6, color: gris });
+  }
 
   // ══════════════════════════════════════════════════════════
   // 5. REF / DATE (gauche) | VALIDITE / EXEMPLEIRE (droite)
