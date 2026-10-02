@@ -416,7 +416,7 @@ async function genererCertificatA5(
   // ── Ligne de découpe + Reçu ───────────────────────────────────
   const cutY = 32;
   page.drawLine({ start: { x: m - 5, y: cutY }, end: { x: W - m + 5, y: cutY }, thickness: 0.5, color: C.dark, dashArray: [3, 3], dashPhase: 0 });
-  dt(page, '✂', m - 8, cutY - 2, reg, 10, C.dark);
+  dt(page, '>>>', m - 8, cutY - 4, reg, 6, C.dark);
   dt(page, `RECU  |  N°${(config.prefixe_recu || 'REC').toUpperCase()}-${String(numero).padStart(4,'0')}-${new Date().getFullYear()}  REF DOC : ${reference}  DATE: ${new Date().toLocaleDateString('fr-FR')}  |  Montant : 2000 Ariary  |`, m + 10, cutY - 14, reg, 6, C.dark);
   dt(page, 'Merci pour votre visite !!!', W/2 - 30, cutY - 24, bold, 6, C.dark);
 }
@@ -609,11 +609,11 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   page.drawLine({ start: { x: sigX - 5, y: sigZoneY - 38 }, end: { x: W - m, y: sigZoneY - 38 }, thickness: 0.5, color: rgb(0.6,0.6,0.7) });
   page.drawText('(Signature et cachet)', { x: sigX + 15, y: sigZoneY - 48, size: 6, font: reg, color: rgb(0.5,0.5,0.6) });
 
-  // ── Ligne pointillée ✂ ────────────────────────────────────
+  // ── Ligne pointillée de découpe ──────────────────────────
   const stripY = 58;
-  page.drawText('✂', { x: m, y: stripY + 2, size: 10, font: bold, color: rgb(0.5,0.5,0.5) });
-  for (let dx = m + 12; dx < W - m; dx += 6) {
-    page.drawLine({ start: { x: dx, y: stripY + 4 }, end: { x: dx + 3.5, y: stripY + 4 }, thickness: 0.6, color: rgb(0.5,0.5,0.5) });
+  page.drawText('- - -', { x: m, y: stripY + 2, size: 7, font: reg, color: rgb(0.5,0.5,0.5) });
+  for (let dx = m + 22; dx < W - m; dx += 6) {
+    page.drawLine({ start: { x: dx, y: stripY + 5 }, end: { x: dx + 3.5, y: stripY + 5 }, thickness: 0.7, color: rgb(0.5,0.5,0.5) });
   }
 
   // ── Bandeau RECU ─────────────────────────────────────────
