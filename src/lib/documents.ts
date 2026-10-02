@@ -423,9 +423,7 @@ async function genererCertificatA5(
 
 // CR — Certificat de Résidence (A5 Portrait officiel)
 // ════════════════════════════════════════════════════════════
-// CERTIFICAT DE RESIDENCE — A4 Portrait officiel
-// Modèle exact : logos République + cachet commune, QR code,
-// grille de champs, bandeau reçu détachable
+// CERTIFICAT DE RESIDENCE — A4 Portrait — Modèle officiel exact
 // ════════════════════════════════════════════════════════════
 export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFokontany): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -434,206 +432,221 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   const { reference, numero } = await genererReference('CR', config);
 
   const W = 595, H = 842;
-  const m = 30; // marge
+  const mL = 42; // marge gauche
   const page = pdf.addPage([W, H]);
 
   // ── Logos ────────────────────────────────────────────────
-  const imgRepub  = await pdf.embedPng(b64ToUint8(LOGO_REPUB_B64));
+  const imgRepub   = await pdf.embedPng(b64ToUint8(LOGO_REPUB_B64));
   const imgCommune = await pdf.embedPng(b64ToUint8(LOGO_COMMUNE_B64));
 
   // ── Dates ────────────────────────────────────────────────
-  const today   = new Date();
-  const dateStr = today.toLocaleDateString('fr-FR');
+  const today      = new Date();
+  const dateStr    = today.toLocaleDateString('fr-FR');
   const validiteDate = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
-  const validite = validiteDate.toLocaleDateString('fr-FR');
+  const validite   = validiteDate.toLocaleDateString('fr-FR');
+  const annee      = today.getFullYear();
 
-  // ── Adresse de résidence ─────────────────────────────────
-  const adresseLOT = foyer.identification_logement
-    ? `LOT ${foyer.identification_logement}${foyer.numero_maison ? ' N°' + foyer.numero_maison : ''}, Quartier ${clean(config.nom_quartier)}, Carreau ${config.code_carreau}`
+  // ── Adresse ──────────────────────────────────────────────
+  const lot = foyer.identification_logement || '';
+  const num = foyer.numero_maison ? `/${foyer.numero_maison}` : '';
+  const adresseLOT = lot
+    ? `LOT ${lot}${num} ${clean(config.nom_quartier).toUpperCase()} Carreau ${config.code_carreau}`
     : foyer.adresse || '-';
-  const adresseComplete = `${adresseLOT}, Fokontany ${clean(config.nom_fokontany)}, ${clean(config.nom_district)}`;
+  const adresseComplete = `${adresseLOT}\nFokontany ${clean(config.nom_fokontany)} - ${clean(config.nom_district)}`;
 
-  // ── Calcul âge ───────────────────────────────────────────
+  // ── Âge ──────────────────────────────────────────────────
   let age = '-';
   if (membre.date_naissance) {
     const dn = new Date(membre.date_naissance);
-    const a = today.getFullYear() - dn.getFullYear() -
+    const a  = today.getFullYear() - dn.getFullYear() -
       (today < new Date(today.getFullYear(), dn.getMonth(), dn.getDate()) ? 1 : 0);
     age = `${a} ans`;
   }
 
-  // ── ZONE HEADER : entête administrative gauche (y 800-750) ─
-  const hTop = H - 30;
-  page.drawText('REPOBLIKAN\'I MADAGASIKARA', { x: m, y: hTop, size: 7.5, font: bold, color: rgb(0.1,0.1,0.1) });
-  page.drawText('Fitiavana - Tanindrazana - Fandrosoana', { x: m, y: hTop - 11, size: 7, font: reg, color: rgb(0.3,0.3,0.3) });
-  page.drawLine({ start: { x: m, y: hTop - 14 }, end: { x: 220, y: hTop - 14 }, thickness: 0.5, color: rgb(0.7,0.7,0.7) });
-  page.drawText(`REGION ${clean(config.nom_region || 'ATSINANANA').toUpperCase()}`, { x: m, y: hTop - 24, size: 7, font: reg, color: rgb(0.2,0.2,0.2) });
-  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`, { x: m, y: hTop - 34, size: 7, font: reg, color: rgb(0.2,0.2,0.2) });
-  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`, { x: m, y: hTop - 44, size: 7, font: reg, color: rgb(0.2,0.2,0.2) });
-  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`, { x: m, y: hTop - 54, size: 7.5, font: bold, color: rgb(0.1,0.1,0.4) });
-  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()}`, { x: m, y: hTop - 64, size: 7, font: reg, color: rgb(0.2,0.2,0.2) });
+  // ════════════════════════════════
+  // 1. EN-TÊTE GAUCHE — texte noir
+  // ════════════════════════════════
+  const hY = H - 30;
+  const lblColor = rgb(0.08, 0.08, 0.08);
+  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`,   { x: mL, y: hY,      size: 7.5, font: bold, color: lblColor });
+  page.drawText(`PREFECTURE ${clean(config.nom_commune).toUpperCase()}`,               { x: mL, y: hY - 11, size: 7.5, font: bold, color: lblColor });
+  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,                { x: mL, y: hY - 22, size: 7.5, font: bold, color: lblColor });
+  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                  { x: mL, y: hY - 33, size: 7.5, font: bold, color: lblColor });
+  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,              { x: mL, y: hY - 44, size: 7.5, font: bold, color: lblColor });
+  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CARREAU ${config.code_carreau}`, { x: mL, y: hY - 55, size: 7.5, font: bold, color: lblColor });
 
-  // ── Logo République (centre) ──────────────────────────────
-  const logoW = 72, logoH = 72;
-  page.drawImage(imgRepub, { x: W / 2 - logoW / 2, y: H - 10 - logoH, width: logoW, height: logoH });
+  // ════════════════════════════════
+  // 2. LOGO REPOBLIKAN'I — centré
+  // ════════════════════════════════
+  const logoW = 80, logoH = 80;
+  const logoX = W / 2 - logoW / 2;
+  const logoY = H - 10 - logoH;
+  page.drawImage(imgRepub, { x: logoX, y: logoY, width: logoW, height: logoH });
+  // Texte sous le logo
+  page.drawText("REPOBLIKAN'I MADAGASIKARA", { x: W / 2 - 68, y: logoY - 12, size: 7, font: bold, color: rgb(0.1,0.1,0.1) });
+  page.drawText('Fitiavana - Tanindrazana - Fandrosoana',  { x: W / 2 - 64, y: logoY - 22, size: 6.5, font: reg,  color: rgb(0.2,0.2,0.2) });
 
-  // ── Numéro de référence (droite) ──────────────────────────
-  page.drawText(`N° : ${reference}`, { x: W - m - 160, y: hTop, size: 7, font: bold, color: rgb(0.1,0.1,0.1) });
-  page.drawText(`Date : ${dateStr}`, { x: W - m - 160, y: hTop - 12, size: 7, font: reg, color: rgb(0.3,0.3,0.3) });
-  page.drawText(`Date de validite : ${validite}`, { x: W - m - 160, y: hTop - 24, size: 7, font: reg, color: rgb(0.3,0.3,0.3) });
-  page.drawText('Exemplaire : 1/1', { x: W - m - 160, y: hTop - 36, size: 7, font: reg, color: rgb(0.3,0.3,0.3) });
+  // ════════════════════════════════
+  // 3. TITRE
+  // ════════════════════════════════
+  const titleY = logoY - 38;
+  page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 105, y: titleY, size: 13, font: bold, color: rgb(0.05,0.05,0.05) });
+  // Ligne tiretée sous titre
+  const dashes = '- - - - - - - - - - - - - - - - - - - - - - - - - -';
+  page.drawText(dashes, { x: W / 2 - 78, y: titleY - 10, size: 7, font: reg, color: rgb(0.4,0.4,0.4) });
 
-  // ── Titre principal ───────────────────────────────────────
-  const titleY = H - 110;
-  page.drawText('[CR] CERTIFICAT DE RESIDENCE', {
-    x: W / 2 - 110,
-    y: titleY,
-    size: 13,
-    font: bold,
-    color: rgb(0.08, 0.08, 0.40),
-  });
-  // Ligne tiretée sous le titre
-  const dashY = titleY - 8;
-  for (let dx = m; dx < W - m; dx += 7) {
-    page.drawLine({ start: { x: dx, y: dashY }, end: { x: dx + 4, y: dashY }, thickness: 0.8, color: rgb(0.5,0.5,0.5) });
+  // ════════════════════════════════
+  // 4. REF / DATE / VALIDITE
+  // ════════════════════════════════
+  const refY = titleY - 28;
+  page.drawText('Ref.:',              { x: mL,           y: refY,      size: 7.5, font: bold, color: rgb(0.1,0.1,0.1) });
+  page.drawText(reference,            { x: mL,           y: refY - 11, size: 8,   font: bold, color: rgb(0.15,0.15,0.70) }); // bleu comme le modèle
+  page.drawText(`Date: ${dateStr}`,   { x: mL,           y: refY - 22, size: 7.5, font: reg,  color: rgb(0.1,0.1,0.1) });
+  page.drawText(`Date de validite : ${validite}`, { x: W - mL - 140, y: refY,      size: 7.5, font: bold, color: rgb(0.1,0.1,0.1) });
+  page.drawText('Exempleire : 1/1',               { x: W - mL - 140, y: refY - 11, size: 7.5, font: bold, color: rgb(0.1,0.1,0.1) });
+
+  // ════════════════════════════════
+  // 5. FILIGRANE CACHET COMMUNE
+  // ════════════════════════════════
+  const wmS = 220;
+  page.drawImage(imgCommune, { x: W / 2 - wmS / 2, y: H / 2 - wmS / 2 + 20, width: wmS, height: wmS, opacity: 0.07 });
+
+  // ════════════════════════════════
+  // 6. TEXTE INTRO
+  // ════════════════════════════════
+  const introY = refY - 42;
+  const introTxt = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)}, Quartier ${clean(config.nom_quartier)}, certifie que la personne dont l'identite est mentionnee ci-dessous reside bien dans le ressort du Fokontany.`;
+  const introLines = wrap(introTxt, 90);
+  introLines.forEach((l, i) => page.drawText(l, { x: mL, y: introY - i * 13, size: 9, font: reg, color: rgb(0.08,0.08,0.08) }));
+
+  // ════════════════════════════════
+  // 7. GRILLE CHAMPS — style modèle :
+  //    label petit gris, valeur gras noir, séparateur ligne fine
+  // ════════════════════════════════
+  const gY = introY - introLines.length * 13 - 18;
+  const lbl  = rgb(0.30, 0.30, 0.30);
+  const val  = rgb(0.05, 0.05, 0.05);
+  const sep  = rgb(0.80, 0.80, 0.80);
+  const lblSz = 7.5;
+  const valSz = 9.5;
+  const rowH  = 28;
+
+  // Colonnes : col1=0-200, col2=200-390, col3=390-535 (relatif à mL)
+  const c1 = mL, c2 = mL + 185, c3 = mL + 370;
+  const cW1 = 180, cW2 = 180, cW3 = 145;
+
+  function fieldLbl(label: string, x: number, y: number) {
+    page.drawText(label + ':', { x, y: y + rowH - 10, size: lblSz, font: reg, color: lbl });
   }
-
-  // ── Bloc Ref / Date / Validité / Exemplaire sous titre ────
-  const refY = dashY - 18;
-  page.drawText(`Ref. : ${reference}`, { x: m, y: refY, size: 7.5, font: bold, color: rgb(0.1,0.1,0.4) });
-  page.drawText(`Date : ${dateStr}`, { x: m, y: refY - 11, size: 7, font: reg, color: rgb(0.2,0.2,0.2) });
-  page.drawText(`Date de validite : ${validite}`, { x: W - m - 140, y: refY, size: 7.5, font: bold, color: rgb(0.1,0.1,0.4) });
-  page.drawText('Exemplaire : 1/1', { x: W - m - 140, y: refY - 11, size: 7, font: reg, color: rgb(0.2,0.2,0.2) });
-
-  // ── Filigrane cachet commune (fond transparent) ───────────
-  const wmSize = 200;
-  page.drawImage(imgCommune, {
-    x: W / 2 - wmSize / 2,
-    y: H / 2 - wmSize / 2,
-    width: wmSize,
-    height: wmSize,
-    opacity: 0.06,
-  });
-
-  // ── Texte d'introduction ──────────────────────────────────
-  const introY = refY - 34;
-  const intro = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)}, Quartier ${clean(config.nom_quartier)}, certifie que la personne dont l'identite est mentionnee ci-dessous reside bien dans le ressort du Fokontany.`;
-  const introLines = wrap(intro, 88);
-  introLines.forEach((line, i) => {
-    page.drawText(line, { x: m, y: introY - i * 12, size: 8, font: reg, color: rgb(0.15,0.15,0.15) });
-  });
-
-  // ── Grille de champs identité ─────────────────────────────
-  const gridStartY = introY - introLines.length * 12 - 18;
-  const cellH = 26;
-  const col3 = (W - m * 2) / 3;
-  const col2 = (W - m * 2) / 2;
-
-  function drawCell(label: string, value: string, cx: number, cy: number, cw: number, ch: number) {
-    page.drawRectangle({ x: cx, y: cy, width: cw, height: ch, borderColor: rgb(0.7,0.7,0.85), borderWidth: 0.6, color: rgb(0.97,0.97,1.0) });
-    page.drawText(label, { x: cx + 4, y: cy + ch - 9, size: 6.5, font: reg, color: rgb(0.4,0.4,0.6) });
-    const vals = wrap(value, Math.floor(cw / 5.5));
-    vals.slice(0, 2).forEach((l, li) => {
-      page.drawText(l, { x: cx + 4, y: cy + ch - 18 - li * 8, size: 8, font: bold, color: rgb(0.1,0.1,0.25) });
-    });
+  function fieldVal(value: string, x: number, y: number) {
+    page.drawText(clean(value) || '-', { x, y: y + rowH - 21, size: valSz, font: bold, color: val });
+  }
+  function rowSep(y: number) {
+    page.drawLine({ start: { x: mL, y }, end: { x: W - mL, y }, thickness: 0.4, color: sep });
   }
 
   // Ligne 1 : NOM | PRENOM(S) | AGE(S)
-  let gy = gridStartY;
-  drawCell('NOM', membre.nom || '-', m, gy, col3, cellH);
-  drawCell('PRENOM(S)', membre.prenom || '-', m + col3, gy, col3, cellH);
-  drawCell('AGE(S)', age, m + col3 * 2, gy, col3, cellH);
-  gy -= cellH;
+  let gy = gY;
+  rowSep(gy + rowH);
+  fieldLbl('NOM',        c1, gy); fieldVal(membre.nom || '-',    c1, gy);
+  fieldLbl('PRENOM(S)',  c2, gy); fieldVal(membre.prenom || '-', c2, gy);
+  fieldLbl('AGE(S)',     c3, gy); fieldVal(age,                  c3, gy);
+  gy -= rowH;
+  rowSep(gy + rowH);
 
   // Ligne 2 : SEXE | DATE DE NAISSANCE | LIEU DE NAISSANCE
-  drawCell('SEXE', membre.sexe || '-', m, gy, col3, cellH);
-  drawCell('DATE DE NAISSANCE', membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '-', m + col3, gy, col3, cellH);
-  drawCell('LIEU DE NAISSANCE', membre.lieu_naissance || '-', m + col3 * 2, gy, col3, cellH);
-  gy -= cellH;
+  fieldLbl('SEXE',               c1, gy); fieldVal(membre.sexe || '-',        c1, gy);
+  fieldLbl('DATE DE NAISSANCE',  c2, gy); fieldVal(membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '-', c2, gy);
+  fieldLbl('LIEU DE NAISSANCE',  c3, gy); fieldVal(membre.lieu_naissance || '-', c3, gy);
+  gy -= rowH;
+  rowSep(gy + rowH);
 
   // Ligne 3 : FILS/FILLE DE | ET DE
-  drawCell('FILS OU FILLE DE', membre.pere_nom || '-', m, gy, col2, cellH);
-  drawCell('ET DE', membre.mere_nom || '-', m + col2, gy, col2, cellH);
-  gy -= cellH;
+  fieldLbl('FILS OU FILLE DE', c1, gy); fieldVal(membre.pere_nom || '-', c1, gy);
+  fieldLbl('ET DE',            c2, gy); fieldVal(membre.mere_nom || '-', c2, gy);
+  gy -= rowH;
+  rowSep(gy + rowH);
 
   // Ligne 4 : PROFESSION | N° CIN | DATE DU CIN
-  drawCell('PROFESSION', membre.profession || '-', m, gy, col3, cellH);
-  drawCell('NUMERO CIN', membre.cin || '-', m + col3, gy, col3, cellH);
-  drawCell('DATE DU CIN', membre.date_cin ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '-', m + col3 * 2, gy, col3, cellH);
-  gy -= cellH;
+  fieldLbl('PROFESSION',  c1, gy); fieldVal(membre.profession || '-', c1, gy);
+  fieldLbl('NUMERO CIN',  c2, gy); fieldVal(membre.cin || '-',        c2, gy);
+  fieldLbl('DATE DU CIN', c3, gy); fieldVal(membre.date_cin ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '-', c3, gy);
+  gy -= rowH;
+  rowSep(gy + rowH);
 
-  // Ligne 5 : MOTIF (moitié) | (espace réservé)
-  drawCell('MOTIF', 'Demande administrative', m, gy, col2, cellH);
-  drawCell('CODE MENAGE', foyer.code_menage || foyer.id?.substring(0,8) || '-', m + col2, gy, col2, cellH);
-  gy -= cellH;
+  // Ligne 5 : MOTIF | ADRESSE DE RESIDENCE (sur 2 lignes)
+  const motifRowH = 40;
+  fieldLbl('MOTIF',               c1, gy - (motifRowH - rowH)); fieldVal(membre.profession ? 'Demande administrative' : 'Demande administrative', c1, gy - (motifRowH - rowH));
+  fieldLbl('ADRESSE DE RESIDENCE', c2, gy - (motifRowH - rowH));
+  // Adresse sur 2 lignes
+  const adrLines = wrap(adresseLOT, 42);
+  adrLines.slice(0, 2).forEach((al, ai) => page.drawText(clean(al), { x: c2, y: gy - (motifRowH - rowH) + rowH - 21 - ai * 12, size: valSz, font: bold, color: val }));
+  const addrLine2 = `Fokontany ${clean(config.nom_fokontany)} - ${clean(config.nom_district)}`;
+  page.drawText(clean(addrLine2), { x: c2, y: gy - (motifRowH - rowH) + rowH - 33, size: valSz, font: bold, color: val });
+  gy -= motifRowH;
+  rowSep(gy + motifRowH);
 
-  // Ligne 6 : ADRESSE DE RESIDENCE (pleine largeur, cellule plus haute)
-  const addrH = 34;
-  drawCell('ADRESSE DE RESIDENCE', adresseComplete, m, gy - (addrH - cellH), W - m * 2, addrH);
-  gy -= addrH;
+  // ════════════════════════════════
+  // 8. TEXTE DE CLOTURE
+  // ════════════════════════════════
+  const closeY = gy - 18;
+  const codeM = foyer.code_menage || '-';
+  page.drawText(`Jusqu'a ce jour et inscrit(e) au registre de recensement de population code menage ${codeM}`, { x: mL, y: closeY,      size: 9, font: reg, color: rgb(0.08,0.08,0.08) });
+  page.drawText('En foi de quoi, le present certificat est delivre pour servir et valoir ce que de droit.',    { x: mL, y: closeY - 14, size: 9, font: reg, color: rgb(0.08,0.08,0.08) });
 
-  // ── Texte de clôture ──────────────────────────────────────
-  const closeY = gy - 16;
-  const codeM = foyer.code_menage || foyer.id?.substring(0,8) || '-';
-  const closeTxt1 = `Jusqu'a ce jour et inscrit(e) au registre de recensement de population code menage ${codeM}.`;
-  const closeTxt2 = "En foi de quoi, le present certificat est delivre pour servir et valoir ce que de droit.";
-  page.drawText(closeTxt1, { x: m, y: closeY, size: 8, font: reg, color: rgb(0.15,0.15,0.15) });
-  page.drawText(closeTxt2, { x: m, y: closeY - 13, size: 8, font: reg, color: rgb(0.15,0.15,0.15) });
+  // ════════════════════════════════
+  // 9. ZONE SIGNATURE
+  // ════════════════════════════════
+  const sigBaseY = closeY - 50;
 
-  // ── Zone signature & cachet ───────────────────────────────
-  const sigZoneY = closeY - 50;
-
-  // QR Code réel (bas gauche)
+  // QR code réel bas gauche
   try {
-    const qrUrl = `https://fanisa.pages.dev/verifier?ref=${encodeURIComponent(reference)}`;
-    const qrDataUrl = await QRCode.toDataURL(qrUrl, { width: 64, margin: 1, color: { dark: '#111133', light: '#FFFFFF' } });
-    const qrBase64 = qrDataUrl.split(',')[1];
-    const qrImg = await pdf.embedPng(b64ToUint8(qrBase64));
-    page.drawImage(qrImg, { x: m, y: sigZoneY - 60, width: 60, height: 60 });
-    page.drawText('Verifier sur FANISA', { x: m, y: sigZoneY - 68, size: 5.5, font: reg, color: rgb(0.3,0.3,0.5) });
-  } catch {
-    // Fallback pattern visuel si QR échoue
-    page.drawRectangle({ x: m, y: sigZoneY - 60, width: 60, height: 60, borderColor: rgb(0.4,0.4,0.6), borderWidth: 0.8 });
-    page.drawText('QR', { x: m + 22, y: sigZoneY - 32, size: 10, font: bold, color: rgb(0.4,0.4,0.6) });
+    const qrUrl     = `https://fanisa.pages.dev/verifier?ref=${encodeURIComponent(reference)}`;
+    const qrDataUrl = await QRCode.toDataURL(qrUrl, { width: 72, margin: 1, color: { dark: '#111133', light: '#FFFFFF' } });
+    const qrImg     = await pdf.embedPng(b64ToUint8(qrDataUrl.split(',')[1]));
+    page.drawImage(qrImg, { x: mL, y: sigBaseY - 68, width: 72, height: 72 });
+    page.drawText('Authentification du document', { x: mL, y: sigBaseY - 76, size: 5.5, font: reg, color: rgb(0.35,0.35,0.35) });
+  } catch (_) {
+    page.drawRectangle({ x: mL, y: sigBaseY - 68, width: 72, height: 72, borderColor: rgb(0.5,0.5,0.5), borderWidth: 0.8, color: rgb(0.96,0.96,0.96) });
+    page.drawText('QR', { x: mL + 28, y: sigBaseY - 30, size: 12, font: bold, color: rgb(0.4,0.4,0.4) });
   }
 
-  // Cachet commune (centre)
-  const cachH = 70;
-  page.drawImage(imgCommune, { x: W / 2 - cachH / 2, y: sigZoneY - 68, width: cachH, height: cachH, opacity: 0.55 });
+  // Cachet commune centre
+  const cacheS = 90;
+  page.drawImage(imgCommune, { x: W / 2 - cacheS / 2, y: sigBaseY - 80, width: cacheS, height: cacheS, opacity: 0.50 });
 
   // Signature droite
-  const sigX = W - m - 130;
-  page.drawText(`${clean(config.nom_fokontany)}, le ${dateStr}`, { x: sigX - 10, y: sigZoneY + 8, size: 7, font: reg, color: rgb(0.2,0.2,0.2) });
-  page.drawText('Le Chef du Fokontany', { x: sigX, y: sigZoneY - 4, size: 7.5, font: bold, color: rgb(0.1,0.1,0.35) });
-  page.drawText(clean(config.chef_fokontany), { x: sigX, y: sigZoneY - 15, size: 7, font: reg, color: rgb(0.3,0.3,0.3) });
-  page.drawLine({ start: { x: sigX - 5, y: sigZoneY - 38 }, end: { x: W - m, y: sigZoneY - 38 }, thickness: 0.5, color: rgb(0.6,0.6,0.7) });
-  page.drawText('(Signature et cachet)', { x: sigX + 15, y: sigZoneY - 48, size: 6, font: reg, color: rgb(0.5,0.5,0.6) });
+  const sigX = W - mL - 150;
+  page.drawText(`${clean(config.nom_fokontany)}, le ${dateStr}`, { x: sigX, y: sigBaseY + 5,  size: 8,   font: reg,  color: rgb(0.08,0.08,0.08) });
+  page.drawText('Le Chef du Fokontany',                           { x: sigX + 10, y: sigBaseY - 12, size: 9,   font: bold, color: rgb(0.05,0.05,0.05) });
+  page.drawLine({ start: { x: sigX - 5, y: sigBaseY - 50 }, end: { x: W - mL, y: sigBaseY - 50 }, thickness: 0.5, color: sep });
+  page.drawText('(Signature et cachet)', { x: sigX + 20, y: sigBaseY - 62, size: 7, font: reg, color: rgb(0.40,0.40,0.40) });
 
-  // ── Ligne pointillée de découpe ──────────────────────────
-  const stripY = 58;
-  page.drawText('- - -', { x: m, y: stripY + 2, size: 7, font: reg, color: rgb(0.5,0.5,0.5) });
-  for (let dx = m + 22; dx < W - m; dx += 6) {
-    page.drawLine({ start: { x: dx, y: stripY + 5 }, end: { x: dx + 3.5, y: stripY + 5 }, thickness: 0.7, color: rgb(0.5,0.5,0.5) });
+  // ════════════════════════════════
+  // 10. LIGNE POINTILLEE DE DECOUPE
+  // ════════════════════════════════
+  const cutY = 52;
+  // Symbole ciseau remplacé par texte compatible WinAnsi
+  page.drawText('>< ', { x: mL - 8, y: cutY - 3, size: 8, font: bold, color: rgb(0.45,0.45,0.45) });
+  for (let dx = mL + 10; dx < W - mL; dx += 5) {
+    page.drawLine({ start: { x: dx, y: cutY }, end: { x: dx + 3, y: cutY }, thickness: 0.6, color: rgb(0.45,0.45,0.45) });
   }
 
-  // ── Bandeau RECU ─────────────────────────────────────────
-  page.drawRectangle({ x: 0, y: 0, width: W, height: stripY, color: rgb(0.95,0.95,1.0) });
-  page.drawRectangle({ x: 0, y: 0, width: W, height: stripY, borderColor: rgb(0.7,0.7,0.85), borderWidth: 0.5 });
+  // ════════════════════════════════
+  // 11. BANDEAU RECU — N°REC-0003-2026
+  //     (numéro séquentiel du doc, PAS numéro ticket caisse)
+  // ════════════════════════════════
+  const recH = cutY;
+  page.drawRectangle({ x: 0, y: 0, width: W, height: recH, color: rgb(0.97,0.97,1.0) });
 
-  const annee = today.getFullYear();
-  const numRec = String(numero).padStart(6, '0');
-  const recLabel = `N°REC-${numRec}-${annee}`;
+  const numRec = String(numero).padStart(4, '0');
+  const recLine = `RECU  |  N°REC-${numRec}-${annee}  REF DOC : ${reference}  DATE: ${dateStr}  |  Montant : 2000 Ariary  |`;
+  page.drawText(recLine,                { x: mL, y: 34, size: 7.5, font: bold, color: rgb(0.08,0.08,0.08) });
+  page.drawText('Merci pour votre visite !!!', { x: W / 2 - 45, y: 20, size: 7.5, font: reg,  color: rgb(0.20,0.20,0.20) });
 
-  page.drawText('RECU', { x: m, y: 40, size: 9, font: bold, color: rgb(0.15,0.15,0.5) });
-  page.drawLine({ start: { x: m + 42, y: 2 }, end: { x: m + 42, y: stripY - 2 }, thickness: 0.5, color: rgb(0.7,0.7,0.85) });
-  page.drawText(recLabel, { x: m + 48, y: 42, size: 7.5, font: bold, color: rgb(0.1,0.1,0.4) });
-  page.drawText(`REF DOC : ${reference}`, { x: m + 48, y: 31, size: 6.5, font: reg, color: rgb(0.2,0.2,0.2) });
-  page.drawText(`DATE : ${dateStr}`, { x: m + 48, y: 21, size: 6.5, font: reg, color: rgb(0.2,0.2,0.2) });
-  page.drawText(`Montant : 2 000 Ariary`, { x: W / 2 + 20, y: 42, size: 8, font: bold, color: rgb(0.08,0.40,0.10) });
-  page.drawText(`Merci pour votre visite !!!`, { x: W / 2 + 20, y: 28, size: 7, font: reg, color: rgb(0.3,0.3,0.3) });
-  // Petite référence de validation transaction (sera remplie par la caisse)
-  page.drawText('Ref. transaction : ___________________________', { x: W / 2 + 20, y: 14, size: 6, font: reg, color: rgb(0.5,0.5,0.5) });
-
+  // ════════════════════════════════
+  // 12. ENREGISTREMENT
+  // ════════════════════════════════
   await enregistrerDocument('CR', reference, numero, membre.id, foyer.id, { nom: membre.nom, prenom: membre.prenom });
   return await pdf.save();
 }
