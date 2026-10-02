@@ -989,30 +989,243 @@ export async function genererFM(foyer: Foyer, membres: Membre[], config: ConfigF
 }
 
 // FFD — Déclaration de Décès (A4P)
-export async function genererFFD(membre: Membre, foyer: Foyer, config: ConfigFokontany, dateDeces?: string, lieuDeces?: string, declarant?: string): Promise<Uint8Array> {
-  const pdf = await PDFDocument.create();
+export async function genererFFD(membre: Membre, foyer: Foyer, config: ConfigFokontany, dateDeces?: string, lieuDeces?: string, declarant?: string, heureDeces?: string, causeDeces?: string, lieuInhumation?: string, lienDeclarant?: string): Promise<Uint8Array> {
+  const pdf  = await PDFDocument.create();
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const reg  = await pdf.embedFont(StandardFonts.Helvetica);
-  const { W, H } = A4P;
+
+  const W = 595, H = 842;
+  const mL = 42;
   const page = pdf.addPage([W, H]);
   const { reference, numero } = await genererReference('FFD', config);
-  const m = 36; const col2 = (W-m*2)/2;
-  drawHeaderA4P(page, config, bold, reg, 'FFD', 'Fanambarana Fahafatesana - Declaration de Deces', reference);
 
-  let y = H - 88;
-  page.drawRectangle({ x: m, y: y-18, width: W-m*2, height: 20, color: rgb(0.92,0.92,0.92), borderColor: C.mid, borderWidth: 0.5, borderRadius: 3 });
-  dt(page, 'DECLARATION OFFICIELLE DE DECES', W/2-80, y-5, bold, 9, C.dark);
-  y -= 30;
-  dt(page, `Nous, Chef du Fokontany ${clean(config.nom_fokontany)}, declarons avoir enregistre le deces de la personne suivante.`, m, y, reg, 9, C.dark);
-  y -= 20;
-  const age = membre.date_naissance ? Math.abs(new Date(Date.now()-new Date(membre.date_naissance).getTime()).getUTCFullYear()-1970) : null;
-  const boxes = [{l:'Nom du defunt',v:membre.nom},{l:'Prenom(s)',v:membre.prenom},{l:'Date de naissance',v:membre.date_naissance?new Date(membre.date_naissance).toLocaleDateString('fr-FR'):'-'},{l:'Lieu de naissance',v:membre.lieu_naissance||'-'},{l:'Age au deces',v:age?`${age} ans`:'-'},{l:'CIN',v:membre.cin||'-'},{l:'Adresse',v:foyer.adresse||'-'},{l:'Date du deces',v:dateDeces||'A preciser'},{l:'Lieu du deces',v:lieuDeces||'A preciser'},{l:'Declarant',v:declarant||'A preciser'}];
-  page.drawRectangle({ x: m, y: y-Math.ceil(boxes.length/2)*34-10, width: W-m*2, height: Math.ceil(boxes.length/2)*34+14, color: C.bg, borderColor: C.border, borderWidth: 0.5, borderRadius: 4 });
-  boxes.forEach((b,i)=>{dt(page,b.l,m+(i%2)*col2+8,y-Math.floor(i/2)*34-10,reg,7,C.light);dt(page,clean(b.v),m+(i%2)*col2+8,y-Math.floor(i/2)*34-22,bold,9.5,C.dark);});
-  y -= Math.ceil(boxes.length/2)*34+22;
-  dt(page, 'En foi de quoi, la presente declaration est etablie pour servir et valoir ce que de droit.', m, y, reg, 9, C.dark);
-  drawFooterA4P(page, config, reg, bold, reference);
-  await enregistrerDocument('FFD', reference, numero, membre.id, foyer.id);
+  const imgRepub   = await pdf.embedPng(b64ToUint8(LOGO_REPUB_B64));
+  const imgCommune = await pdf.embedPng(b64ToUint8(LOGO_COMMUNE_B64));
+
+  const today   = new Date();
+  const dateStr = today.toLocaleDateString('fr-FR');
+  const annee   = today.getFullYear();
+
+  const noir = rgb(0.05, 0.05, 0.05);
+  const gris = rgb(0.30, 0.30, 0.30);
+  const bleu = rgb(0.10, 0.10, 0.65);
+  const sep  = rgb(0.75, 0.75, 0.75);
+
+  // ── Helpers ───────────────────────────────────────────────
+  function hLine(y: number) {
+    page.drawLine({ start: { x: mL, y }, end: { x: W - mL, y }, thickness: 0.4, color: sep });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 0. FILIGRANE COMMUNE
+  // ══════════════════════════════════════════════════════════
+  page.drawImage(imgCommune, {
+    x: W / 2 - 140, y: H / 2 - 180,
+    width: 280, height: 280, opacity: 0.14,
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // 1. EN-TETE GAUCHE — 8 lignes avec tirets intercalés
+  // ══════════════════════════════════════════════════════════
+  const hTop = H - 28;
+
+  // helper tirets en-tête (drawLine)
+  function drawDashLine(y: number, len: number) {
+    for (let dx = mL; dx < mL + len; dx += 5) {
+      page.drawLine({ start: { x: dx, y }, end: { x: Math.min(dx + 3, mL + len), y }, thickness: 0.5, color: gris });
+    }
+  }
+
+  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`, { x: mL, y: hTop,      size: 7.5, font: bold, color: noir });
+  drawDashLine(hTop - 8, 100);
+  page.drawText(`PREFECTURE ${clean(config.nom_district).toUpperCase()}`,            { x: mL, y: hTop - 16, size: 7.5, font: bold, color: noir });
+  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,              { x: mL, y: hTop - 27, size: 7.5, font: bold, color: noir });
+  drawDashLine(hTop - 35, 130);
+  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                { x: mL, y: hTop - 43, size: 7.5, font: bold, color: noir });
+  drawDashLine(hTop - 51, 100);
+  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,            { x: mL, y: hTop - 59, size: 7.5, font: bold, color: noir });
+  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`, { x: mL, y: hTop - 70, size: 7.5, font: bold, color: noir });
+  drawDashLine(hTop - 78, 115);
+
+  // ══════════════════════════════════════════════════════════
+  // 2. LOGO REPUBLIQUE — centré, sous l'en-tête gauche (aligné verticalement)
+  // ══════════════════════════════════════════════════════════
+  const lgW = 115, lgH = 88;
+  const lgX = W / 2 - lgW / 2;
+  const lgY = hTop - 55 - 18 - lgH;
+  page.drawImage(imgRepub, { x: lgX, y: lgY, width: lgW, height: lgH });
+
+  // ══════════════════════════════════════════════════════════
+  // 3. TITRE — centré, gras 16, tirets dessous
+  // ══════════════════════════════════════════════════════════
+  const titleY   = lgY - 16;
+  const titleTxt = '[FFD] DECLARATION DE DECES';
+  const titleSz  = 16;
+  const titleW   = bold.widthOfTextAtSize(titleTxt, titleSz);
+  const titleX   = W / 2 - titleW / 2;
+  page.drawText(titleTxt, { x: titleX, y: titleY, size: titleSz, font: bold, color: noir });
+  for (let dx = titleX; dx < titleX + titleW - 2; dx += 5) {
+    page.drawLine({ start: { x: dx, y: titleY - 6 }, end: { x: Math.min(dx + 3, titleX + titleW), y: titleY - 6 }, thickness: 0.6, color: gris });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 4. REF / DATE — empilé à gauche (pas de bloc validité à droite)
+  // ══════════════════════════════════════════════════════════
+  const refY = titleY - 32;
+  page.drawText('Ref.:',            { x: mL, y: refY,      size: 7.5, font: bold, color: noir });
+  page.drawText(reference,          { x: mL, y: refY - 13, size: 8.5, font: bold, color: bleu });
+  page.drawText(`Date: ${dateStr}`, { x: mL, y: refY - 25, size: 7.5, font: reg,  color: noir });
+
+  // ══════════════════════════════════════════════════════════
+  // 5. INTRO
+  // ══════════════════════════════════════════════════════════
+  const introY = refY - 48;
+  page.drawText('Je soussigne(e), declare par la presente le deces de :', { x: mL, y: introY, size: 9, font: reg, color: noir });
+
+  // ══════════════════════════════════════════════════════════
+  // 6. GRILLE CHAMPS DEFUNT
+  //    Rang 1 : NOM(S) | PRENOM(S) | PROFESSION
+  //    Rang 2 : DATE ET LIEU DE NAISSANCE (2/3) | TITULAIRE CIN n° (1/3)
+  //    Rang 3 : ADRESSE RESIDENTIELLE (plein)
+  // ══════════════════════════════════════════════════════════
+  const rowH = 28;
+  const lblSz = 7.5, valSz = 10;
+  const col3w = (W - mL * 2) / 3; // largeur d'une colonne sur 3
+
+  let gy = introY - 18;
+  hLine(gy + rowH);
+
+  // Rang 1 : NOM | PRENOM | PROFESSION
+  const c1 = mL, c2 = mL + col3w, c3 = mL + col3w * 2;
+  page.drawText('Nom(s) :', { x: c1, y: gy + rowH - 10, size: lblSz, font: reg, color: gris });
+  page.drawText(clean(membre.nom || '-'), { x: c1, y: gy + rowH - 22, size: valSz, font: bold, color: noir });
+  page.drawText('Prenom(s) :', { x: c2, y: gy + rowH - 10, size: lblSz, font: reg, color: gris });
+  page.drawText(clean(membre.prenom || '-'), { x: c2, y: gy + rowH - 22, size: valSz, font: bold, color: noir });
+  page.drawText('Profession :', { x: c3, y: gy + rowH - 10, size: lblSz, font: reg, color: gris });
+  page.drawText(clean(membre.profession || '-'), { x: c3, y: gy + rowH - 22, size: valSz, font: bold, color: noir });
+  gy -= rowH; hLine(gy + rowH);
+
+  // Rang 2 : DATE ET LIEU DE NAISSANCE (2 colonnes) | TITULAIRE CIN n°
+  const dnStr = membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '-';
+  const lieu  = clean(membre.lieu_naissance || '-');
+  const cinStr = membre.cin ? `${membre.cin} delivree le ${membre.date_cin ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '-'} a ${lieu}` : '-';
+  const col2w = col3w * 2;
+  page.drawText('Date et lieu de naissance :', { x: c1, y: gy + rowH - 10, size: lblSz, font: reg, color: gris });
+  page.drawText(`${dnStr} a ${lieu}`,           { x: c1, y: gy + rowH - 22, size: valSz, font: bold, color: noir });
+  page.drawText('Titulaire de la CIN n° :', { x: c1 + col2w, y: gy + rowH - 10, size: lblSz, font: reg, color: gris });
+  page.drawText(cinStr,                      { x: c1 + col2w, y: gy + rowH - 22, size: 8.5, font: bold, color: noir });
+  gy -= rowH; hLine(gy + rowH);
+
+  // Rang 3 : ADRESSE RESIDENTIELLE (plein)
+  const adresse = foyer.adresse || `${clean(config.nom_quartier)} - Fokontany ${clean(config.nom_fokontany)}`;
+  page.drawText('Adresse residentielle :', { x: c1, y: gy + rowH - 10, size: lblSz, font: reg, color: gris });
+  page.drawText(clean(adresse),             { x: c1, y: gy + rowH - 22, size: valSz, font: bold, color: noir });
+  gy -= rowH; hLine(gy + rowH);
+
+  // ══════════════════════════════════════════════════════════
+  // 7. LISTE INFORMATIONS DECES (tirets décoratifs + puces)
+  // ══════════════════════════════════════════════════════════
+  gy -= 14;
+
+  // Tirets décoratifs avant la liste
+  for (let dx = mL; dx < W - mL - 4; dx += 5) {
+    page.drawLine({ start: { x: dx, y: gy }, end: { x: Math.min(dx + 3, W - mL), y: gy }, thickness: 0.5, color: sep });
+  }
+  gy -= 14;
+
+  const infoDeces = [
+    `Date du deces : ${dateDeces || '[Date]'}`,
+    `Heure : ${heureDeces || '[Heure]'}`,
+    `Lieu : ${lieuDeces || '[Lieu du deces]'}`,
+    `Cause : ${causeDeces || '[Cause du deces]'}`,
+    `Inhume(e) a : ${lieuInhumation || '[Lieu d\'inhumation]'}`,
+  ];
+  for (const line of infoDeces) {
+    page.drawText(`- ${clean(line)}`, { x: mL + 10, y: gy, size: 9, font: reg, color: noir });
+    gy -= 15;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 8. TEXTE DE CLOTURE
+  // ══════════════════════════════════════════════════════════
+  gy -= 10;
+  const closeTxt = "Je certifie que ces informations sont exactes et sinceres. Cette declaration est etablie pour servir et valoir ce que de droit, notamment pour les formalites d'etat civil.";
+  const closeLines = wrap(closeTxt, 90);
+  closeLines.forEach((l, i) => page.drawText(l, { x: mL, y: gy - i * 13, size: 9, font: reg, color: noir }));
+  gy -= closeLines.length * 13 + 8;
+
+  // Déclarant
+  const nomDeclarant = declarant || '[Nom et Prenom du declarant]';
+  const lienDec      = lienDeclarant || '[Epoux/Epouse, Fils/Fille, Frere/Soeur, etc.]';
+  page.drawText('Nom complet du declarant :',    { x: mL, y: gy,      size: 9, font: reg, color: noir });
+  page.drawText(clean(nomDeclarant),              { x: mL + 130, y: gy, size: 9, font: bold, color: noir });
+  page.drawText('Lien avec le defunt :',         { x: mL, y: gy - 14, size: 9, font: reg, color: noir });
+  page.drawText(clean(lienDec),                  { x: mL + 130, y: gy - 14, size: 9, font: reg, color: noir });
+
+  gy -= 36;
+
+  // ══════════════════════════════════════════════════════════
+  // 9. CADRE RESERVE AU FOKONTANY
+  // ══════════════════════════════════════════════════════════
+  page.drawText('CADRE RESERVE AU FOKONTANY', { x: mL, y: gy, size: 9, font: bold, color: noir });
+  gy -= 14;
+  const cadreH = 52;
+  const cadreTxt = `Vu pour legalisation de la signature du declarant. Le deces de Monsieur/Madame ${clean(membre.nom || '')} ${clean(membre.prenom || '')} est confirme par les autorites locales.`;
+  const cadreLines = wrap(cadreTxt, 85);
+  cadreLines.forEach((l, i) => page.drawText(l, { x: mL, y: gy - i * 13, size: 8.5, font: reg, color: noir }));
+  gy -= Math.max(cadreLines.length * 13, cadreH);
+
+  // ══════════════════════════════════════════════════════════
+  // 10. ZONE SIGNATURE
+  //     QR gauche | (Signature du déclarant) centre | Fokontany droite
+  // ══════════════════════════════════════════════════════════
+  const sigBase = gy - 10;
+
+  // QR code
+  try {
+    const qrUrl = `https://fanisa.pages.dev/verifier?ref=${encodeURIComponent(reference)}`;
+    const qrDU  = await QRCode.toDataURL(qrUrl, { width: 80, margin: 1, color: { dark: '#111133', light: '#FFFFFF' } });
+    const qrImg = await pdf.embedPng(b64ToUint8(qrDU.split(',')[1]));
+    page.drawImage(qrImg, { x: mL, y: sigBase - 80, width: 80, height: 80 });
+    page.drawText('Authentification du document', { x: mL, y: sigBase - 87, size: 6, font: reg, color: gris });
+  } catch (_) {
+    page.drawRectangle({ x: mL, y: sigBase - 80, width: 80, height: 80, borderColor: gris, borderWidth: 0.8, color: rgb(0.96,0.96,0.96) });
+  }
+
+  // Signature déclarant — centré
+  const sigDecX = W / 2 - 55;
+  page.drawText('(Signature du declarant)', { x: sigDecX, y: sigBase - 60, size: 8, font: reg, color: gris });
+
+  // Bloc chef — droite
+  const sX = W - mL - 160;
+  page.drawText(`${clean(config.nom_commune)}, le ${dateStr}`,  { x: sX, y: sigBase + 5,  size: 8, font: reg,  color: noir });
+  page.drawText('Le Chef du Fokontany',                          { x: sX + 8, y: sigBase - 12, size: 9, font: bold, color: noir });
+  page.drawLine({ start: { x: sX - 5, y: sigBase - 52 }, end: { x: W - mL, y: sigBase - 52 }, thickness: 0.5, color: sep });
+  page.drawText('(Signature et cachet)', { x: sX + 22, y: sigBase - 63, size: 7, font: reg, color: gris });
+
+  // ══════════════════════════════════════════════════════════
+  // 11. LIGNE POINTILLEE DE DECOUPE
+  // ══════════════════════════════════════════════════════════
+  const cutY = 52;
+  page.drawText('- -', { x: mL - 6, y: cutY - 2, size: 7, font: reg, color: gris });
+  for (let dx = mL + 8; dx < W - mL - 4; dx += 5) {
+    page.drawLine({ start: { x: dx, y: cutY }, end: { x: dx + 3, y: cutY }, thickness: 0.6, color: rgb(0.5,0.5,0.5) });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 12. BANDEAU RECU — centré
+  // ══════════════════════════════════════════════════════════
+  page.drawRectangle({ x: 0, y: 0, width: W, height: cutY - 1, color: rgb(1,1,1) });
+  const numRec = String(numero).padStart(4, '0');
+  const recLine = `RECU  |  N°REC-${numRec}-${annee}  REF DOC : ${reference}  DATE: ${dateStr}  |  Montant : 2000 Ariary  |`;
+  const recW = bold.widthOfTextAtSize(recLine, 7.5);
+  page.drawText(recLine, { x: W / 2 - recW / 2, y: 36, size: 7.5, font: bold, color: noir });
+  page.drawText('Merci pour votre visite !!!', { x: W / 2 - 52, y: 22, size: 8, font: reg, color: gris });
+
+  // ══════════════════════════════════════════════════════════
+  // 13. ENREGISTREMENT
+  // ══════════════════════════════════════════════════════════
+  await enregistrerDocument('FFD', reference, numero, membre.id, foyer.id, { nom: membre.nom, prenom: membre.prenom });
   return await pdf.save();
 }
 
