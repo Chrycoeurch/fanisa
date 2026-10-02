@@ -465,63 +465,69 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   const sep   = rgb(0.75, 0.75, 0.75);
 
   // ══════════════════════════════════════════════════════════
-  // 0. FILIGRANE COMMUNE — grand, centré, très transparent, couvre tout le corps
+  // 0. FILIGRANE COMMUNE — centré sur le corps du document, visible ~15%
   // ══════════════════════════════════════════════════════════
-  const filW = 230, filH = 230;
+  const filW = 280, filH = 280;
   page.drawImage(imgCommune, {
     x: W / 2 - filW / 2,
-    y: H / 2 - filH / 2 - 30,
+    y: H / 2 - filH / 2 - 40,
     width: filW,
     height: filH,
-    opacity: 0.07,
+    opacity: 0.14,
   });
 
   // ══════════════════════════════════════════════════════════
-  // 1. EN-TETE GAUCHE — texte noir gras, 6 lignes
+  // 1. EN-TETE GAUCHE — 6 lignes, taille 7.5, gras, interligne 11
   // ══════════════════════════════════════════════════════════
   const hTop = H - 28;
-  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`,                     { x: mL, y: hTop,      size: 7.5, font: bold, color: noir });
-  page.drawText(`PREFECTURE ${clean(config.nom_district).toUpperCase()}`,                                { x: mL, y: hTop - 11, size: 7.5, font: bold, color: noir });
-  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,                                  { x: mL, y: hTop - 22, size: 7.5, font: bold, color: noir });
-  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                                    { x: mL, y: hTop - 33, size: 7.5, font: bold, color: noir });
-  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,                                { x: mL, y: hTop - 44, size: 7.5, font: bold, color: noir });
-  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`,  { x: mL, y: hTop - 55, size: 7.5, font: bold, color: noir });
+  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`,                    { x: mL, y: hTop,      size: 7.5, font: bold, color: noir });
+  page.drawText(`PREFECTURE ${clean(config.nom_district).toUpperCase()}`,                               { x: mL, y: hTop - 11, size: 7.5, font: bold, color: noir });
+  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,                                 { x: mL, y: hTop - 22, size: 7.5, font: bold, color: noir });
+  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                                   { x: mL, y: hTop - 33, size: 7.5, font: bold, color: noir });
+  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,                               { x: mL, y: hTop - 44, size: 7.5, font: bold, color: noir });
+  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`, { x: mL, y: hTop - 55, size: 7.5, font: bold, color: noir });
 
   // ══════════════════════════════════════════════════════════
-  // 2. LOGO REPUBLIQUE — centré, aligné avec la dernière ligne gauche, plus étroit (70×70)
-  //    hTop - 55 = bas de la 6e ligne gauche → logo centré là, légèrement remonté
+  // 2. LOGO REPUBLIQUE — centré, grand (90×90), avec espace sous l'en-tête
+  //    L'en-tête finit à hTop-55. On laisse ~18pts de gap puis on place le logo.
   // ══════════════════════════════════════════════════════════
-  const lgW = 70, lgH = 70;
+  const lgW = 90, lgH = 90;
   const lgX = W / 2 - lgW / 2;
-  // aligner le bas du logo avec la dernière ligne d'en-tête gauche
-  const lgY = hTop - 55;
+  const lgY = hTop - 55 - 18 - lgH; // bas du logo = hTop-55-18-lgH → haut = hTop-55-18
   page.drawImage(imgRepub, { x: lgX, y: lgY, width: lgW, height: lgH });
 
   // ══════════════════════════════════════════════════════════
-  // 3. TITRE PRINCIPAL — centré, directement sous le logo
+  // 3. REPOBLIKAN'I MADAGASIKARA + devise — centrés sous le logo
   // ══════════════════════════════════════════════════════════
-  const titleY = lgY - 18;
+  const repY = lgY - 13;
+  page.drawText("REPOBLIKAN'I MADAGASIKARA", { x: W / 2 - 74, y: repY,      size: 8,   font: bold, color: noir });
+  page.drawText('Fitiavana - Tanindrazana - Fandrosoana', { x: W / 2 - 72, y: repY - 12, size: 7,   font: reg,  color: gris });
+
+  // ══════════════════════════════════════════════════════════
+  // 4. TITRE PRINCIPAL — centré, gras 14, tirets dessous
+  // ══════════════════════════════════════════════════════════
+  const titleY = repY - 26;
   page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 114, y: titleY, size: 14, font: bold, color: noir });
-  // Ligne pointillée sous titre
-  const dotStr = '. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .';
-  page.drawText(dotStr, { x: W / 2 - 100, y: titleY - 11, size: 7, font: reg, color: gris });
+  // Tirets centrés sous le titre (comme le PDF original)
+  page.drawText('- - - - - - - - - - - - - - - - - - - - - - - -', { x: W / 2 - 88, y: titleY - 11, size: 7, font: reg, color: gris });
 
   // ══════════════════════════════════════════════════════════
-  // 4. REF (gauche) | VALIDITE (droite) — sur la même ligne, bien alignés
+  // 5. REF / DATE (gauche) | VALIDITE / EXEMPLEIRE (droite)
+  //    Ref.: sur sa propre ligne, référence bleu en dessous, Date: en dessous
   // ══════════════════════════════════════════════════════════
-  const refY = titleY - 28;
-  // Bloc gauche
-  page.drawText('Ref.:',            { x: mL,           y: refY,       size: 7.5, font: bold, color: gris });
-  page.drawText(reference,          { x: mL + 28,      y: refY,       size: 8.5, font: bold, color: bleu });
-  page.drawText(`Date: ${dateStr}`, { x: mL,           y: refY - 13,  size: 7.5, font: reg,  color: noir });
-  // Bloc droit
-  page.drawText(`Date de validite : ${validite}`, { x: W - mL - 160, y: refY,      size: 7.5, font: bold, color: noir });
-  page.drawText('Exempleire : 1/1',               { x: W - mL - 160, y: refY - 13, size: 7.5, font: bold, color: noir });
+  const refY = titleY - 30;
+  // Gauche : 3 lignes empilées
+  page.drawText('Ref.:',            { x: mL, y: refY,      size: 7.5, font: bold, color: noir });
+  page.drawText(reference,          { x: mL, y: refY - 13, size: 8.5, font: bold, color: bleu });
+  page.drawText(`Date: ${dateStr}`, { x: mL, y: refY - 25, size: 7.5, font: reg,  color: noir });
+  // Droite : 2 lignes alignées avec Ref.:
+  page.drawText(`Date de validite : ${validite}`, { x: W - mL - 162, y: refY,      size: 7.5, font: bold, color: noir });
+  page.drawText('Exempleire : 1/1',               { x: W - mL - 162, y: refY - 13, size: 7.5, font: bold, color: noir });
 
   // ══════════════════════════════════════════════════════════
-  // 6. TEXTE D'INTRO
+  // 6. TEXTE D'INTRO — espace suffisant sous le bloc ref (3 lignes = ~25pts + 20 gap)
   // ══════════════════════════════════════════════════════════
-  const introY = refY - 42;
+  const introY = refY - 48;
   const introTxt = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)}, Quartier ${clean(config.nom_quartier)} careau n°${config.code_carreau}, certifie que la personne dont l'identite est mentionnee ci-dessous reside bien dans le ressort du Fokontany.`;
   const introLines = wrap(introTxt, 90);
   introLines.forEach((l, i) => page.drawText(l, { x: mL, y: introY - i * 13, size: 9, font: reg, color: noir }));
