@@ -491,7 +491,7 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   // 2. LOGO REPUBLIQUE — centré, grand (90×90), avec espace sous l'en-tête
   //    L'en-tête finit à hTop-55. On laisse ~18pts de gap puis on place le logo.
   // ══════════════════════════════════════════════════════════
-  const lgW = 75, lgH = 75;
+  const lgW = 88, lgH = 88;
   const lgX = W / 2 - lgW / 2;
   const lgY = hTop - 55 - 18 - lgH;
   page.drawImage(imgRepub, { x: lgX, y: lgY, width: lgW, height: lgH });
@@ -501,8 +501,8 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   // ══════════════════════════════════════════════════════════
   const titleY = lgY - 18;
   page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 114, y: titleY, size: 14, font: bold, color: noir });
-  // Tirets centrés sous le titre (comme le PDF original)
-  page.drawText('- - - - - - - - - - - - - - - - - - - - - - - -', { x: W / 2 - 88, y: titleY - 11, size: 7, font: reg, color: gris });
+  // Tirets sur toute la largeur du titre (conforme PDF original)
+  page.drawText('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', { x: W / 2 - 114, y: titleY - 11, size: 7, font: reg, color: gris });
 
   // ══════════════════════════════════════════════════════════
   // 5. REF / DATE (gauche) | VALIDITE / EXEMPLEIRE (droite)
@@ -528,7 +528,7 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   // ══════════════════════════════════════════════════════════
   // 7. GRILLE CHAMPS — label petit gris, valeur gras noir, lignes séparation fines
   // ══════════════════════════════════════════════════════════
-  const gTop = introY - introLines.length * 13 - 10;
+  const gTop = introY - introLines.length * 13 - 22;
   const rowH = 28;
   const c1 = mL, c2 = mL + 185, c3 = mL + 375;
   const lblSz = 7.5, valSz = 10;
