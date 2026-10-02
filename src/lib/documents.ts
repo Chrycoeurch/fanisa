@@ -501,9 +501,8 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   // ══════════════════════════════════════════════════════════
   const titleY = lgY - 18;
   page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 114, y: titleY, size: 14, font: bold, color: noir });
-  // Tirets centrés, proportionnels au titre (même largeur, centrés comme lui)
-  const titleW = 228; // largeur approx du titre à size 14
-  page.drawText('- - - - - - - - - - - - - - - - - - - - - - - -', { x: W / 2 - titleW / 2, y: titleY - 11, size: 8, font: reg, color: gris });
+  // Tirets sur toute la largeur du titre (conforme PDF original)
+  page.drawText('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', { x: W / 2 - 114, y: titleY - 11, size: 7, font: reg, color: gris });
 
   // ══════════════════════════════════════════════════════════
   // 5. REF / DATE (gauche) | VALIDITE / EXEMPLEIRE (droite)
@@ -601,29 +600,25 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   // ══════════════════════════════════════════════════════════
   const sigBase = clY - 52;
 
-  // Zone signature centrée : QR à gauche du centre | Signature à droite du centre
-  // Centre de la zone = W/2, QR occupe 80pts, gap 30pts, bloc sig ~155pts
-  // Total = 80 + 30 + 155 = 265 → débute à W/2 - 265/2 ≈ 165
-  const sigZoneX = W / 2 - 132;
-  const qrX = sigZoneX;
-  const sX   = sigZoneX + 80 + 30; // après QR + gap
-
-  // QR code
+  // QR code réel
   try {
     const qrUrl = `https://fanisa.pages.dev/verifier?ref=${encodeURIComponent(reference)}`;
     const qrDU  = await QRCode.toDataURL(qrUrl, { width: 80, margin: 1, color: { dark: '#111133', light: '#FFFFFF' } });
     const qrImg = await pdf.embedPng(b64ToUint8(qrDU.split(',')[1]));
-    page.drawImage(qrImg, { x: qrX, y: sigBase - 75, width: 80, height: 80 });
-    page.drawText('Authentification du document', { x: qrX, y: sigBase - 86, size: 6, font: reg, color: gris });
+    page.drawImage(qrImg, { x: mL, y: sigBase - 75, width: 80, height: 80 });
+    page.drawText('Authentification du document', { x: mL, y: sigBase - 82, size: 6, font: reg, color: gris });
   } catch (_) {
-    page.drawRectangle({ x: qrX, y: sigBase - 75, width: 80, height: 80, borderColor: gris, borderWidth: 0.8, color: rgb(0.96,0.96,0.96) });
+    page.drawRectangle({ x: mL, y: sigBase - 75, width: 80, height: 80, borderColor: gris, borderWidth: 0.8, color: rgb(0.96,0.96,0.96) });
   }
 
-  // Bloc signature droite
-  page.drawText(`${clean(config.nom_fokontany)}, le ${dateStr}`, { x: sX,      y: sigBase + 5,   size: 8, font: reg,  color: noir });
-  page.drawText('Le Chef du Fokontany',                          { x: sX + 8,  y: sigBase - 12,  size: 9, font: bold, color: noir });
-  page.drawLine({ start: { x: sX, y: sigBase - 52 }, end: { x: sX + 150, y: sigBase - 52 }, thickness: 0.5, color: sep });
-  page.drawText('(Signature et cachet)',                         { x: sX + 20, y: sigBase - 63,  size: 7, font: reg,  color: gris });
+  // Cachet commune supprimé — déjà présent en filigrane sur tout le corps du document
+
+  // Signature droite
+  const sX = W - mL - 160;
+  page.drawText(`${clean(config.nom_fokontany)}, le ${dateStr}`, { x: sX, y: sigBase + 5,  size: 8, font: reg,  color: noir });
+  page.drawText('Le Chef du Fokontany',                          { x: sX + 8, y: sigBase - 12, size: 9, font: bold, color: noir });
+  page.drawLine({ start: { x: sX - 5, y: sigBase - 52 }, end: { x: W - mL, y: sigBase - 52 }, thickness: 0.5, color: sep });
+  page.drawText('(Signature et cachet)', { x: sX + 22, y: sigBase - 63, size: 7, font: reg, color: gris });
 
   // ══════════════════════════════════════════════════════════
   // 9. LIGNE POINTILLEE DE DECOUPE
