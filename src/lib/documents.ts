@@ -491,22 +491,15 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   // 2. LOGO REPUBLIQUE — centré, grand (90×90), avec espace sous l'en-tête
   //    L'en-tête finit à hTop-55. On laisse ~18pts de gap puis on place le logo.
   // ══════════════════════════════════════════════════════════
-  const lgW = 90, lgH = 90;
+  const lgW = 75, lgH = 75;
   const lgX = W / 2 - lgW / 2;
-  const lgY = hTop - 55 - 18 - lgH; // bas du logo = hTop-55-18-lgH → haut = hTop-55-18
+  const lgY = hTop - 55 - 18 - lgH;
   page.drawImage(imgRepub, { x: lgX, y: lgY, width: lgW, height: lgH });
 
   // ══════════════════════════════════════════════════════════
-  // 3. REPOBLIKAN'I MADAGASIKARA + devise — centrés sous le logo
+  // 3. TITRE PRINCIPAL — directement sous le logo, centré, gras 14, tirets dessous
   // ══════════════════════════════════════════════════════════
-  const repY = lgY - 13;
-  page.drawText("REPOBLIKAN'I MADAGASIKARA", { x: W / 2 - 74, y: repY,      size: 8,   font: bold, color: noir });
-  page.drawText('Fitiavana - Tanindrazana - Fandrosoana', { x: W / 2 - 72, y: repY - 12, size: 7,   font: reg,  color: gris });
-
-  // ══════════════════════════════════════════════════════════
-  // 4. TITRE PRINCIPAL — centré, gras 14, tirets dessous
-  // ══════════════════════════════════════════════════════════
-  const titleY = repY - 26;
+  const titleY = lgY - 18;
   page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 114, y: titleY, size: 14, font: bold, color: noir });
   // Tirets centrés sous le titre (comme le PDF original)
   page.drawText('- - - - - - - - - - - - - - - - - - - - - - - -', { x: W / 2 - 88, y: titleY - 11, size: 7, font: reg, color: gris });
