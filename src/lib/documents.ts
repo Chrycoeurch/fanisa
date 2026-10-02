@@ -488,38 +488,35 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`,  { x: mL, y: hTop - 55, size: 7.5, font: bold, color: noir });
 
   // ══════════════════════════════════════════════════════════
-  // 2. LOGO REPUBLIQUE — centré, grand (85×85)
+  // 2. LOGO REPUBLIQUE — centré, aligné avec la dernière ligne gauche, plus étroit (70×70)
+  //    hTop - 55 = bas de la 6e ligne gauche → logo centré là, légèrement remonté
   // ══════════════════════════════════════════════════════════
-  const lgW = 85, lgH = 85;
+  const lgW = 70, lgH = 70;
   const lgX = W / 2 - lgW / 2;
-  const lgY = H - 12 - lgH;
+  // aligner le bas du logo avec la dernière ligne d'en-tête gauche
+  const lgY = hTop - 55;
   page.drawImage(imgRepub, { x: lgX, y: lgY, width: lgW, height: lgH });
 
   // ══════════════════════════════════════════════════════════
-  // 3. TEXTE REPUBLIQUE + DEVISE sous le logo centré
+  // 3. TITRE PRINCIPAL — centré, directement sous le logo
   // ══════════════════════════════════════════════════════════
-  const repY = lgY - 13;
-  page.drawText("REPOBLIKAN'I MADAGASIKARA", { x: W / 2 - 74, y: repY,      size: 8,   font: bold, color: noir });
-  page.drawText('Fitiavana - Tanindrazana - Fandrosoana', { x: W / 2 - 72, y: repY - 12, size: 7.5, font: reg,  color: gris });
-
-  // ══════════════════════════════════════════════════════════
-  // 4. TITRE PRINCIPAL — centré, gras, grand
-  // ══════════════════════════════════════════════════════════
-  const titleY = repY - 28;
+  const titleY = lgY - 18;
   page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 114, y: titleY, size: 14, font: bold, color: noir });
   // Ligne pointillée sous titre
   const dotStr = '. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .';
   page.drawText(dotStr, { x: W / 2 - 100, y: titleY - 11, size: 7, font: reg, color: gris });
 
   // ══════════════════════════════════════════════════════════
-  // 5. REF / DATE / VALIDITE
+  // 4. REF (gauche) | VALIDITE (droite) — sur la même ligne, bien alignés
   // ══════════════════════════════════════════════════════════
-  const refY = titleY - 30;
-  page.drawText('Ref.:',              { x: mL, y: refY,       size: 8,   font: bold, color: noir });
-  page.drawText(reference,            { x: mL, y: refY - 12,  size: 8.5, font: bold, color: bleu });
-  page.drawText(`Date: ${dateStr}`,   { x: mL, y: refY - 24,  size: 8,   font: reg,  color: noir });
-  page.drawText(`Date de validite : ${validite}`, { x: W - mL - 158, y: refY,      size: 8,   font: bold, color: noir });
-  page.drawText('Exempleire : 1/1',               { x: W - mL - 158, y: refY - 14, size: 8,   font: bold, color: noir });
+  const refY = titleY - 28;
+  // Bloc gauche
+  page.drawText('Ref.:',            { x: mL,           y: refY,       size: 7.5, font: bold, color: gris });
+  page.drawText(reference,          { x: mL + 28,      y: refY,       size: 8.5, font: bold, color: bleu });
+  page.drawText(`Date: ${dateStr}`, { x: mL,           y: refY - 13,  size: 7.5, font: reg,  color: noir });
+  // Bloc droit
+  page.drawText(`Date de validite : ${validite}`, { x: W - mL - 160, y: refY,      size: 7.5, font: bold, color: noir });
+  page.drawText('Exempleire : 1/1',               { x: W - mL - 160, y: refY - 13, size: 7.5, font: bold, color: noir });
 
   // ══════════════════════════════════════════════════════════
   // 6. TEXTE D'INTRO
