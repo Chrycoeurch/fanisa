@@ -465,53 +465,64 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   const sep   = rgb(0.75, 0.75, 0.75);
 
   // ══════════════════════════════════════════════════════════
-  // 1. EN-TETE GAUCHE — texte noir gras, 7 lignes
+  // 0. FILIGRANE COMMUNE — grand, centré, très transparent, couvre tout le corps
   // ══════════════════════════════════════════════════════════
-  const hTop = H - 28;
-  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`,          { x: mL, y: hTop,      size: 7.5, font: bold, color: noir });
-  page.drawText(`PREFECTURE ${clean(config.nom_district).toUpperCase()}`,                      { x: mL, y: hTop - 11, size: 7.5, font: bold, color: noir });
-  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,                        { x: mL, y: hTop - 22, size: 7.5, font: bold, color: noir });
-  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                          { x: mL, y: hTop - 33, size: 7.5, font: bold, color: noir });
-  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,                      { x: mL, y: hTop - 44, size: 7.5, font: bold, color: noir });
-  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N°${config.code_carreau}`, { x: mL, y: hTop - 55, size: 7.5, font: bold, color: noir });
+  const filW = 230, filH = 230;
+  page.drawImage(imgCommune, {
+    x: W / 2 - filW / 2,
+    y: H / 2 - filH / 2 - 30,
+    width: filW,
+    height: filH,
+    opacity: 0.07,
+  });
 
   // ══════════════════════════════════════════════════════════
-  // 2. LOGO REPUBLIQUE — haut droite (petit, aligné avec les lignes d'en-tête)
+  // 1. EN-TETE GAUCHE — texte noir gras, 6 lignes
   // ══════════════════════════════════════════════════════════
-  const lgW = 62, lgH = 62;
-  const lgX = W - mL - lgW;
+  const hTop = H - 28;
+  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`,                     { x: mL, y: hTop,      size: 7.5, font: bold, color: noir });
+  page.drawText(`PREFECTURE ${clean(config.nom_district).toUpperCase()}`,                                { x: mL, y: hTop - 11, size: 7.5, font: bold, color: noir });
+  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,                                  { x: mL, y: hTop - 22, size: 7.5, font: bold, color: noir });
+  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                                    { x: mL, y: hTop - 33, size: 7.5, font: bold, color: noir });
+  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,                                { x: mL, y: hTop - 44, size: 7.5, font: bold, color: noir });
+  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`,  { x: mL, y: hTop - 55, size: 7.5, font: bold, color: noir });
+
+  // ══════════════════════════════════════════════════════════
+  // 2. LOGO REPUBLIQUE — centré, grand (85×85)
+  // ══════════════════════════════════════════════════════════
+  const lgW = 85, lgH = 85;
+  const lgX = W / 2 - lgW / 2;
   const lgY = H - 12 - lgH;
   page.drawImage(imgRepub, { x: lgX, y: lgY, width: lgW, height: lgH });
 
   // ══════════════════════════════════════════════════════════
-  // 3. LIGNE SEPARATION + TITRE BLOC CENTRAL
+  // 3. TEXTE REPUBLIQUE + DEVISE sous le logo centré
   // ══════════════════════════════════════════════════════════
-  const sepY = H - 96;
-  page.drawLine({ start: { x: mL, y: sepY }, end: { x: W - mL, y: sepY }, thickness: 0.5, color: sep });
+  const repY = lgY - 13;
+  page.drawText("REPOBLIKAN'I MADAGASIKARA", { x: W / 2 - 74, y: repY,      size: 8,   font: bold, color: noir });
+  page.drawText('Fitiavana - Tanindrazana - Fandrosoana', { x: W / 2 - 72, y: repY - 12, size: 7.5, font: reg,  color: gris });
 
-  // "REPOBLIKAN'I MADAGASIKARA" centré
-  page.drawText("REPOBLIKAN'I MADAGASIKARA", { x: W / 2 - 72, y: sepY - 13, size: 8, font: bold, color: noir });
-  page.drawText('Fitiavana - Tanindrazana - Fandrosoana', { x: W / 2 - 68, y: sepY - 23, size: 7, font: reg, color: gris });
-
-  // Titre principal
-  const titleY = sepY - 40;
-  page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 108, y: titleY, size: 14, font: bold, color: noir });
+  // ══════════════════════════════════════════════════════════
+  // 4. TITRE PRINCIPAL — centré, gras, grand
+  // ══════════════════════════════════════════════════════════
+  const titleY = repY - 28;
+  page.drawText('[CR] CERTIFICAT DE RESIDENCE', { x: W / 2 - 114, y: titleY, size: 14, font: bold, color: noir });
   // Ligne pointillée sous titre
   const dotStr = '. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .';
-  page.drawText(dotStr, { x: W / 2 - 100, y: titleY - 10, size: 7, font: reg, color: gris });
+  page.drawText(dotStr, { x: W / 2 - 100, y: titleY - 11, size: 7, font: reg, color: gris });
 
   // ══════════════════════════════════════════════════════════
-  // 4. REF / DATE / VALIDITE
+  // 5. REF / DATE / VALIDITE
   // ══════════════════════════════════════════════════════════
-  const refY = titleY - 28;
+  const refY = titleY - 30;
   page.drawText('Ref.:',              { x: mL, y: refY,       size: 8,   font: bold, color: noir });
   page.drawText(reference,            { x: mL, y: refY - 12,  size: 8.5, font: bold, color: bleu });
-  page.drawText(`Date: ${dateStr}`,   { x: mL, y: refY - 23,  size: 8,   font: reg,  color: noir });
-  page.drawText(`Date de validite : ${validite}`, { x: W - mL - 155, y: refY,      size: 8,   font: bold, color: noir });
-  page.drawText('Exempleire : 1/1',               { x: W - mL - 155, y: refY - 12, size: 8,   font: bold, color: noir });
+  page.drawText(`Date: ${dateStr}`,   { x: mL, y: refY - 24,  size: 8,   font: reg,  color: noir });
+  page.drawText(`Date de validite : ${validite}`, { x: W - mL - 158, y: refY,      size: 8,   font: bold, color: noir });
+  page.drawText('Exempleire : 1/1',               { x: W - mL - 158, y: refY - 14, size: 8,   font: bold, color: noir });
 
   // ══════════════════════════════════════════════════════════
-  // 5. TEXTE D'INTRO
+  // 6. TEXTE D'INTRO
   // ══════════════════════════════════════════════════════════
   const introY = refY - 42;
   const introTxt = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)}, Quartier ${clean(config.nom_quartier)} careau n°${config.code_carreau}, certifie que la personne dont l'identite est mentionnee ci-dessous reside bien dans le ressort du Fokontany.`;
@@ -519,7 +530,7 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   introLines.forEach((l, i) => page.drawText(l, { x: mL, y: introY - i * 13, size: 9, font: reg, color: noir }));
 
   // ══════════════════════════════════════════════════════════
-  // 6. GRILLE CHAMPS — label petit gris, valeur gras noir, ligne séparation fine
+  // 7. GRILLE CHAMPS — label petit gris, valeur gras noir, lignes séparation fines
   // ══════════════════════════════════════════════════════════
   const gTop = introY - introLines.length * 13 - 10;
   const rowH = 28;
@@ -527,6 +538,7 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   const lblSz = 7.5, valSz = 10;
 
   function fLabel(txt: string, x: number, y: number) {
+    // label en haut de la cellule (y = bas de cellule, label à y + rowH - 10)
     page.drawText(txt + ':', { x, y: y + rowH - 10, size: lblSz, font: reg, color: gris });
   }
   function fVal(txt: string, x: number, y: number) {
@@ -537,7 +549,7 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
     page.drawLine({ start: { x: mL, y }, end: { x: W - mL, y }, thickness: 0.4, color: sep });
   }
 
-  // Ligne du haut de la grille
+  // Ligne supérieure de la grille
   hLine(gTop + rowH);
 
   // Rang 1 : NOM | PRENOM(S) | AGE(S)
@@ -564,14 +576,19 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   fLabel('DATE DU CIN', c3, gy); fVal(membre.date_cin ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '-', c3, gy);
   gy -= rowH; hLine(gy + rowH);
 
-  // Rang 5 : MOTIF | ADRESSE DE RESIDENCE (hauteur double)
-  const motifH = 36;
-  fLabel('MOTIF', c1, gy - (motifH - rowH));
-  page.drawText('Demande administrative', { x: c1, y: gy - (motifH - rowH) + rowH - 22, size: valSz, font: bold, color: noir });
-  fLabel('ADRESSE DE RESIDENCE', c2, gy - (motifH - rowH));
-  page.drawText(clean(adresseLOT), { x: c2, y: gy - (motifH - rowH) + rowH - 22, size: valSz, font: bold, color: noir });
-  page.drawText(`Fokontany ${clean(config.nom_fokontany)} - ${clean(config.nom_district)}`, { x: c2, y: gy - (motifH - rowH) + rowH - 34, size: valSz, font: bold, color: noir });
-  gy -= motifH; hLine(gy + motifH);
+  // Rang 5 : MOTIF | ADRESSE DE RESIDENCE
+  // Hauteur augmentée pour deux lignes d'adresse + espacement correct
+  const motifH = 46;
+  // bas de la cellule = gy - motifH, haut = gy
+  // label en haut de cellule (à gy - 10)
+  page.drawText('MOTIF:', { x: c1, y: gy - 10, size: lblSz, font: reg, color: gris });
+  page.drawText('Demande administrative', { x: c1, y: gy - 22, size: valSz, font: bold, color: noir });
+  page.drawText('ADRESSE DE RESIDENCE:', { x: c2, y: gy - 10, size: lblSz, font: reg, color: gris });
+  page.drawText(clean(adresseLOT), { x: c2, y: gy - 22, size: valSz, font: bold, color: noir });
+  page.drawText(`Fokontany ${clean(config.nom_fokontany)} - ${clean(config.nom_district)}`, { x: c2, y: gy - 34, size: valSz, font: bold, color: noir });
+  // ligne de séparation sous la cellule MOTIF/ADRESSE
+  gy -= motifH;
+  hLine(gy);
 
   // ══════════════════════════════════════════════════════════
   // 7. TEXTE DE CLOTURE
