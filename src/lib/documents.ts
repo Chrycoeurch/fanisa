@@ -611,9 +611,7 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
     page.drawRectangle({ x: mL, y: sigBase - 75, width: 80, height: 80, borderColor: gris, borderWidth: 0.8, color: rgb(0.96,0.96,0.96) });
   }
 
-  // Cachet commune centré — visible, semi-transparent (signature area uniquement)
-  const cS = 95;
-  page.drawImage(imgCommune, { x: W / 2 - cS / 2, y: sigBase - 82, width: cS, height: cS, opacity: 0.45 });
+  // Cachet commune supprimé — déjà présent en filigrane sur tout le corps du document
 
   // Signature droite
   const sX = W - mL - 160;
