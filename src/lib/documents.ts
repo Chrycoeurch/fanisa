@@ -635,7 +635,9 @@ export async function genererCR(membre: Membre, foyer: Foyer, config: ConfigFoko
   page.drawRectangle({ x: 0, y: 0, width: W, height: cutY - 1, color: rgb(1,1,1) });
   const numRec = String(numero).padStart(4, '0');
   const recLine = `RECU  |  N°REC-${numRec}-${annee}  REF DOC : ${reference}  DATE: ${dateStr}  |  Montant : 2000 Ariary  |`;
-  page.drawText(recLine, { x: mL, y: 36, size: 7.5, font: bold, color: noir });
+  // Centrer le texte du reçu
+  const recW = bold.widthOfTextAtSize(recLine, 7.5);
+  page.drawText(recLine, { x: W / 2 - recW / 2, y: 36, size: 7.5, font: bold, color: noir });
   page.drawText('Merci pour votre visite !!!', { x: W / 2 - 52, y: 22, size: 8, font: reg, color: gris });
 
   // ══════════════════════════════════════════════════════════
