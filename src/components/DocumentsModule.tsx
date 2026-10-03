@@ -188,6 +188,21 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
                   </div>
                 </div>
               )}
+              {code === 'DUOP' && (
+                <div className="space-y-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-slate-500 uppercase">Informations sur le bien occupé</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-xs text-slate-500 block mb-1">Qualité du demandeur</label><select value={extraData.qualite || ''} onChange={e => setExtraData((p: any) => ({ ...p, qualite: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-slate-400"><option value="">-- Choisir --</option>{['Propriétaire','Locataire','Occupant','Héritier','Usufruitier','Représentant légal'].map(q => <option key={q}>{q}</option>)}</select></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Nature du bien</label><select value={extraData.natureBien || ''} onChange={e => setExtraData((p: any) => ({ ...p, natureBien: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-slate-400"><option value="">-- Choisir --</option>{['Maison d\'habitation','Appartement','Local commercial','Terrain nu','Entrepôt','Atelier','Bureau','Autre'].map(n => <option key={n}>{n}</option>)}</select></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Superficie (m²)</label><input type="number" value={extraData.superficieBien || ''} onChange={e => setExtraData((p: any) => ({ ...p, superficieBien: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: 120" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Usage du bien</label><select value={extraData.usageBien || ''} onChange={e => setExtraData((p: any) => ({ ...p, usageBien: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-slate-400"><option value="">-- Choisir --</option>{['Résidentiel','Commercial','Artisanal','Agricole','Mixte','Industriel','Autre'].map(u => <option key={u}>{u}</option>)}</select></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Occupé depuis</label><input type="date" value={extraData.occupationDepuis || ''} onChange={e => setExtraData((p: any) => ({ ...p, occupationDepuis: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Titre / Référence</label><input value={extraData.titreReference || ''} onChange={e => setExtraData((p: any) => ({ ...p, titreReference: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: Titre foncier N°..." /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">GPS — Latitude</label><input value={extraData.gpsLat || ''} onChange={e => setExtraData((p: any) => ({ ...p, gpsLat: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: -18.9137" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">GPS — Longitude</label><input value={extraData.gpsLng || ''} onChange={e => setExtraData((p: any) => ({ ...p, gpsLng: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: 47.5362" /></div>
+                  </div>
+                </div>
+              )}
               {code === 'CCR' && (
                 <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <p className="text-xs font-bold text-blue-700 uppercase">Informations du changement de résidence</p>
