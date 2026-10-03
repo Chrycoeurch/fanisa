@@ -212,6 +212,22 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
                   </div>
                 </div>
               )}
+              {code === 'DNAS' && (
+                <div className="space-y-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-slate-500 uppercase">Informations sur l'enfant déclaré</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-xs text-slate-500 block mb-1">Nom de l'enfant *</label><input value={extraData.nomEnfant || ''} onChange={e => setExtraData((p: any) => ({ ...p, nomEnfant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Nom(s)" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Prénom(s) de l'enfant *</label><input value={extraData.prenomEnfant || ''} onChange={e => setExtraData((p: any) => ({ ...p, prenomEnfant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Prénom(s)" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Sexe *</label><select value={extraData.sexeEnfant || ''} onChange={e => setExtraData((p: any) => ({ ...p, sexeEnfant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-slate-400"><option value="">-- Choisir --</option><option>Masculin</option><option>Feminin</option></select></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Date de naissance *</label><input type="date" value={extraData.dateNaissanceEnfant || ''} onChange={e => setExtraData((p: any) => ({ ...p, dateNaissanceEnfant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
+                    <div className="col-span-2"><label className="text-xs text-slate-500 block mb-1">Lieu de naissance *</label><input value={extraData.lieuNaissanceEnfant || ''} onChange={e => setExtraData((p: any) => ({ ...p, lieuNaissanceEnfant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: Maternité de Toamasina..." /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Nom du père</label><input value={extraData.nomPere || ''} onChange={e => setExtraData((p: any) => ({ ...p, nomPere: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Nom et prénom(s)" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Nom de la mère</label><input value={extraData.nomMere || ''} onChange={e => setExtraData((p: any) => ({ ...p, nomMere: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Nom et prénom(s)" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Nb d'enfants dans la famille</label><input type="number" min="1" value={extraData.nbEnfantsFamille || ''} onChange={e => setExtraData((p: any) => ({ ...p, nbEnfantsFamille: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: 3" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Rang de l'enfant</label><input type="number" min="1" value={extraData.rangEnfant || ''} onChange={e => setExtraData((p: any) => ({ ...p, rangEnfant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: 2" /></div>
+                  </div>
+                </div>
+              )}
               {code === 'CCR' && (
                 <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <p className="text-xs font-bold text-blue-700 uppercase">Informations du changement de résidence</p>

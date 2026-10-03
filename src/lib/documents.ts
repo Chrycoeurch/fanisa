@@ -1857,6 +1857,176 @@ export async function genererDUOP(
   return await pdf.save();
 }
 
+// ════════════════════════════════════════════════════════════
+// DNAS — Declaration de Naissance (A4 Portrait — modele officiel)
+// ════════════════════════════════════════════════════════════
+export async function genererDNAS(
+  membre: Membre, foyer: Foyer, config: ConfigFokontany,
+  dateNaissanceEnfant?: string, lieuNaissanceEnfant?: string,
+  sexeEnfant?: string, nomEnfant?: string, prenomEnfant?: string,
+  nomPere?: string, nomMere?: string,
+  nbEnfantsFamille?: string, rangEnfant?: string
+): Promise<Uint8Array> {
+  const pdf  = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const { W, H } = A4P;
+  const mL   = 42;
+  const page = pdf.addPage([W, H]);
+  const { reference, numero } = await genererReference('DNAS', config);
+
+  const noir = rgb(0.04, 0.04, 0.10);
+  const bleu = rgb(0.00, 0.30, 0.70);
+  const sep  = rgb(0.55, 0.58, 0.65);
+
+  const imgRepub   = await pdf.embedPng(b64ToUint8(LOGO_REPUB_B64));
+  const imgCommune = await pdf.embedPng(b64ToUint8(LOGO_COMMUNE_B64));
+
+  // ── 0. FILIGRANE ────────────────────────────────────────
+  try { page.drawImage(imgCommune, { x: W/2 - 140, y: H/2 - 160, width: 280, height: 280, opacity: 0.14 }); } catch(_) {}
+
+  // ── 1. EN-TETE GAUCHE ───────────────────────────────────
+  function drawDash(y: number, len: number) {
+    for (let dx = mL; dx < mL + len; dx += 5)
+      page.drawLine({ start: { x: dx, y }, end: { x: Math.min(dx+3, mL+len), y }, thickness: 0.6, color: noir });
+  }
+  const hTop = H - 46;
+  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`,  { x: mL, y: hTop,      size: 7.5, font: bold, color: noir });
+  drawDash(hTop - 8, 100);
+  page.drawText(`PREFECTURE ${clean(config.nom_district).toUpperCase()}`,             { x: mL, y: hTop - 16, size: 7.5, font: bold, color: noir });
+  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,               { x: mL, y: hTop - 27, size: 7.5, font: bold, color: noir });
+  drawDash(hTop - 35, 130);
+  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                 { x: mL, y: hTop - 43, size: 7.5, font: bold, color: noir });
+  drawDash(hTop - 51, 100);
+  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,             { x: mL, y: hTop - 59, size: 7.5, font: bold, color: noir });
+  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`, { x: mL, y: hTop - 70, size: 7.5, font: bold, color: noir });
+  drawDash(hTop - 78, 115);
+
+  // ── 2. LOGO ─────────────────────────────────────────────
+  try { page.drawImage(imgRepub, { x: W/2 - 57, y: H - 110, width: 115, height: 88 }); } catch(_) {}
+  page.drawText("REPOBLIKAN'I MADAGASIKARA",         { x: W/2 - bold.widthOfTextAtSize("REPOBLIKAN'I MADAGASIKARA", 8)/2,        y: H - 116, size: 8, font: bold, color: noir });
+  page.drawText('Fitiavana - Tanindrazana - Fandrosoana', { x: W/2 - reg.widthOfTextAtSize('Fitiavana - Tanindrazana - Fandrosoana', 7)/2, y: H - 126, size: 7, font: reg,  color: noir });
+
+  // ── 3. TITRE ────────────────────────────────────────────
+  const titre  = 'DECLARATION DE NAISSANCE';
+  const titreSz = 18;
+  const titreW  = bold.widthOfTextAtSize(titre, titreSz);
+  const titreX  = W/2 - titreW/2;
+  const titreY  = H - 152;
+  page.drawText(titre, { x: titreX, y: titreY, size: titreSz, font: bold, color: noir });
+  for (let dx = titreX; dx < titreX + titreW; dx += 5)
+    page.drawLine({ start: { x: dx, y: titreY - 3 }, end: { x: Math.min(dx+3, titreX+titreW), y: titreY - 3 }, thickness: 0.7, color: noir });
+
+  // ── 4. REF / DATE ───────────────────────────────────────
+  const today = new Date().toLocaleDateString('fr-FR');
+  page.drawText('Ref.:', { x: mL, y: titreY - 22, size: 8, font: reg, color: noir });
+  page.drawText(reference, { x: mL, y: titreY - 33, size: 8, font: bold, color: bleu });
+  page.drawText(`Date: ${today}`, { x: mL, y: titreY - 44, size: 8, font: reg, color: noir });
+
+  // ── 5. INTRO ────────────────────────────────────────────
+  const introY = titreY - 66;
+  page.drawText(`Le soussigne(e) Chef du Fokontany ${clean(config.nom_fokontany)}, Quartier ${clean(config.nom_quartier)}, declare que :`,
+    { x: mL, y: introY, size: 9, font: reg, color: noir, maxWidth: W - mL*2 });
+
+  // ── 6. GRILLE ENFANT ────────────────────────────────────
+  const rowH  = 28;
+  const colW  = (W - mL*2) / 3;
+  const col2w = (W - mL*2) / 2;
+  const c1 = mL; const c2 = mL + colW; const c3 = mL + colW*2;
+  const labelSz = 7; const valSz = 9;
+
+  function hLine(y: number) {
+    page.drawLine({ start: { x: mL, y }, end: { x: W - mL, y }, thickness: 0.4, color: sep });
+  }
+  function fLabel(txt: string, x: number, y: number) {
+    page.drawText(txt, { x: x + 2, y: y + rowH - 10, size: labelSz, font: reg, color: sep });
+  }
+  function fVal(txt: string, x: number, y: number, sz?: number) {
+    page.drawText(clean(txt), { x: x + 2, y: y + rowH - 22, size: sz || valSz, font: bold, color: noir });
+  }
+
+  // Donnees de l'enfant declaré
+  const enfNom    = nomEnfant    || membre.nom    || '-';
+  const enfPrenom = prenomEnfant || membre.prenom || '-';
+  const enfSexe   = sexeEnfant   || membre.sexe   || '-';
+  const enfDate   = dateNaissanceEnfant
+    ? new Date(dateNaissanceEnfant).toLocaleDateString('fr-FR')
+    : (membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '-');
+  const enfLieu   = lieuNaissanceEnfant || membre.lieu_naissance || '-';
+  const enfPere   = nomPere  || membre.pere_nom || '-';
+  const enfMere   = nomMere  || membre.mere_nom || '-';
+
+  let gy = introY - 18;
+  hLine(gy + rowH);
+
+  // Rang 1 : NOM | PRENOM(S) | SEXE
+  fLabel('Nom(s) :', c1, gy);     fVal(enfNom,    c1, gy);
+  fLabel('Prenom(s) :', c2, gy);  fVal(enfPrenom, c2, gy);
+  fLabel('Sexe :', c3, gy);       fVal(enfSexe,   c3, gy);
+  gy -= rowH; hLine(gy + rowH);
+
+  // Rang 2 : DATE NAISSANCE | NOM DU PERE
+  fLabel('Date de naissance :', c1, gy);
+  fVal(enfDate, c1, gy);
+  fLabel('Nom du pere :', c1 + col2w, gy);
+  fVal(enfPere, c1 + col2w, gy);
+  gy -= rowH; hLine(gy + rowH);
+
+  // Rang 3 : LIEU DE NAISSANCE (pleine largeur)
+  fLabel('Lieu de naissance :', c1, gy);
+  fVal(enfLieu, c1, gy);
+  gy -= rowH; hLine(gy + rowH);
+
+  // ── 7. LISTE PUCES ──────────────────────────────────────
+  const adresseParents = [foyer.identification_logement, foyer.numero_maison, config.nom_quartier, config.nom_fokontany].filter(Boolean).join(', ');
+  const puces = [
+    `- Nom de la mere : ${clean(enfMere)}`,
+    `- Nationalite : Malagasy`,
+    `- Adresse des parents : ${clean(adresseParents)}`,
+    `- Nombre d'enfants dans la famille : [${nbEnfantsFamille || '-'}]`,
+    `- Rang de l'enfant : [${rangEnfant || '-'}]`,
+  ];
+  let py = gy - 10;
+  for (const puce of puces) {
+    page.drawText(puce, { x: mL + 6, y: py, size: 9, font: (puce.includes('mere') || puce.includes('Nationalite')) ? bold : reg, color: noir });
+    py -= 16;
+  }
+
+  // ── 8. CLOTURE ──────────────────────────────────────────
+  const clotY = py - 14;
+  page.drawText(`Je soussigne(e), Chef du Fokontany ${clean(config.nom_fokontany)}, declare avoir recu la presente`, { x: mL, y: clotY,      size: 9, font: reg, color: noir });
+  page.drawText('declaration de naissance conformement aux dispositions en vigueur. Cette declaration est',          { x: mL, y: clotY - 13, size: 9, font: reg, color: noir });
+  page.drawText('delivree pour servir et valoir ce que de droit.',                                                   { x: mL, y: clotY - 26, size: 9, font: reg, color: noir });
+
+  // ── 9. SIGNATURE ────────────────────────────────────────
+  const sigBase = 130;
+  try {
+    const qrUrl = `https://fanisa.pages.dev/verify?ref=${reference}`;
+    const qrDU  = await QRCode.toDataURL(qrUrl, { width: 80, margin: 1, color: { dark: '#111133', light: '#FFFFFF' } });
+    const qrImg = await pdf.embedPng(b64ToUint8(qrDU.split(',')[1]));
+    page.drawImage(qrImg, { x: mL, y: sigBase - 80, width: 80, height: 80 });
+    page.drawText('Authentification du document', { x: mL, y: sigBase - 88, size: 6.5, font: reg, color: sep });
+  } catch(_) {}
+  const villeDate = `${clean(config.nom_fokontany)}, le ${today}`;
+  page.drawText(villeDate, { x: W - mL - bold.widthOfTextAtSize(villeDate, 9),              y: sigBase + 10, size: 9, font: reg,  color: noir });
+  page.drawText('Le Chef du Fokontany',   { x: W - mL - bold.widthOfTextAtSize('Le Chef du Fokontany', 9),   y: sigBase - 4,  size: 9, font: bold, color: noir });
+  page.drawText('(Signature et cachet)',  { x: W - mL - reg.widthOfTextAtSize('(Signature et cachet)', 8),   y: sigBase - 18, size: 8, font: reg,  color: sep  });
+
+  // ── 10. DECOUPE ─────────────────────────────────────────
+  const cutY = 50;
+  page.drawText('- -', { x: mL - 6, y: cutY - 2, size: 7, font: reg, color: sep });
+  for (let dx = mL + 8; dx < W - mL; dx += 8)
+    page.drawLine({ start: { x: dx, y: cutY }, end: { x: dx + 4, y: cutY }, thickness: 0.5, color: sep });
+
+  // ── 11. RECU ────────────────────────────────────────────
+  const recuTxt = `RECU  |  N\xb0REC-${String(numero).padStart(4,'0')}-${new Date().getFullYear()} REF DOC : ${reference} DATE: ${today}  |  Montant : 2000 Ariary  |  Merci pour votre visite !!!`;
+  page.drawText(recuTxt, { x: W/2 - reg.widthOfTextAtSize(recuTxt, 7)/2, y: cutY - 18, size: 7, font: reg, color: noir, maxWidth: W - mL*2 });
+
+  // ── 12. ENREGISTREMENT ──────────────────────────────────
+  await enregistrerDocument('DNAS', reference, numero, membre.id, foyer.id, { nom: enfNom, prenom: enfPrenom });
+  return await pdf.save();
+}
+
 export async function genererDocumentParCode(
   code: string,
   config: ConfigFokontany,
@@ -1879,6 +2049,7 @@ export async function genererDocumentParCode(
     case 'FM':  return await genererFM(foyer!, membresDuFoyer || [], config);
     case 'FFD': return await genererFFD(membre!, foyer!, config, extraData?.dateDeces, extraData?.lieuDeces, extraData?.declarant, extraData?.heureDeces, extraData?.causeDeces, extraData?.lieuInhumation, extraData?.lienDeclarant);
     case 'DUOP': return await genererDUOP(membre!, foyer!, config, extraData?.natureBien, extraData?.superficieBien, extraData?.usageBien, extraData?.occupationDepuis, extraData?.titreReference, extraData?.gpsLat, extraData?.gpsLng, extraData?.qualite);
+    case 'DNAS': return await genererDNAS(membre!, foyer!, config, extraData?.dateNaissanceEnfant, extraData?.lieuNaissanceEnfant, extraData?.sexeEnfant, extraData?.nomEnfant, extraData?.prenomEnfant, extraData?.nomPere, extraData?.nomMere, extraData?.nbEnfantsFamille, extraData?.rangEnfant);
     case 'FAS': return await genererFAS(membre!, foyer!, config);
     case 'PCG': return await genererPCG(membre!, foyer!, config, membresDuFoyer?.find(m => m.is_chef));
     case 'COT': return await genererCOT(parcelle!, detenteur!, config);
@@ -1905,6 +2076,7 @@ export const DOCUMENTS_ADMIN = [
   { code: 'FM',  nom: 'Fiche Ménage',                       description: "Fiche détaillée du ménage",            icon: '📄', niveau: 'foyer', format: 'A4 Portrait' },
   { code: 'FFD',  nom: 'Déclaration de Décès',               description: "Fanambarana Fahafatesana",             icon: '🕊️', niveau: 'membre', format: 'A4 Portrait' },
   { code: 'DUOP', nom: "Attestation d'Occupation des Lieux", description: "Constat d'occupation et d'usage",      icon: '🏗️', niveau: 'membre', format: 'A4 Portrait' },
+  { code: 'DNAS', nom: 'Declaration de Naissance',          description: "Fanambarana ny Nahaterahan'ny Zaza",    icon: '👶', niveau: 'membre', format: 'A4 Portrait' },
   { code: 'FAS',  nom: 'Attestation de Travail',             description: "Fanamarinana Asa",                     icon: '💼', niveau: 'membre', format: 'A5 Paysage' },
   { code: 'PCG', nom: 'Prise en Charge et Garde',           description: "Atteste la garde d'une personne",      icon: '🤝', niveau: 'membre', format: 'A4 Portrait' },
 ] as const;
