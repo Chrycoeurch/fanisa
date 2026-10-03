@@ -10,12 +10,44 @@
  *   VITE_KOBO_UID_FONCIER=<uid du formulaire fanisa_foncier>
  */
 
-export const KOBO_BASE_URL = 'https://kf.kobotoolbox.org';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const _env: any = (import.meta as any).env || {};
-export const KOBO_TOKEN       = (_env.VITE_KOBO_TOKEN       as string) || '';
-export const KOBO_UID_MENAGE  = (_env.VITE_KOBO_UID_MENAGE  as string) || '';
-export const KOBO_UID_FONCIER = (_env.VITE_KOBO_UID_FONCIER as string) || '';
+/**
+ * En production (Cloudflare Pages), les appels API passent par le proxy Worker
+ * /api/kobo/* pour contourner le blocage CORS de kf.kobotoolbox.org.
+ *
+ * En développement local (vite dev), on peut appeler l'API directement
+ * car le serveur de dev Vite peut configurer un proxy, ou utiliser le Worker local.
+ */
+const _env: any = (import.meta as any).env || {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+// En production : utiliser le proxy CF Pages Function (/api/kobo)
+// En dev local : appel direct à kf.kobotoolbox.org (nécessite VITE_KOBO_TOKEN dans .env)
+const isDev = _env.DEV === true;
+
+export const KOBO_BASE_URL = isDev
+  ? 'https://kf.kobotoolbox.org'
+  : '';  // URL relative → proxy CF Pages
+
+// Le token est utilisé en dev local seulement (en prod c'est le Worker qui l'injecte)
+export const KOBO_TOKEN = (_env.VITE_KOBO_TOKEN as string) || '';
+
+// UIDs des formulaires FANISA — valeurs par défaut hardcodées pour la prod
+// (les vars d'env sont prioritaires si définies dans CF Pages)
+export const KOBO_UID_MENAGE  =
+  (_env.VITE_KOBO_UID_MENAGE  as string) || 'atpiJo8M47xUFCXQV6sJ5V';
+export const KOBO_UID_FONCIER =
+  (_env.VITE_KOBO_UID_FONCIER as string) || 'avqLd5dBt4dryES5ZjnBAs';
+
+/**
+ * Construit l'URL de l'endpoint Kobo.
+ * - Dev : https://kf.kobotoolbox.org/api/v2/...
+ * - Prod : /api/kobo/... (proxy CF Worker)
+ */
+function koboUrl(path: string): string {
+  if (isDev) {
+    return `https://kf.kobotoolbox.org/api/v2/${path}`;
+  }
+  return `/api/kobo/${path}`;
+}
 
 // ── Types bruts retournés par l'API Kobo ──────────────────────────────────────
 
@@ -46,11 +78,17 @@ export class KoboApiError extends Error {
 // ── Utilitaires headers ───────────────────────────────────────────────────────
 
 function koboHeaders(): HeadersInit {
-  if (!KOBO_TOKEN) throw new KoboApiError('VITE_KOBO_TOKEN non configuré');
-  return {
-    'Authorization': `Token ${KOBO_TOKEN}`,
-    'Content-Type': 'application/json',
-  };
+  // En dev local : on envoie le token directement
+  // En prod : le Worker CF injecte le token côté serveur, pas besoin de l'envoyer depuis le navigateur
+  if (isDev) {
+    if (!KOBO_TOKEN) throw new KoboApiError('VITE_KOBO_TOKEN non configuré dans .env');
+    return {
+      'Authorization': `Token ${KOBO_TOKEN}`,
+      'Content-Type': 'application/json',
+    };
+  }
+  // En prod on passe juste le Content-Type (le proxy ajoute Authorization)
+  return { 'Content-Type': 'application/json' };
 }
 
 // ── Récupérer toutes les soumissions d'un formulaire (avec pagination) ────────
@@ -62,8 +100,7 @@ export async function fetchKoboSubmissions(
   if (!assetUid) throw new KoboApiError('UID du formulaire Kobo manquant');
 
   const all: KoboSubmission[] = [];
-  let url: string | null =
-    `${KOBO_BASE_URL}/api/v2/assets/${assetUid}/data/?format=json&limit=100`;
+  let url: string | null = koboUrl(`assets/${assetUid}/data/?format=json&limit=100`);
 
   while (url) {
     const res = await fetch(url, { headers: koboHeaders() });
@@ -77,7 +114,13 @@ export async function fetchKoboSubmissions(
     const data: KoboApiResponse = await res.json();
     all.push(...data.results);
     onProgress?.(all.length, data.count);
-    url = data.next;
+    // Convertir l'URL de pagination vers le proxy en prod
+    if (data.next && !isDev) {
+      const nextPath = data.next.replace('https://kf.kobotoolbox.org/api/v2/', '');
+      url = `/api/kobo/${nextPath}`;
+    } else {
+      url = data.next;
+    }
   }
 
   return all;
@@ -105,7 +148,7 @@ export async function fetchKoboAssetInfo(assetUid: string): Promise<KoboAssetInf
   if (!assetUid) throw new KoboApiError('UID du formulaire Kobo manquant');
 
   const res = await fetch(
-    `${KOBO_BASE_URL}/api/v2/assets/${assetUid}/?format=json`,
+    koboUrl(`assets/${assetUid}/?format=json`),
     { headers: koboHeaders() }
   );
   if (!res.ok) {
@@ -121,7 +164,7 @@ export async function fetchKoboAssetInfo(assetUid: string): Promise<KoboAssetInf
 
 export async function testKoboConnection(): Promise<{ ok: boolean; username?: string; error?: string }> {
   try {
-    const res = await fetch(`${KOBO_BASE_URL}/api/v2/me/`, { headers: koboHeaders() });
+    const res = await fetch(koboUrl('me/'), { headers: koboHeaders() });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json();
     return { ok: true, username: data.username };
@@ -141,7 +184,7 @@ export interface KoboAssetSummary {
 
 export async function fetchKoboAssets(): Promise<KoboAssetSummary[]> {
   const res = await fetch(
-    `${KOBO_BASE_URL}/api/v2/assets/?format=json&asset_type=survey&limit=50`,
+    koboUrl('assets/?format=json&asset_type=survey&limit=50'),
     { headers: koboHeaders() }
   );
   if (!res.ok) throw new KoboApiError(`Erreur API Kobo ${res.status}`, res.status);
