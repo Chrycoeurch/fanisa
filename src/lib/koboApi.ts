@@ -164,8 +164,19 @@ export async function fetchKoboAssetInfo(assetUid: string): Promise<KoboAssetInf
 
 export async function testKoboConnection(): Promise<{ ok: boolean; username?: string; error?: string }> {
   try {
-    const res = await fetch(koboUrl('me/'), { headers: koboHeaders() });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const url = koboUrl('me/');
+    const res = await fetch(url, { headers: koboHeaders() });
+    if (!res.ok) {
+      // Essayer de récupérer le message d'erreur JSON du proxy
+      let detail = '';
+      try {
+        const body = await res.json();
+        detail = body?.targetUrl ? ` (→ ${body.targetUrl})` : (body?.error || '');
+      } catch {
+        detail = await res.text().catch(() => '');
+      }
+      return { ok: false, error: `HTTP ${res.status}${detail ? ' — ' + detail : ''}` };
+    }
     const data = await res.json();
     return { ok: true, username: data.username };
   } catch (e) {

@@ -2,13 +2,6 @@
  * Cloudflare Pages Function — Proxy KoboToolbox API
  *
  * Route : /api/kobo/* → https://kf.kobotoolbox.org/api/v2/*
- *
- * Résout le problème CORS : kf.kobotoolbox.org bloque les requêtes
- * directes depuis le navigateur. Ce Worker relaie les appels côté serveur
- * où CORS ne s'applique pas.
- *
- * Variables d'environnement requises dans Cloudflare Pages :
- *   VITE_KOBO_TOKEN — Token Bearer KoboToolbox
  */
 
 interface Env {
@@ -18,13 +11,21 @@ interface Env {
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
 
-  // Chemin après /api/kobo/
+  // Chemin après /api/kobo/ — params.path est un tableau de segments
   const pathSegments = (params['path'] as string[] | undefined) ?? [];
   const koboPath = pathSegments.join('/');
 
   // Reconstruire l'URL vers KoboToolbox
+  // Ex: /api/kobo/me/ → https://kf.kobotoolbox.org/api/v2/me/
+  // Ex: /api/kobo/assets/UID/data/?format=json → https://kf.kobotoolbox.org/api/v2/assets/UID/data/?format=json
   const originalUrl = new URL(request.url);
-  const koboUrl = `https://kf.kobotoolbox.org/api/v2/${koboPath}${originalUrl.search}`;
+
+  // Préserver le slash final si présent dans l'URL originale
+  const originalPath = originalUrl.pathname; // ex: /api/kobo/me/
+  const trailingSlash = originalPath.endsWith('/') ? '/' : '';
+  const koboPathWithSlash = koboPath.endsWith('/') ? koboPath : koboPath + trailingSlash;
+
+  const targetUrl = `https://kf.kobotoolbox.org/api/v2/${koboPathWithSlash}${originalUrl.search}`;
 
   // Token depuis les variables d'environnement Cloudflare
   const token = env.VITE_KOBO_TOKEN;
@@ -42,20 +43,53 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   // Relayer la requête vers KoboToolbox
-  const koboResponse = await fetch(koboUrl, {
-    method: request.method,
-    headers: {
-      Authorization: `Token ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: request.method !== 'GET' && request.method !== 'HEAD'
-      ? await request.text()
-      : undefined,
-  });
+  let koboResponse: Response;
+  try {
+    koboResponse = await fetch(targetUrl, {
+      method: request.method,
+      headers: {
+        Authorization: `Token ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: request.method !== 'GET' && request.method !== 'HEAD'
+        ? await request.text()
+        : undefined,
+      redirect: 'follow',
+    });
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: `Erreur proxy: ${String(err)}`, targetUrl }),
+      {
+        status: 502,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      }
+    );
+  }
 
   // Récupérer le corps de la réponse
   const responseBody = await koboResponse.text();
+
+  // En cas de 404, renvoyer l'URL ciblée pour faciliter le debug
+  if (koboResponse.status === 404) {
+    return new Response(
+      JSON.stringify({
+        error: 'KoboToolbox 404',
+        targetUrl,
+        koboResponse: responseBody.slice(0, 500),
+      }),
+      {
+        status: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      }
+    );
+  }
 
   // Retourner avec headers CORS
   return new Response(responseBody, {
