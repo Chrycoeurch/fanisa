@@ -676,19 +676,176 @@ export async function genererBC(membre: Membre, foyer: Foyer, config: ConfigFoko
   return await pdf.save();
 }
 
-// CVI — Certificat de Vie Individuelle (A5 Portrait officiel)
-export async function genererCVI(membre: Membre, foyer: Foyer, config: ConfigFokontany): Promise<Uint8Array> {
-  const pdf = await PDFDocument.create();
+// CVI — Certificat de Vie Individuelle (A4 Portrait — modele officiel)
+export async function genererCVI(
+  membre: Membre, foyer: Foyer, config: ConfigFokontany,
+  nbEnfants?: string, numeroRegistre?: string
+): Promise<Uint8Array> {
+  const pdf  = await PDFDocument.create();
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+  const { W, H } = A4P;
+  const mL   = 42;
+  const page = pdf.addPage([W, H]);
   const { reference, numero } = await genererReference('CVI', config);
-  const validite = new Date(Date.now() + 90*24*60*60*1000).toLocaleDateString('fr-FR');
-  const intro = `Le soussigne Chef du Fokontany ${clean(config.nom_fokontany)}, Quartier ${clean(config.nom_quartier)}, certifie que la personne dont l'identite est mentionnee ci-dessous est en vie a ce jour et reside dans le ressort du Fokontany.`;
-  await genererCertificatA5(pdf, bold, reg, config, 'CVI', 'CERTIFICAT DE VIE INDIVIDUELLE', reference, numero, membre, foyer,
-    [{ l: 'CODE MENAGE:', v: foyer.code_menage }],
-    intro, undefined, undefined, validite
-  );
-  await enregistrerDocument('CVI', reference, numero, membre.id, foyer.id);
+
+  const noir  = rgb(0.04, 0.04, 0.10);
+  const bleu  = rgb(0.00, 0.30, 0.70);
+  const sep   = rgb(0.55, 0.58, 0.65);
+
+  const imgRepub   = await pdf.embedPng(b64ToUint8(LOGO_REPUB_B64));
+  const imgCommune = await pdf.embedPng(b64ToUint8(LOGO_COMMUNE_B64));
+
+  // ── 0. FILIGRANE COMMUNE ──────────────────────────────────
+  try {
+    page.drawImage(imgCommune, { x: W/2 - 140, y: H/2 - 160, width: 280, height: 280, opacity: 0.14 });
+  } catch(_) {}
+
+  // ── 1. EN-TÊTE GAUCHE ────────────────────────────────────
+  function drawDash(y: number, len: number) {
+    for (let dx = mL; dx < mL + len; dx += 5) {
+      page.drawLine({ start: { x: dx, y }, end: { x: Math.min(dx + 3, mL + len), y }, thickness: 0.6, color: noir });
+    }
+  }
+  const hTop = H - 46;
+  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`,  { x: mL, y: hTop,      size: 7.5, font: bold, color: noir });
+  drawDash(hTop - 8, 100);
+  page.drawText(`PREFECTURE ${clean(config.nom_district).toUpperCase()}`,             { x: mL, y: hTop - 16, size: 7.5, font: bold, color: noir });
+  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,               { x: mL, y: hTop - 27, size: 7.5, font: bold, color: noir });
+  drawDash(hTop - 35, 130);
+  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                 { x: mL, y: hTop - 43, size: 7.5, font: bold, color: noir });
+  drawDash(hTop - 51, 100);
+  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,             { x: mL, y: hTop - 59, size: 7.5, font: bold, color: noir });
+  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`, { x: mL, y: hTop - 70, size: 7.5, font: bold, color: noir });
+  drawDash(hTop - 78, 115);
+
+  // ── 2. LOGO REPUBLIQUE ───────────────────────────────────
+  try {
+    page.drawImage(imgRepub, { x: W/2 - 57, y: H - 110, width: 115, height: 88 });
+  } catch(_) {}
+  page.drawText("REPOBLIKAN'I MADAGASIKARA", { x: W/2 - bold.widthOfTextAtSize("REPOBLIKAN'I MADAGASIKARA", 8)/2, y: H - 116, size: 8, font: bold, color: noir });
+  page.drawText('Fitiavana - Tanindrazana - Fandrosoana',  { x: W/2 - reg.widthOfTextAtSize('Fitiavana - Tanindrazana - Fandrosoana', 7)/2, y: H - 126, size: 7, font: reg, color: noir });
+
+  // ── 3. TITRE ─────────────────────────────────────────────
+  const titre = 'CERTIFICAT DE VIE';
+  const titreSz = 18;
+  const titreW  = bold.widthOfTextAtSize(titre, titreSz);
+  const titreX  = W/2 - titreW/2;
+  const titreY  = H - 152;
+  page.drawText(titre, { x: titreX, y: titreY, size: titreSz, font: bold, color: noir });
+  for (let dx = titreX; dx < titreX + titreW; dx += 5) {
+    page.drawLine({ start: { x: dx, y: titreY - 3 }, end: { x: Math.min(dx + 3, titreX + titreW), y: titreY - 3 }, thickness: 0.7, color: noir });
+  }
+
+  // ── 4. REF / DATE ────────────────────────────────────────
+  const today = new Date().toLocaleDateString('fr-FR');
+  page.drawText('Ref.:', { x: mL, y: titreY - 22, size: 8, font: reg, color: noir });
+  page.drawText(reference, { x: mL, y: titreY - 33, size: 8, font: bold, color: bleu });
+  page.drawText(`Date: ${today}`, { x: mL, y: titreY - 44, size: 8, font: reg, color: noir });
+
+  // ── 5. INTRO ─────────────────────────────────────────────
+  const introY  = titreY - 66;
+  const introTxt = `Le soussigne(e) Chef du Fokontany ${clean(config.nom_fokontany)}, Quartier ${clean(config.nom_quartier)}, certifie que :`;
+  page.drawText(introTxt, { x: mL, y: introY, size: 9, font: reg, color: noir, maxWidth: W - mL*2 });
+
+  // ── 6. GRILLE IDENTITÉ ───────────────────────────────────
+  const rowH  = 28;
+  const colW  = (W - mL*2) / 3;
+  const col2w = (W - mL*2) / 2;
+  const c1 = mL; const c2 = mL + colW; const c3 = mL + colW*2;
+  const labelSz = 7; const valSz = 9;
+
+  function hLine(y: number) {
+    page.drawLine({ start: { x: mL, y }, end: { x: W - mL, y }, thickness: 0.4, color: sep });
+  }
+  function fLabel(txt: string, x: number, y: number) {
+    page.drawText(txt, { x: x + 2, y: y + rowH - 10, size: labelSz, font: reg, color: sep });
+  }
+  function fVal(txt: string, x: number, y: number) {
+    page.drawText(clean(txt), { x: x + 2, y: y + rowH - 22, size: valSz, font: bold, color: noir });
+  }
+
+  let gy = introY - 18;
+  hLine(gy + rowH);
+
+  // Rang 1 : NOM | PRENOM(S) | PROFESSION
+  fLabel('Nom(s) :', c1, gy);        fVal(membre.nom,          c1, gy);
+  fLabel('Prenom(s) :', c2, gy);     fVal(membre.prenom,       c2, gy);
+  fLabel('Profession :', c3, gy);    fVal(membre.profession,   c3, gy);
+  gy -= rowH; hLine(gy + rowH);
+
+  // Rang 2 : DATE+LIEU NAISSANCE | CIN
+  const dateNaiss = membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '-';
+  const dateCin   = membre.date_cin       ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '-';
+  const cinStr    = `${clean(membre.cin)} delivree le ${dateCin} a ${clean(membre.lieu_naissance)}`;
+  fLabel('Date et lieu de naissance :', c1, gy);
+  page.drawText(`${dateNaiss} a ${clean(membre.lieu_naissance)}`, { x: c1 + 2, y: gy + rowH - 22, size: valSz, font: bold, color: noir });
+  fLabel('Titulaire de la CIN n\xb0 :', c1 + col2w, gy);
+  page.drawText(cinStr, { x: c1 + col2w + 2, y: gy + rowH - 22, size: 8, font: bold, color: noir });
+  gy -= rowH; hLine(gy + rowH);
+
+  // Rang 3 : ADRESSE RESIDENTIELLE
+  const adresse = [foyer.identification_logement, foyer.numero_maison, config.nom_quartier, config.nom_fokontany].filter(Boolean).join(', ');
+  fLabel('Adresse residentielle :', c1, gy);
+  page.drawText(clean(adresse), { x: c1 + 2, y: gy + rowH - 22, size: valSz, font: bold, color: noir });
+  gy -= rowH; hLine(gy + rowH);
+
+  // ── 7. LISTE PUCES ───────────────────────────────────────
+  const puceY0 = gy - 6;
+  const sitMat = clean(membre.situation_matrimoniale || '-');
+  const nat    = clean((membre as any).nationalite || 'Malagasy');
+  const nbEnf  = nbEnfants || '-';
+  const nReg   = numeroRegistre || foyer.code_menage || '-';
+
+  const puces = [
+    `- Nationalite : ${nat}`,
+    `- Situation matrimoniale : [${sitMat}]`,
+    `- Nombre d'enfants : [${nbEnf}]`,
+    `- Code menage : [${foyer.code_menage || '-'}]`,
+    `- N\xb0 registre : [${nReg}]`,
+  ];
+  let py = puceY0;
+  for (const puce of puces) {
+    page.drawText(puce, { x: mL + 6, y: py, size: 9, font: reg, color: noir });
+    py -= 16;
+  }
+
+  // ── 8. CLÔTURE ───────────────────────────────────────────
+  const clotY = py - 14;
+  const clot1 = 'Je certifie que la personne susmentionnee est vivante a ce jour et reside effectivement dans le ressort du';
+  const clot2 = 'Fokontany. Ce certificat est delivre pour servir et valoir ce que de droit.';
+  page.drawText(clot1, { x: mL, y: clotY,      size: 9, font: reg, color: noir });
+  page.drawText(clot2, { x: mL, y: clotY - 13, size: 9, font: reg, color: noir });
+
+  // ── 9. SIGNATURE ─────────────────────────────────────────
+  const sigBase = 130;
+  // QR gauche
+  try {
+    const qrUrl = `https://fanisa.pages.dev/verify?ref=${reference}`;
+    const qrDU  = await QRCode.toDataURL(qrUrl, { width: 80, margin: 1, color: { dark: '#111133', light: '#FFFFFF' } });
+    const qrImg = await pdf.embedPng(b64ToUint8(qrDU.split(',')[1]));
+    page.drawImage(qrImg, { x: mL, y: sigBase - 80, width: 80, height: 80 });
+    page.drawText('Authentification du document', { x: mL, y: sigBase - 88, size: 6.5, font: reg, color: sep });
+  } catch(_) {}
+  // Chef fokontany droite
+  const villeDate = `${clean(config.nom_fokontany)}, le ${today}`;
+  page.drawText(villeDate, { x: W - mL - bold.widthOfTextAtSize(villeDate, 9), y: sigBase + 10, size: 9, font: reg, color: noir });
+  page.drawText('Le Chef du Fokontany', { x: W - mL - bold.widthOfTextAtSize('Le Chef du Fokontany', 9), y: sigBase - 4, size: 9, font: bold, color: noir });
+  page.drawText('(Signature et cachet)', { x: W - mL - reg.widthOfTextAtSize('(Signature et cachet)', 8),  y: sigBase - 18, size: 8, font: reg, color: sep });
+
+  // ── 10. LIGNE DE DÉCOUPE ─────────────────────────────────
+  const coupY = 50;
+  page.drawText('✂', { x: mL - 10, y: coupY - 3, size: 10, font: reg, color: sep });
+  for (let dx = mL + 4; dx < W - mL; dx += 8) {
+    page.drawLine({ start: { x: dx, y: coupY }, end: { x: dx + 4, y: coupY }, thickness: 0.5, color: sep });
+  }
+
+  // ── 11. RECU ─────────────────────────────────────────────
+  const recuTxt = `RECU  |  N\xb0REC-${String(numero).padStart(4,'0')}-${new Date().getFullYear()} REF DOC : ${reference} DATE: ${today}  |  Montant : 2000 Ariary  |  Merci pour votre visite !!!`;
+  page.drawText(recuTxt, { x: W/2 - reg.widthOfTextAtSize(recuTxt, 7)/2, y: coupY - 20, size: 7, font: reg, color: noir, maxWidth: W - mL*2 });
+
+  // ── 12. ENREGISTREMENT ────────────────────────────────────
+  await enregistrerDocument('CVI', reference, numero, membre.id, foyer.id, { nom: membre.nom, prenom: membre.prenom });
   return await pdf.save();
 }
 
@@ -1714,7 +1871,7 @@ export async function genererDocumentParCode(
   switch (code) {
     case 'CR':  return await genererCR(membre!, foyer!, config);
     case 'CCR': return await genererCCR(membre!, foyer!, config, ctx.extraData?.ancienneAdresse);
-    case 'CVI': return await genererCVI(membre!, foyer!, config);
+    case 'CVI': return await genererCVI(membre!, foyer!, config, extraData?.nbEnfants, extraData?.numeroRegistre);
     case 'CVC': return await genererCVC(foyer!, membresDuFoyer || [], config);
     case 'CEL': return await genererCEL(membre!, foyer!, config);
     case 'BC':  return await genererBC(membre!, foyer!, config);

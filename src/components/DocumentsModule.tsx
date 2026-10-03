@@ -203,6 +203,15 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
                   </div>
                 </div>
               )}
+              {code === 'CVI' && (
+                <div className="space-y-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-slate-500 uppercase">Informations complémentaires (optionnel)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-xs text-slate-500 block mb-1">Nombre d'enfants</label><input type="number" min="0" value={extraData.nbEnfants || ''} onChange={e => setExtraData((p: any) => ({ ...p, nbEnfants: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: 2" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">N° registre</label><input value={extraData.numeroRegistre || ''} onChange={e => setExtraData((p: any) => ({ ...p, numeroRegistre: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: REG-0001" /></div>
+                  </div>
+                </div>
+              )}
               {code === 'CCR' && (
                 <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <p className="text-xs font-bold text-blue-700 uppercase">Informations du changement de résidence</p>
