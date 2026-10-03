@@ -835,7 +835,7 @@ export async function genererCVI(
 
   // ── 10. LIGNE DE DÉCOUPE ─────────────────────────────────
   const coupY = 50;
-  page.drawText('✂', { x: mL - 10, y: coupY - 3, size: 10, font: reg, color: sep });
+  page.drawText('- -', { x: mL - 6, y: coupY - 2, size: 7, font: reg, color: sep });
   for (let dx = mL + 4; dx < W - mL; dx += 8) {
     page.drawLine({ start: { x: dx, y: coupY }, end: { x: dx + 4, y: coupY }, thickness: 0.5, color: sep });
   }
