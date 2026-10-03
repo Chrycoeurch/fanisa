@@ -161,12 +161,15 @@ function WizardDemande({ code, nom, format, icon, niveau, foyer, membre, parcell
                   <p className="text-xs font-bold text-slate-500 uppercase">Informations du décès</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div><label className="text-xs text-slate-500 block mb-1">Date du décès *</label><input type="date" value={extraData.dateDeces || ''} onChange={e => setExtraData((p: any) => ({ ...p, dateDeces: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Heure du décès</label><input type="time" value={extraData.heureDeces || ''} onChange={e => setExtraData((p: any) => ({ ...p, heureDeces: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
                     <div><label className="text-xs text-slate-500 block mb-1">Lieu du décès *</label><input value={extraData.lieuDeces || ''} onChange={e => setExtraData((p: any) => ({ ...p, lieuDeces: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" /></div>
+                    <div><label className="text-xs text-slate-500 block mb-1">Cause du décès</label><input value={extraData.causeDeces || ''} onChange={e => setExtraData((p: any) => ({ ...p, causeDeces: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: Maladie, Accident..." /></div>
+                    <div className="col-span-2"><label className="text-xs text-slate-500 block mb-1">Lieu d'inhumation</label><input value={extraData.lieuInhumation || ''} onChange={e => setExtraData((p: any) => ({ ...p, lieuInhumation: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="Ex: Cimetière municipal de Toamasina..." /></div>
                     <div>
                       <label className="text-xs text-slate-500 block mb-1">Déclarant *</label>
                       <select value={extraData.declarant || ''} onChange={e => setExtraData((p: any) => ({ ...p, declarant: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-slate-400">
                         <option value="">-- Choisir parmi les membres --</option>
-                        {membresDuFoyer.filter(m => m.id !== selectedMembre?.id).map(m => (
+                        {membres.filter(m => m.foyer_id === foyer?.id && m.id !== membre?.id).map(m => (
                           <option key={m.id} value={`${m.nom} ${m.prenom}`}>{m.nom} {m.prenom} ({m.relation_chef || (m.is_chef ? 'Chef' : '—')})</option>
                         ))}
                         <option value="__autre__">Autre personne (saisie libre)</option>

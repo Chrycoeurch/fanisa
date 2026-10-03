@@ -1527,7 +1527,7 @@ export async function genererDocumentParCode(
     case 'BC':  return await genererBC(membre!, foyer!, config);
     case 'CM':  return await genererCM(foyer!, membresDuFoyer || [], config);
     case 'FM':  return await genererFM(foyer!, membresDuFoyer || [], config);
-    case 'FFD': return await genererFFD(membre!, foyer!, config, extraData?.dateDeces, extraData?.lieuDeces, extraData?.declarant);
+    case 'FFD': return await genererFFD(membre!, foyer!, config, extraData?.dateDeces, extraData?.lieuDeces, extraData?.declarant, extraData?.heureDeces, extraData?.causeDeces, extraData?.lieuInhumation, extraData?.lienDeclarant);
     case 'FAS': return await genererFAS(membre!, foyer!, config);
     case 'PCG': return await genererPCG(membre!, foyer!, config, membresDuFoyer?.find(m => m.is_chef));
     case 'COT': return await genererCOT(parcelle!, detenteur!, config);
