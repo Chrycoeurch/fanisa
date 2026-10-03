@@ -14,11 +14,12 @@ import PatrimoineModule from './components/PatrimoineModule';
 import StatsView from './components/StatsView';
 import CRAADModule from './components/CRAADModule';
 import VieCommunautaireModule from './components/VieCommunautaireModule';
+import KoboSyncModule from './components/KoboSyncModule';
 import { FOKONTANY_LIST } from './seedData';
 import {
   FolderLock, Users, HeartPulse, History, PlusCircle, Search,
   RotateCcw, ShieldCheck, Building, FileSignature, Landmark,
-  Package, Loader2, Home, Filter, Award, BarChart2, Download
+  Package, Loader2, Home, Filter, Award, BarChart2, Download, RefreshCw
 } from 'lucide-react';
 
 export default function App() {
@@ -30,7 +31,7 @@ export default function App() {
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'logs'|'land'|'patrimoine'>('annuaire');
+  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'logs'|'land'|'patrimoine'|'kobo'>('annuaire');
   const [searchQuery, setSearchQuery] = useState('');
   const [fokontanyFilter, setFokontanyFilter] = useState('Tous');
   const [statutFilter, setStatutFilter] = useState('Tous');
@@ -254,6 +255,7 @@ export default function App() {
             ['materials', Package, 'Matériels'],
             ['land', Building, 'Foncier'],
             ['patrimoine', Award, 'Patrimoine'],
+            ['kobo', RefreshCw, 'KoboSync'],
             ['logs', History, `Journal (${logs.length})`],
           ] as const).map(([key, Icon, label]) => (
             <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-2 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
@@ -386,6 +388,16 @@ export default function App() {
         )}
         {activeTab === 'land' && <FoncierModule foyers={foyers} membres={membres} />}
         {activeTab === 'patrimoine' && <PatrimoineModule foyers={foyers} />}
+        {activeTab === 'kobo' && (
+          <KoboSyncModule onImportDone={async () => {
+            const [{ data: f }, { data: m }] = await Promise.all([
+              supabase.from('foyers').select('*').order('created_at', { ascending: false }),
+              supabase.from('membres').select('*').order('created_at'),
+            ]);
+            setFoyers((f as Foyer[]) || []);
+            setMembres((m as Membre[]) || []);
+          }} />
+        )}
         {activeTab === 'logs' && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
