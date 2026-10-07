@@ -125,6 +125,13 @@ export default function App() {
   const handleDeleteFoyer = async (foyer: Foyer) => {
     if (!confirm(`Supprimer le foyer ${foyer.code_menage} et tous ses membres ?`)) return;
     await supabase.from('foyers').delete().eq('id', foyer.id);
+    // Remettre le carnet dans le pool (réattribuable)
+    if (foyer.code_menage) {
+      await supabase
+        .from('carnets_disponibles')
+        .update({ attribue: false, foyer_id: null, attribue_le: null })
+        .eq('code_menage', foyer.code_menage);
+    }
     setFoyers(prev => prev.filter(f => f.id !== foyer.id));
     setMembres(prev => prev.filter(m => m.foyer_id !== foyer.id));
     setSelectedFoyer(null);
