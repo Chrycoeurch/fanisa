@@ -18,6 +18,23 @@
 import { Foyer, Membre } from '../types';
 import { KoboSubmission } from './koboApi';
 
+// ── Validation identifiant FANISA ──────────────────────────────────────────────
+
+/**
+ * Format : AMB-(TRV|THN|BTN|MHV|AMN)-YY-T-XXXXX
+ * Exemple : AMB-TRV-26-T-EJC2U
+ * Alphabet QR : 23456789ABCDEFGHJKMNPQRSTUVWXYZ (exclut 0,O,1,I,L)
+ */
+export const RX_MENAGE_ID = /^AMB-(TRV|THN|BTN|MHV|AMN)-[0-9]{2}-T-[2-9A-HJKMNP-Z]{5}$/;
+
+export function normaliserId(saisie: string): string {
+  return saisie.trim().toUpperCase();
+}
+
+export function idValide(saisie: string): boolean {
+  return RX_MENAGE_ID.test(normaliserId(saisie));
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Lit un champ Kobo en gérant les variantes bilingues FR/MG et les _other */
@@ -57,12 +74,28 @@ function koboDate(raw: string): string | undefined {
   return raw;
 }
 
-/** Génère un code_menage de fallback depuis les données Kobo */
-function generateCodeMenage(row: KoboSubmission, idx: number): string {
-  const existing = koboGet(row, 'code_menage', 'code_famille', 'id_menage');
-  if (existing) return existing;
+/**
+ * Récupère le menage_id depuis le formulaire Kobo.
+ * Chemin Kobo : grp_enquete/grp_identifiants/menage_id
+ * Fallback : autres noms possibles, puis génération d'urgence.
+ */
+function getCodeMenage(row: KoboSubmission, idx: number): { code: string; valid: boolean } {
+  // Priorité 1 : chemin exact du formulaire FANISA
+  const fromKobo = koboGet(
+    row,
+    'grp_enquete/grp_identifiants/menage_id',
+    'menage_id',
+    'id_menage',
+    'code_menage',
+    'code_famille',
+  );
+  if (fromKobo) {
+    const normalised = normaliserId(fromKobo);
+    return { code: normalised, valid: idValide(normalised) };
+  }
+  // Fallback d'urgence (si Kobo ne fournit pas de menage_id)
   const year = new Date().getFullYear().toString().slice(-2);
-  return `M${year}-${String(idx + 1).padStart(4, '0')}`;
+  return { code: `SECOURS-${year}-${String(idx + 1).padStart(4, '0')}`, valid: false };
 }
 
 // ── Résultat du mapping ────────────────────────────────────────────────────────
@@ -113,11 +146,33 @@ export function mapKoboMenage(row: KoboSubmission, idx: number): KoboImportResul
 
   // ── Foyer ──────────────────────────────────────────────────────────────────
   const fokontany = koboGet(row,
+    'grp_enquete/grp_localisation/quartier_final',
+    'grp_enquete/grp_localisation/fokontany',
     'fokontany', 'Fokontany', 'fokontany_fr', 'fokontany_mg',
     'group_localisation/fokontany'
   ) || 'Ambodisaina';
 
-  const codeMenage = generateCodeMenage(row, idx);
+  // Identifiant principal : menage_id du carnet QR
+  const { code: codeMenage, valid: codeValide } = getCodeMenage(row, idx);
+  if (!codeValide) {
+    warnings.push(`menage_id invalide ou absent : "${codeMenage}" (UUID Kobo: ${row._uuid}). Format attendu : AMB-QQQ-AA-T-XXXXX`);
+  }
+
+  // Numéro de lot (lien avec le formulaire Foncier)
+  const numeroLot = koboGet(row,
+    'grp_enquete/grp_lot/numero_lot',
+    'numero_lot', 'num_lot', 'lot'
+  );
+
+  // Maison ID et unité (pour construction M1, U1)
+  const maisonId = koboGet(row, 'grp_enquete/grp_identifiants/maison_id', 'maison_id');
+  const uniteId  = koboGet(row, 'grp_enquete/grp_identifiants/unite_id',  'unite_id');
+
+  // Carreau
+  const carreau = koboGet(row,
+    'grp_enquete/grp_localisation/carreau_final',
+    'carreau_final', 'carreau', 'num_carreau'
+  );
 
   const adresse = koboGet(row,
     'adresse', 'adresse_fr', 'adresse_complete',
@@ -128,10 +183,15 @@ export function mapKoboMenage(row: KoboSubmission, idx: number): KoboImportResul
     code_menage: codeMenage,
     statut: 'Actif',
     fokontany,
-    commune: koboGet(row, 'commune', 'Commune', 'group_localisation/commune') || 'Ambodisaina',
-    district: koboGet(row, 'district', 'District', 'group_localisation/district') || 'Antananarivo Avaradrano',
+    commune: koboGet(row, 'grp_enquete/grp_localisation/commune', 'commune', 'Commune', 'group_localisation/commune') || 'Ambodisaina',
+    district: koboGet(row, 'grp_enquete/grp_localisation/district', 'district', 'District', 'group_localisation/district') || 'Antananarivo Avaradrano',
     adresse: adresse || `${fokontany}, Ambodisaina`,
+    carreau: carreau || undefined,
     nombre_membres: 0, // sera recalculé
+    // Lot et identifiants logement
+    ...(numeroLot ? { numero_maison: numeroLot } : {}),
+    ...(maisonId  ? { identification_logement: maisonId } : {}),
+    ...(uniteId   ? {} : {}), // unité stockée dans notes si besoin
 
     // Logement
     type_logement: koboGet(row, 'type_logement', 'type_habitat', 'group_logement/type_logement'),
