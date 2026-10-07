@@ -2092,3 +2092,218 @@ export const DOCUMENTS_FONCIERS = [
   { code: 'DRF', nom: 'Demande de Régularisation Foncière', description: "Prépare le dossier régularisation",  icon: '📑', besoin: ['parcelle'],              format: 'A4 Portrait' },
   { code: 'IFT', nom: 'Ticket IFT',                         description: "Prépare la fiscalité foncière",      icon: '🏷️', besoin: ['parcelle'],             format: 'A5 Paysage' },
 ] as const;
+
+// ── Génération de la page QR Carnet (format carte 85×54 mm) ──────────────────
+// Imprimable et à glisser dans le carnet physique du ménage.
+// Contient : QR code du code_menage, nom du chef, adresse, fokontany.
+export async function genererCarnetQR(
+  foyer: Foyer,
+  chefNom: string,
+  config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf  = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+
+  // Format carte de crédit 85×54 mm → 240.9 × 153.0 pts (1mm = 2.835pt)
+  const W = 241;
+  const H = 153;
+
+  const page = pdf.addPage([W, H]);
+
+  // ── Fond blanc avec bordure bleue ─────────────────────────────
+  page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: rgb(1, 1, 1) });
+  page.drawRectangle({ x: 0, y: 0, width: W, height: H,
+    borderColor: rgb(0.18, 0.27, 0.56), borderWidth: 2, color: rgb(1,1,1) });
+
+  // ── Bande d'en-tête bleue ─────────────────────────────────────
+  page.drawRectangle({ x: 0, y: H - 28, width: W, height: 28, color: rgb(0.18, 0.27, 0.56) });
+
+  // Titre en-tête
+  page.drawText('CARNET DE MÉNAGE', {
+    x: 8, y: H - 11, size: 7, font: bold, color: rgb(1, 1, 1),
+  });
+  page.drawText(`FANISA — ${config.nom_fokontany.toUpperCase()}`, {
+    x: 8, y: H - 21, size: 5.5, font: reg, color: rgb(0.8, 0.88, 1),
+  });
+
+  // ── QR Code (50×50 pts, à droite) ────────────────────────────
+  const qrDataUrl = await QRCode.toDataURL(foyer.code_menage, {
+    width: 140, margin: 1,
+    color: { dark: '#1A2547', light: '#FFFFFF' },
+  });
+  const qrBase64 = qrDataUrl.split(',')[1];
+  const qrBytes  = Uint8Array.from(atob(qrBase64), c => c.charCodeAt(0));
+  const qrImg    = await pdf.embedPng(qrBytes);
+
+  const QS = 56; // taille QR en pts
+  page.drawImage(qrImg, { x: W - QS - 6, y: H - 28 - QS - 4, width: QS, height: QS });
+
+  // ── Infos ménage (à gauche du QR) ────────────────────────────
+  const TX = 8;
+  let TY = H - 42;
+
+  // Code ménage en gros
+  page.drawText(foyer.code_menage, {
+    x: TX, y: TY, size: 8.5, font: bold, color: rgb(0.18, 0.27, 0.56),
+  });
+  TY -= 13;
+
+  // Chef de ménage
+  page.drawText('Chef de ménage :', {
+    x: TX, y: TY, size: 5.5, font: reg, color: rgb(0.45, 0.45, 0.45),
+  });
+  TY -= 9;
+  page.drawText(chefNom.length > 28 ? chefNom.slice(0, 27) + '…' : chefNom, {
+    x: TX, y: TY, size: 7, font: bold, color: rgb(0.1, 0.1, 0.1),
+  });
+  TY -= 11;
+
+  // Fokontany
+  page.drawText('Fokontany :', {
+    x: TX, y: TY, size: 5.5, font: reg, color: rgb(0.45, 0.45, 0.45),
+  });
+  TY -= 9;
+  page.drawText(foyer.fokontany, {
+    x: TX, y: TY, size: 7, font: bold, color: rgb(0.1, 0.1, 0.1),
+  });
+  TY -= 11;
+
+  // Adresse (tronquée)
+  if (foyer.adresse) {
+    page.drawText('Adresse :', {
+      x: TX, y: TY, size: 5.5, font: reg, color: rgb(0.45, 0.45, 0.45),
+    });
+    TY -= 9;
+    const adr = foyer.adresse.length > 30 ? foyer.adresse.slice(0, 29) + '…' : foyer.adresse;
+    page.drawText(adr, { x: TX, y: TY, size: 6, font: reg, color: rgb(0.1, 0.1, 0.1) });
+  }
+
+  // ── Pied de page ─────────────────────────────────────────────
+  page.drawLine({
+    start: { x: 4, y: 14 }, end: { x: W - 4, y: 14 },
+    thickness: 0.5, color: rgb(0.75, 0.75, 0.75),
+  });
+  page.drawText(`${config.nom_commune} — ${config.nom_district}`, {
+    x: TX, y: 5, size: 5, font: reg, color: rgb(0.55, 0.55, 0.55),
+  });
+  page.drawText('Document officiel du Fokontany', {
+    x: W - 92, y: 5, size: 5, font: reg, color: rgb(0.55, 0.55, 0.55),
+  });
+
+  return pdf.save();
+}
+
+// ── Génération en lot : plusieurs carnets sur une feuille A4 ──────────────────
+// 8 cartes par page A4 (2 colonnes × 4 lignes), prêtes à découper.
+export async function genererCarnetQRLot(
+  foyers: Array<{ foyer: Foyer; chefNom: string }>,
+  config: ConfigFokontany
+): Promise<Uint8Array> {
+  const pdf  = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg  = await pdf.embedFont(StandardFonts.Helvetica);
+
+  const A4W = 595, A4H = 842;
+  const CARD_W = 241, CARD_H = 153;
+  const COLS = 2, ROWS = 4;
+  const PAD_X = (A4W - COLS * CARD_W) / (COLS + 1); // marge horizontale
+  const PAD_Y = (A4H - ROWS * CARD_H) / (ROWS + 1); // marge verticale
+
+  // Précalcul des QR codes
+  const qrImages: Record<string, ReturnType<PDFDocument['embedPng']>> = {};
+
+  for (let i = 0; i < foyers.length; i += COLS * ROWS) {
+    const page = pdf.addPage([A4W, A4H]);
+
+    // Titre discret en haut
+    page.drawText(`Impression carnets QR — ${config.nom_fokontany} — Page ${Math.floor(i / (COLS * ROWS)) + 1}`, {
+      x: 20, y: A4H - 15, size: 7, font: reg, color: rgb(0.6, 0.6, 0.6),
+    });
+
+    const batch = foyers.slice(i, i + COLS * ROWS);
+
+    for (let j = 0; j < batch.length; j++) {
+      const { foyer, chefNom } = batch[j];
+      const col = j % COLS;
+      const row = Math.floor(j / COLS);
+
+      const ox = PAD_X + col * (CARD_W + PAD_X);
+      const oy = A4H - PAD_Y - (row + 1) * CARD_H - row * PAD_Y;
+
+      // ── Fond + bordure ────────────────────────────────────────
+      page.drawRectangle({ x: ox, y: oy, width: CARD_W, height: CARD_H,
+        color: rgb(1, 1, 1), borderColor: rgb(0.18, 0.27, 0.56), borderWidth: 1.5 });
+
+      // ── En-tête bleu ──────────────────────────────────────────
+      page.drawRectangle({ x: ox, y: oy + CARD_H - 28, width: CARD_W, height: 28,
+        color: rgb(0.18, 0.27, 0.56) });
+      page.drawText('CARNET DE MÉNAGE', {
+        x: ox + 8, y: oy + CARD_H - 11, size: 7, font: bold, color: rgb(1,1,1),
+      });
+      page.drawText(`FANISA — ${config.nom_fokontany.toUpperCase()}`, {
+        x: ox + 8, y: oy + CARD_H - 21, size: 5.5, font: reg, color: rgb(0.8, 0.88, 1),
+      });
+
+      // ── QR Code ───────────────────────────────────────────────
+      let qrImg;
+      if (!qrImages[foyer.code_menage]) {
+        const qrDataUrl = await QRCode.toDataURL(foyer.code_menage, {
+          width: 140, margin: 1, color: { dark: '#1A2547', light: '#FFFFFF' },
+        });
+        const qrBase64 = qrDataUrl.split(',')[1];
+        const qrBytes  = Uint8Array.from(atob(qrBase64), c => c.charCodeAt(0));
+        qrImg = await pdf.embedPng(qrBytes);
+        qrImages[foyer.code_menage] = Promise.resolve(qrImg);
+      } else {
+        qrImg = await qrImages[foyer.code_menage];
+      }
+
+      const QS = 56;
+      page.drawImage(qrImg, { x: ox + CARD_W - QS - 6, y: oy + CARD_H - 28 - QS - 4, width: QS, height: QS });
+
+      // ── Infos ─────────────────────────────────────────────────
+      const TX = ox + 8;
+      let TY = oy + CARD_H - 42;
+
+      page.drawText(foyer.code_menage, {
+        x: TX, y: TY, size: 8.5, font: bold, color: rgb(0.18, 0.27, 0.56),
+      });
+      TY -= 13;
+
+      page.drawText('Chef de ménage :', { x: TX, y: TY, size: 5.5, font: reg, color: rgb(0.45,0.45,0.45) });
+      TY -= 9;
+      page.drawText(chefNom.length > 28 ? chefNom.slice(0,27)+'…' : chefNom, {
+        x: TX, y: TY, size: 7, font: bold, color: rgb(0.1,0.1,0.1),
+      });
+      TY -= 11;
+
+      page.drawText('Fokontany :', { x: TX, y: TY, size: 5.5, font: reg, color: rgb(0.45,0.45,0.45) });
+      TY -= 9;
+      page.drawText(foyer.fokontany, { x: TX, y: TY, size: 7, font: bold, color: rgb(0.1,0.1,0.1) });
+      TY -= 11;
+
+      if (foyer.adresse) {
+        page.drawText('Adresse :', { x: TX, y: TY, size: 5.5, font: reg, color: rgb(0.45,0.45,0.45) });
+        TY -= 9;
+        const adr = foyer.adresse.length > 30 ? foyer.adresse.slice(0,29)+'…' : foyer.adresse;
+        page.drawText(adr, { x: TX, y: TY, size: 6, font: reg, color: rgb(0.1,0.1,0.1) });
+      }
+
+      // ── Pied ──────────────────────────────────────────────────
+      page.drawLine({
+        start: { x: ox + 4, y: oy + 14 }, end: { x: ox + CARD_W - 4, y: oy + 14 },
+        thickness: 0.5, color: rgb(0.75,0.75,0.75),
+      });
+      page.drawText(`${config.nom_commune} — ${config.nom_district}`, {
+        x: ox + 8, y: oy + 5, size: 5, font: reg, color: rgb(0.55,0.55,0.55),
+      });
+
+      // Ligne de découpe (tirets autour de la carte)
+      page.drawRectangle({ x: ox - 1, y: oy - 1, width: CARD_W + 2, height: CARD_H + 2,
+        borderColor: rgb(0.85, 0.85, 0.85), borderWidth: 0.5, borderDashArray: [3, 3] });
+    }
+  }
+
+  return pdf.save();
+}

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Foyer, Membre } from '../types';
-import { X, Home, MapPin, Users, UserCheck, PlusCircle, Edit2, Trash2, AlertTriangle, Phone, Mail, CreditCard, ChevronDown, ChevronUp, FileText, Printer, Loader2, Brain, BarChart2, CheckCircle, XCircle } from 'lucide-react';
+import { X, Home, MapPin, Users, UserCheck, PlusCircle, Edit2, Trash2, AlertTriangle, Phone, Mail, CreditCard, ChevronDown, ChevronUp, FileText, Printer, Loader2, Brain, BarChart2, CheckCircle, XCircle, QrCode } from 'lucide-react';
 import MembreProfil360 from './MembreProfil360';
 import { genererFicheMenage } from '../lib/ficheMenagePDF';
-import { telechargerPDF } from '../lib/documents';
+import { telechargerPDF, genererCarnetQR, getConfig } from '../lib/documents';
 import ModalApercu from './ModalApercu';
 import { analyserMenage, verifierCompletude, type AnalyseIntelligence } from '../lib/intelligenceEngine';
 
@@ -256,6 +256,7 @@ export default function FoyerDetail({ foyer, membres, onClose, onEditFoyer, onDe
   const [calculantAnalyse, setCalculantAnalyse] = useState(false);
   const [generatingFiche, setGeneratingFiche] = useState(false);
   const [apercuFiche, setApercuFiche] = useState<{ url: string; bytes: Uint8Array } | null>(null);
+  const [generatingCarnetQR, setGeneratingCarnetQR] = useState(false);
 
   // Calcul automatique dès qu'on clique sur l'onglet Intelligence
   useEffect(() => {
@@ -303,6 +304,20 @@ export default function FoyerDetail({ foyer, membres, onClose, onEditFoyer, onDe
     setApercuFiche(null);
   };
 
+  const handleCarnetQR = async () => {
+    if (!foyer.code_menage) { alert('Ce foyer n\'a pas de code carnet QR.'); return; }
+    setGeneratingCarnetQR(true);
+    try {
+      const config = await getConfig();
+      const chefNom = chef ? `${chef.nom} ${chef.prenom}` : 'Chef non défini';
+      const bytes = await genererCarnetQR(foyer, chefNom, config);
+      await telechargerPDF(bytes, `CARNET_QR_${foyer.code_menage}.pdf`);
+    } catch (e) {
+      alert('Erreur génération carnet QR : ' + e);
+    }
+    setGeneratingCarnetQR(false);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
       <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-3xl max-h-[90vh] flex flex-col">
@@ -334,6 +349,12 @@ export default function FoyerDetail({ foyer, membres, onClose, onEditFoyer, onDe
               {generatingFiche ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
               {generatingFiche ? 'Génération…' : 'Fiche ménage'}
             </button>
+            {foyer.code_menage && (
+              <button onClick={handleCarnetQR} disabled={generatingCarnetQR} title="Télécharger la carte QR à coller dans le carnet physique" className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white text-xs font-bold rounded-lg transition">
+                {generatingCarnetQR ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />}
+                {generatingCarnetQR ? 'Génération…' : 'Carnet QR'}
+              </button>
+            )}
             <button onClick={onEditFoyer} className="p-2 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600"><Edit2 className="h-4 w-4" /></button>
             <button onClick={onDeleteFoyer} className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>
