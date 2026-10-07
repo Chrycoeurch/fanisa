@@ -40,12 +40,15 @@ const TYPES_AIDE = ['Vivres alimentaires', 'Riz', 'Huile', 'Eau potable', "Kit d
 const TRAVAUX_TYPES = ['Aucune intervention', 'Reparation mineure', 'Renovation partielle', 'Renovation importante', 'Reconstruction complete'];
 const TRAVAUX_PARTIES = ['Toiture', 'Murs', 'Sol', 'Portes', 'Fenetres', 'Charpente', 'Installation electrique', 'Installation sanitaire', 'Ensemble de la maison'];
 
-async function genCodeMenage(): Promise<string> {
-  const { data } = await supabase.from('foyers').select('code_menage').order('created_at', { ascending: false });
-  if (!data || data.length === 0) return 'MEN-001';
-  const nums = data.map(f => parseInt((f.code_menage || '').replace('MEN-', '')) || 0).filter(n => !isNaN(n));
-  const max = nums.length > 0 ? Math.max(...nums) : 0;
-  return `MEN-${String(max + 1).padStart(3, '0')}`;
+async function genCodeMenage(fokontany: string): Promise<string> {
+  if (!fokontany.trim()) {
+    throw new Error('Veuillez d\'abord saisir le fokontany avant de générer un code.');
+  }
+  const { data, error } = await supabase.rpc('pick_next_carnet', { p_fokontany: fokontany.trim() });
+  if (error || !data) {
+    throw new Error(`Plus de carnets disponibles pour le fokontany « ${fokontany} ». Contactez l'administrateur.`);
+  }
+  return data as string;
 }
 
 function ChoiceGroup({ label, options, value, onChange, required, cols = 2 }: { label: string; options: string[]; value: string; onChange: (v: string) => void; required?: boolean; cols?: number }) {
@@ -138,7 +141,8 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [tab, setTab] = useState<Tab>('general');
   const [code_menage, setCodeMenage] = useState(foyer?.code_menage || '');
-  const [loadingCode, setLoadingCode] = useState(!foyer);
+  const [loadingCode, setLoadingCode] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   // Général
   const [statut, setStatut] = useState<Foyer['statut']>(foyer?.statut || 'Actif');
@@ -244,9 +248,17 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   const toggleArr = (arr: string[], val: string) => arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
   const isLastTab = tab === TAB_ORDER[TAB_ORDER.length - 1];
 
+  // Génère le code carnet depuis le pool dès que le fokontany est saisi (nouveau foyer uniquement)
   useEffect(() => {
-    if (!foyer) genCodeMenage().then(code => { setCodeMenage(code); setLoadingCode(false); });
-  }, [foyer]);
+    if (foyer || !fokontany.trim() || code_menage) return;
+    setLoadingCode(true);
+    setCodeError(null);
+    genCodeMenage(fokontany)
+      .then(code => { setCodeMenage(code); })
+      .catch(err => { setCodeError(err.message); })
+      .finally(() => setLoadingCode(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fokontany]);
 
   // Auto-remplir le LOT depuis l'adresse — toujours recalculé, non modifiable
   useEffect(() => {
@@ -331,6 +343,14 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
     e.preventDefault();
     const err = validateTab();
     if (err) { alert(err); return; }
+    if (!foyer && !code_menage) {
+      alert('Aucun carnet QR disponible pour ce fokontany. Veuillez contacter l\'administrateur.');
+      return;
+    }
+    if (!foyer && codeError) {
+      alert(codeError);
+      return;
+    }
     setSaving(true);
     await onSave({
       code_menage, statut,
@@ -407,7 +427,16 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
             <div className="bg-indigo-600 p-2 rounded-xl"><Home className="h-5 w-5 text-white" /></div>
             <div>
               <h2 className="text-base font-bold text-slate-900">{foyer ? 'Modifier le foyer' : 'Nouveau foyer'}</h2>
-              <p className="text-xs text-slate-500">Code : {loadingCode ? <span className="text-slate-400 italic">génération…</span> : <span className="font-mono font-bold text-indigo-600">{code_menage}</span>}</p>
+              <p className="text-xs text-slate-500">
+                Code : {loadingCode
+                  ? <span className="text-slate-400 italic">Attribution en cours…</span>
+                  : codeError
+                    ? <span className="text-red-500 italic">⚠ {codeError}</span>
+                    : code_menage
+                      ? <span className="font-mono font-bold text-indigo-600">{code_menage}</span>
+                      : <span className="text-slate-400 italic">Saisissez le fokontany</span>
+                }
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-500" /></button>

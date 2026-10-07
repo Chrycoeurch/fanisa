@@ -109,6 +109,13 @@ export default function App() {
       if (created) {
         setFoyers(prev => [created as Foyer, ...prev]);
         await addLog('Création', `Nouveau foyer ${data.code_menage} créé`, created.id);
+        // Marquer le carnet comme attribué dans le pool
+        if (data.code_menage) {
+          await supabase
+            .from('carnets_disponibles')
+            .update({ attribue: true, foyer_id: created.id, attribue_le: new Date().toISOString() })
+            .eq('code_menage', data.code_menage);
+        }
       }
     }
     setShowFoyerForm(false);
