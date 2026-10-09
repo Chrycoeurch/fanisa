@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+/* ── Utilitaires formulaire collecte terrain ── */
+.champ {
+  @apply w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white;
+}
+.label-field {
+  @apply block text-xs font-semibold text-slate-500 mb-0.5;
+}

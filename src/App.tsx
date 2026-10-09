@@ -15,6 +15,7 @@ import StatsView from './components/StatsView';
 import CRAADModule from './components/CRAADModule';
 import VieCommunautaireModule from './components/VieCommunautaireModule';
 import KoboSyncModule from './components/KoboSyncModule';
+import CollecteModule from './components/CollecteModule';
 import CotisationsModule from './components/CotisationsModule';
 import PresenceModule from './components/PresenceModule';
 import { FOKONTANY_LIST } from './seedData';
@@ -22,7 +23,7 @@ import {
   FolderLock, Users, HeartPulse, History, PlusCircle, Search,
   RotateCcw, ShieldCheck, Building, FileSignature, Landmark,
   Package, Loader2, Home, Filter, Award, BarChart2, Download, RefreshCw,
-  Coins, CalendarCheck
+  Coins, CalendarCheck, ClipboardList
 } from 'lucide-react';
 
 export default function App() {
@@ -34,7 +35,7 @@ export default function App() {
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'logs'|'land'|'patrimoine'|'kobo'|'cotisations'|'presences'>('annuaire');
+  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'logs'|'land'|'patrimoine'|'kobo'|'cotisations'|'presences'|'collecte'>('annuaire');
   const [searchQuery, setSearchQuery] = useState('');
   const [fokontanyFilter, setFokontanyFilter] = useState('Tous');
   const [statutFilter, setStatutFilter] = useState('Tous');
@@ -272,6 +273,7 @@ export default function App() {
             ['materials', Package, 'Matériels'],
             ['land', Building, 'Foncier'],
             ['patrimoine', Award, 'Patrimoine'],
+            ['collecte', ClipboardList, 'Collecte'],
             ['kobo', RefreshCw, 'KoboSync'],
             ['cotisations', Coins, 'Cotisations'],
             ['presences', CalendarCheck, 'Présences'],
@@ -407,6 +409,7 @@ export default function App() {
         )}
         {activeTab === 'land' && <FoncierModule foyers={foyers} membres={membres} />}
         {activeTab === 'patrimoine' && <PatrimoineModule foyers={foyers} />}
+        {activeTab === 'collecte' && <CollecteModule />}
         {activeTab === 'kobo' && (
           <KoboSyncModule onImportDone={async () => {
             const [{ data: f }, { data: m }] = await Promise.all([
