@@ -11,6 +11,7 @@ import {
   type CollecteMembre,
   type CollecteVahiny,
   type CollectePhoto,
+  type CollecteFoncier,
   type SyncQueue,
 } from './offlineDB';
 
@@ -21,6 +22,7 @@ export interface RapportSync {
   membres_ok: number;
   vahiny_ok: number;
   photos_ok: number;
+  foncier_ok: number;
   erreurs: string[];
   doublons_ignores: number;
   duree_ms: number;
@@ -51,15 +53,15 @@ let syncEnCours = false;
 
 export async function lancerSync(): Promise<RapportSync> {
   if (syncEnCours) {
-    return { foyers_ok: 0, membres_ok: 0, vahiny_ok: 0, photos_ok: 0, erreurs: ['Sync déjà en cours'], doublons_ignores: 0, duree_ms: 0 };
+    return { foyers_ok: 0, membres_ok: 0, vahiny_ok: 0, photos_ok: 0, foncier_ok: 0, erreurs: ['Sync déjà en cours'], doublons_ignores: 0, duree_ms: 0 };
   }
   if (!estEnLigne()) {
-    return { foyers_ok: 0, membres_ok: 0, vahiny_ok: 0, photos_ok: 0, erreurs: ['Pas de connexion réseau'], doublons_ignores: 0, duree_ms: 0 };
+    return { foyers_ok: 0, membres_ok: 0, vahiny_ok: 0, photos_ok: 0, foncier_ok: 0, erreurs: ['Pas de connexion réseau'], doublons_ignores: 0, duree_ms: 0 };
   }
 
   syncEnCours = true;
   const debut = Date.now();
-  const rapport: RapportSync = { foyers_ok: 0, membres_ok: 0, vahiny_ok: 0, photos_ok: 0, erreurs: [], doublons_ignores: 0, duree_ms: 0 };
+  const rapport: RapportSync = { foyers_ok: 0, membres_ok: 0, vahiny_ok: 0, photos_ok: 0, foncier_ok: 0, erreurs: [], doublons_ignores: 0, duree_ms: 0 };
 
   try {
     // 1. Récupérer la queue en attente
@@ -75,6 +77,7 @@ export async function lancerSync(): Promise<RapportSync> {
           case 'upsert_membre':  await syncMembre(item, rapport);  break;
           case 'upsert_vahiny':  await syncVahiny(item, rapport);  break;
           case 'upload_photo':   await syncPhoto(item, rapport);   break;
+          case 'upsert_foncier': await syncFoncier(item, rapport); break;
         }
         await db.sync_queue.update(item.id!, { statut: 'synchronise' });
       } catch (e: unknown) {
@@ -246,6 +249,71 @@ async function syncPhoto(item: SyncQueue, rapport: RapportSync) {
   }
 
   rapport.photos_ok++;
+}
+
+// ── Sync foncier ───────────────────────────────────────────────
+
+async function syncFoncier(item: SyncQueue, rapport: RapportSync) {
+  const foncier = await db.collecte_foncier.where('uuid').equals(item.entite_uuid).first();
+  if (!foncier) throw new Error('Parcelle introuvable en local');
+
+  // Vérifier doublon sur numero_lot
+  const { data: existing } = await supabase
+    .from('parcelles')
+    .select('id')
+    .eq('numero_lot', foncier.numero_lot)
+    .maybeSingle();
+
+  if (existing) {
+    // Mise à jour de la parcelle existante
+    const { error } = await supabase.from('parcelles').update(buildFoncierPayload(foncier)).eq('id', existing.id);
+    if (error) throw new Error(error.message);
+    // Mettre à jour / créer le détenteur
+    if (foncier.detenteur_connu && foncier.detenteur_nom) {
+      await upsertDetenteur(existing.id, foncier);
+    }
+  } else {
+    // Nouvelle parcelle
+    const { data, error } = await supabase.from('parcelles').insert(buildFoncierPayload(foncier)).select('id').single();
+    if (error) throw new Error(error.message);
+    if (data?.id && foncier.detenteur_connu && foncier.detenteur_nom) {
+      await upsertDetenteur(data.id, foncier);
+    }
+  }
+
+  await db.collecte_foncier.update(foncier.id!, { statut_sync: 'synchronise', updated_at: new Date().toISOString() });
+  rapport.foncier_ok++;
+}
+
+async function upsertDetenteur(parcelle_id: string, foncier: CollecteFoncier) {
+  const payload = {
+    parcelle_id,
+    type_detention: foncier.detenteur_type || 'Propriétaire',
+    nom: foncier.detenteur_nom,
+    prenom: foncier.detenteur_prenom,
+    cin: foncier.detenteur_cin,
+    telephone: foncier.detenteur_telephone,
+  };
+  await supabase.from('detenteurs').upsert(payload, { onConflict: 'parcelle_id' });
+}
+
+function buildFoncierPayload(f: CollecteFoncier) {
+  return {
+    numero_lot: f.numero_lot,
+    fokontany: f.fokontany,
+    adresse: f.adresse,
+    gps_lat: f.gps_lat,
+    gps_lng: f.gps_lng,
+    superficie_m2: f.superficie_m2,
+    usage: f.usage || 'Habitation',
+    titre_foncier: f.titre_foncier,
+    notes: [
+      f.terrain_nu_statut ? `Terrain ${f.terrain_nu_statut}` : null,
+      f.destruction_cause ? `Destruction : ${f.destruction_cause} (${f.destruction_annee || '?'})` : null,
+      f.a_verifier ? 'À vérifier' : null,
+      f.notes || null,
+    ].filter(Boolean).join(' | ') || null,
+  };
 }
 
 // ── Constructeurs de payload Supabase ──────────────────────────
