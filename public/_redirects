@@ -1,1 +1,6 @@
-/* /index.html 200
+# App collecte terrain — PWA installable séparément
+/collecte     /collecte.html  200
+/collecte/*   /collecte.html  200
+
+# App principale FANISA
+/*  /index.html  200

@@ -1,0 +1,18 @@
+{
+  "name": "FANISA Collecte Terrain",
+  "short_name": "Collecte",
+  "description": "Collecte de données terrain offline — Fokontany Ambodisaina",
+  "theme_color": "#7c3aed",
+  "background_color": "#f8fafc",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/collecte",
+  "scope": "/collecte",
+  "id": "/collecte",
+  "icons": [
+    { "src": "/icon-collecte-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-collecte-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["productivity", "utilities"],
+  "screenshots": []
+}
