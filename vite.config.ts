@@ -31,6 +31,7 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
+          globIgnores: ['collecte/**', 'collecte-sw.js'],  // servis par collecte-sw.js
           navigateFallback: '/',
           navigateFallbackDenylist: [/^\/collecte/],  // laisse /collecte à son propre SW
           runtimeCaching: [
@@ -46,7 +47,8 @@ export default defineConfig(() => {
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, 'index.html'),
-          collecte: path.resolve(__dirname, 'collecte/index.html'),
+          // collecte/index.html est un fichier statique standalone (public/collecte/index.html)
+          // — il n'est PAS bundlé par Vite, Cloudflare Pages le sert directement.
         },
       },
     },
