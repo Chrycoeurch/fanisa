@@ -32,6 +32,7 @@ export default defineConfig(() => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
           globIgnores: ['collecte/**', 'collecte-sw.js'],  // servis par collecte-sw.js
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MiB (xlsx lib augmente le bundle)
           navigateFallback: '/',
           navigateFallbackDenylist: [/^\/collecte/],  // laisse /collecte à son propre SW
           runtimeCaching: [

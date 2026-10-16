@@ -15,8 +15,193 @@
  *   - "Autre → Précisez" : champs _other lus en fallback
  */
 
+import * as XLSX from 'xlsx';
 import { Foyer, Membre } from '../types';
 import { KoboSubmission } from './koboApi';
+
+// ── Parsing XLSX KoboCollect ──────────────────────────────────────────────────
+
+/**
+ * Lit un export XLSX KoboCollect et retourne les soumissions prêtes pour mapKoboMenage.
+ *
+ * Structure attendue :
+ *   - Feuille principale : une ligne par soumission, colonnes = noms de champs Kobo
+ *   - Feuille "personnes" : repeat group membres (liée via _index/_parent_index)
+ *   - Feuille "vahiny" : visiteurs (optionnel)
+ *
+ * @param file  Fichier .xlsx sélectionné par l'utilisateur
+ * @returns     Tableau de KoboSubmission avec le repeat group "personnes" imbriqué
+ */
+export async function parseKoboXlsxMenage(file: File): Promise<KoboSubmission[]> {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+
+  // Feuille principale
+  const mainSheet = wb.Sheets[wb.SheetNames[0]];
+  const mainRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(mainSheet, { defval: null });
+
+  // Feuille personnes (repeat group)
+  const personnesSheet = wb.Sheets['personnes'];
+  let personnesRows: Record<string, unknown>[] = [];
+  if (personnesSheet) {
+    personnesRows = XLSX.utils.sheet_to_json(personnesSheet, { defval: null });
+  }
+
+  // Feuille vahiny (visiteurs)
+  const vahinySheet = wb.Sheets['vahiny'];
+  let vahinyRows: Record<string, unknown>[] = [];
+  if (vahinySheet) {
+    vahinyRows = XLSX.utils.sheet_to_json(vahinySheet, { defval: null });
+  }
+
+  // Regrouper personnes par _parent_index
+  const personnesParParent = new Map<number, Record<string, unknown>[]>();
+  for (const p of personnesRows) {
+    const parentIdx = Number(p['_parent_index'] ?? p['_index'] ?? 0);
+    if (!personnesParParent.has(parentIdx)) personnesParParent.set(parentIdx, []);
+    personnesParParent.get(parentIdx)!.push(p);
+  }
+
+  // Regrouper vahiny par _parent_index
+  const vahinyParParent = new Map<number, Record<string, unknown>[]>();
+  for (const v of vahinyRows) {
+    const parentIdx = Number(v['_parent_index'] ?? 0);
+    if (!vahinyParParent.has(parentIdx)) vahinyParParent.set(parentIdx, []);
+    vahinyParParent.get(parentIdx)!.push(v);
+  }
+
+  // Construire les soumissions avec sous-tableaux imbriqués
+  return mainRows.map((row, i) => {
+    const idx = Number(row['_index'] ?? i + 1);
+    const personnes = personnesParParent.get(idx) ?? [];
+    const vahiny = vahinyParParent.get(idx) ?? [];
+
+    return {
+      ...normaliseRowMenage(row),
+      personnes: personnes.map(p => p as unknown as KoboSubmission),
+      vahiny: vahiny.map(v => v as unknown as KoboSubmission),
+    } as unknown as KoboSubmission;
+  });
+}
+
+/**
+ * Lit un export XLSX KoboCollect foncier et retourne les soumissions.
+ *
+ * Structure :
+ *   - Feuille principale
+ *   - Feuille "constructions" : repeat group bâtiments
+ *   - Feuille "detenteurs"   : repeat group détenteurs
+ *   - Feuille "documents"    : repeat group documents
+ */
+export async function parseKoboXlsxFoncier(file: File): Promise<KoboSubmission[]> {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+
+  const mainSheet = wb.Sheets[wb.SheetNames[0]];
+  const mainRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(mainSheet, { defval: null });
+
+  // Sous-tables
+  const subTables: Record<string, Map<number, Record<string, unknown>[]>> = {};
+  for (const name of ['constructions', 'detenteurs', 'documents', 'heritiers', 'jorolava_liste']) {
+    const sheet = wb.Sheets[name];
+    if (!sheet) continue;
+    const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+    const map = new Map<number, Record<string, unknown>[]>();
+    for (const r of rows) {
+      const parentIdx = Number(r['_parent_index'] ?? 0);
+      if (!map.has(parentIdx)) map.set(parentIdx, []);
+      map.get(parentIdx)!.push(r);
+    }
+    subTables[name] = map;
+  }
+
+  return mainRows.map((row, i) => {
+    const idx = Number(row['_index'] ?? i + 1);
+    const submission: Record<string, unknown> = { ...normaliseRowFoncier(row) };
+
+    for (const [name, map] of Object.entries(subTables)) {
+      submission[name] = (map.get(idx) ?? []).map(r => r as KoboSubmission);
+    }
+
+    return submission as KoboSubmission;
+  });
+}
+
+/** Normalise les noms de champs du formulaire ménage pour compatibilité avec mapKoboMenage */
+function normaliseRowMenage(row: Record<string, unknown>): Record<string, unknown> {
+  const n: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    // Normaliser les dates JavaScript -> ISO string
+    const val = v instanceof Date ? v.toISOString() : v;
+    n[k] = val;
+  }
+
+  // Alias pour les champs utilisés par mapKoboMenage
+  // GPS : convertir "LAT LNG ALT PREC" en _geolocation tableau
+  const gps = n['gps'] as string | null;
+  if (gps && typeof gps === 'string') {
+    const parts = gps.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      n['_geolocation/0'] = parseFloat(parts[0]);
+      n['_geolocation/1'] = parseFloat(parts[1]);
+    }
+  }
+  // GPS split par Kobo (_gps_latitude)
+  if (!n['_geolocation/0'] && n['_gps_latitude']) {
+    n['_geolocation/0'] = n['_gps_latitude'];
+    n['_geolocation/1'] = n['_gps_longitude'];
+  }
+
+  // Noms de champs directs déjà bien nommés dans le formulaire FANISA :
+  // menage_id, numero_lot, quartier_final, carreau_final, maison_id, unite_id,
+  // nom_chef_menage, person_count, statut_occupation, consentement → OK tels quels
+
+  return n;
+}
+
+/** Normalise les noms de champs du formulaire foncier */
+function normaliseRowFoncier(row: Record<string, unknown>): Record<string, unknown> {
+  const n: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    const val = v instanceof Date ? v.toISOString() : v;
+    n[k] = val;
+  }
+
+  // Alias pour mapKoboFoncier (qui attend des noms génériques)
+  n['numero_lot']    = n['lot_id']    ?? n['lot_norm']   ?? n['numero_lot'];
+  n['quartier_final']= n['quartier_lot'] ?? n['quartier_final'];
+  n['carreau_final'] = n['carreau_lot']  ?? n['carreau_final'];
+  n['code_agent']    = n['agent']     ?? n['code_agent'];
+  n['parcelle_id']   = n['foncier_id']   ?? n['parcelle_id'];
+
+  // GPS visite foncière
+  const gpsVisite = n['gps_visite_fonciere'] as string | null;
+  if (gpsVisite && typeof gpsVisite === 'string') {
+    const parts = gpsVisite.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      n['_geolocation/0'] = parseFloat(parts[0]);
+      n['_geolocation/1'] = parseFloat(parts[1]);
+    }
+  }
+  if (!n['_geolocation/0'] && n['_gps_visite_fonciere_latitude']) {
+    n['_geolocation/0'] = n['_gps_visite_fonciere_latitude'];
+    n['_geolocation/1'] = n['_gps_visite_fonciere_longitude'];
+  }
+
+  // Champs détenteur (depuis sous-table ou champs plats)
+  // La sous-table "detenteurs" sera traitée séparément dans mapKoboFoncierXlsx
+  n['detenteur_nom']    = n['det_nom']    ?? n['detenteur_nom'];
+  n['detenteur_prenom'] = n['det_prenom'] ?? n['detenteur_prenom'];
+  n['detenteur_cin']    = n['det_cin']    ?? n['detenteur_cin'];
+  n['detenteur_tel']    = n['det_telephone'] ?? n['detenteur_tel'];
+  n['detenteur_type']   = n['det_type']   ?? n['detenteur_type'];
+
+  // Surfaces
+  n['superficie_m2'] = n['superficie_declaree'] ?? n['superficie_estimee'] ?? n['superficie_m2'];
+  n['nature_terrain']  = n['nature_terrain'] ?? n['presence_final'];
+
+  return n;
+}
 
 // ── Validation identifiant FANISA ──────────────────────────────────────────────
 

@@ -5,11 +5,11 @@
  * vers la base de données Supabase FANISA.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   RefreshCw, CheckCircle, AlertTriangle, XCircle, ChevronDown,
   ChevronRight, Wifi, WifiOff, Download, Eye, Loader2,
-  Users, Home, MapPin, Info
+  Users, Home, MapPin, Info, FileSpreadsheet, Upload
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
@@ -18,6 +18,7 @@ import {
 } from '../lib/koboApi';
 import {
   mapKoboMenage, mapKoboFoncier, deduplicateKoboResults,
+  parseKoboXlsxMenage, parseKoboXlsxFoncier,
   KoboImportResult, KoboFoncierResult
 } from '../lib/koboMapping';
 
@@ -56,6 +57,8 @@ export default function KoboSyncModule({ onImportDone }: Props) {
   });
   const [expandedWarnings, setExpandedWarnings] = useState(false);
   const [expandedDuplicates, setExpandedDuplicates] = useState(false);
+  const [xlsxDragOver, setXlsxDragOver] = useState(false);
+  const xlsxInputRef = useRef<HTMLInputElement>(null);
 
   // ── Tester la connexion ───────────────────────────────────────────────────
 
@@ -198,6 +201,74 @@ export default function KoboSyncModule({ onImportDone }: Props) {
     if (imported > 0) onImportDone?.();
   }, [state.results, formType, onImportDone]);
 
+  // ── Import XLSX ───────────────────────────────────────────────────────────
+
+  const handleXlsxFile = useCallback(async (file: File) => {
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      setState(s => ({ ...s, step: 'error', error: 'Veuillez sélectionner un fichier .xlsx exporté depuis KoboCollect / KoboToolbox.' }));
+      return;
+    }
+
+    setState(s => ({
+      ...s, step: 'fetching', progress: 0, total: 0,
+      results: [], foncierResults: [], duplicates: [], imported: 0, warnings: [], error: undefined,
+    }));
+
+    try {
+      if (formType === 'menage') {
+        const submissions = await parseKoboXlsxMenage(file);
+
+        const allResults = submissions.map((row, i) => mapKoboMenage(row, i));
+        const allWarnings = allResults.flatMap(r => r.warnings);
+
+        const { data: existing } = await supabase
+          .from('foyers')
+          .select('code_menage')
+          .not('code_menage', 'is', null);
+
+        const existingCodes = new Set((existing || []).map((f: { code_menage: string }) => f.code_menage));
+        const { toInsert, duplicates } = deduplicateKoboResults(allResults, existingCodes);
+
+        setState(s => ({
+          ...s, step: 'preview',
+          results: toInsert,
+          duplicates,
+          warnings: allWarnings,
+          total: submissions.length,
+        }));
+      } else {
+        const submissions = await parseKoboXlsxFoncier(file);
+        const allFoncier = submissions.map(row => mapKoboFoncier(row));
+        const allWarnings = allFoncier.flatMap(r => r.warnings);
+        setState(s => ({
+          ...s, step: 'preview',
+          foncierResults: allFoncier,
+          warnings: allWarnings,
+          total: submissions.length,
+        }));
+      }
+    } catch (e) {
+      setState(s => ({
+        ...s, step: 'error',
+        error: `Erreur lecture XLSX : ${e instanceof Error ? e.message : String(e)}`,
+      }));
+    }
+  }, [formType]);
+
+  const handleXlsxInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleXlsxFile(file);
+    // reset pour permettre re-sélection du même fichier
+    e.target.value = '';
+  }, [handleXlsxFile]);
+
+  const handleXlsxDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setXlsxDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleXlsxFile(file);
+  }, [handleXlsxFile]);
+
   // ── Reset ─────────────────────────────────────────────────────────────────
 
   const handleReset = () => {
@@ -308,15 +379,65 @@ export default function KoboSyncModule({ onImportDone }: Props) {
           )}
         </div>
 
-        {/* Action principale */}
+        {/* Actions */}
         {(state.step === 'idle' || state.step === 'error') && (
-          <button
-            onClick={handleFetch}
-            className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition"
-          >
-            <Download className="h-4 w-4" />
-            Récupérer les soumissions Kobo
-          </button>
+          <div className="mt-4 space-y-3">
+            {/* Bouton API */}
+            <button
+              onClick={handleFetch}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition"
+            >
+              <Download className="h-4 w-4" />
+              Récupérer via API KoboToolbox
+            </button>
+
+            {/* Séparateur */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 border-t border-slate-200" />
+              <span className="text-xs text-slate-400">ou</span>
+              <div className="flex-1 border-t border-slate-200" />
+            </div>
+
+            {/* Zone XLSX drag & drop */}
+            <div
+              onDragOver={e => { e.preventDefault(); setXlsxDragOver(true); }}
+              onDragLeave={() => setXlsxDragOver(false)}
+              onDrop={handleXlsxDrop}
+              onClick={() => xlsxInputRef.current?.click()}
+              className={`
+                relative cursor-pointer rounded-lg border-2 border-dashed p-5
+                flex flex-col items-center gap-2 transition-colors
+                ${xlsxDragOver
+                  ? 'border-emerald-400 bg-emerald-50'
+                  : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'
+                }
+              `}
+            >
+              <input
+                ref={xlsxInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="sr-only"
+                onChange={handleXlsxInputChange}
+              />
+              <FileSpreadsheet className={`h-8 w-8 ${xlsxDragOver ? 'text-emerald-500' : 'text-slate-400'}`} />
+              <div className="text-center">
+                <p className="text-sm font-semibold text-slate-700">
+                  Importer un export XLSX KoboCollect
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Glissez-déposez ou cliquez pour sélectionner le fichier&nbsp;—&nbsp;
+                  <span className="font-medium text-slate-600">
+                    {formType === 'menage' ? 'FORMULAIRE A (ménages)' : 'FANISA Foncier'}
+                  </span>
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                <Upload className="h-3 w-3" />
+                Fonctionne sans connexion internet
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
