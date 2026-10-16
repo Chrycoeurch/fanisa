@@ -40,15 +40,31 @@ export async function parseKoboXlsxMenage(file: File): Promise<KoboSubmission[]>
   const mainSheet = wb.Sheets[wb.SheetNames[0]];
   const mainRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(mainSheet, { defval: null });
 
-  // Feuille personnes (repeat group)
-  const personnesSheet = wb.Sheets['personnes'];
+  // Debug : noms de feuilles disponibles (visible dans la console du navigateur)
+  console.debug('[FANISA XLSX] Feuilles trouvées :', wb.SheetNames);
+  if (mainRows[0]) {
+    console.debug('[FANISA XLSX] Colonnes feuille principale (10 premières) :', Object.keys(mainRows[0]).slice(0, 10));
+  }
+
+  // Feuille personnes (repeat group) — cherche plusieurs variantes de nom
+  const personnesSheetName = wb.SheetNames.find(n =>
+    /^personnes?$/i.test(n.trim()) || /membre/i.test(n) || /person/i.test(n)
+  );
+  const personnesSheet = personnesSheetName ? wb.Sheets[personnesSheetName] : undefined;
   let personnesRows: Record<string, unknown>[] = [];
   if (personnesSheet) {
     personnesRows = XLSX.utils.sheet_to_json(personnesSheet, { defval: null });
+    console.debug(`[FANISA XLSX] Feuille personnes "${personnesSheetName}" : ${personnesRows.length} lignes`);
+    if (personnesRows[0]) {
+      console.debug('[FANISA XLSX] Colonnes personnes :', Object.keys(personnesRows[0]).slice(0, 15));
+    }
+  } else {
+    console.warn('[FANISA XLSX] Feuille "personnes" introuvable. Feuilles dispo :', wb.SheetNames);
   }
 
   // Feuille vahiny (visiteurs)
-  const vahinySheet = wb.Sheets['vahiny'];
+  const vahinySheetName = wb.SheetNames.find(n => /^vahiny$/i.test(n.trim()) || /visiteur/i.test(n));
+  const vahinySheet = vahinySheetName ? wb.Sheets[vahinySheetName] : undefined;
   let vahinyRows: Record<string, unknown>[] = [];
   if (vahinySheet) {
     vahinyRows = XLSX.utils.sheet_to_json(vahinySheet, { defval: null });
@@ -57,10 +73,13 @@ export async function parseKoboXlsxMenage(file: File): Promise<KoboSubmission[]>
   // Regrouper personnes par _parent_index
   const personnesParParent = new Map<number, Record<string, unknown>[]>();
   for (const p of personnesRows) {
-    const parentIdx = Number(p['_parent_index'] ?? p['_index'] ?? 0);
+    // _parent_index référence _index de la feuille principale (commence à 1)
+    const parentIdx = Number(p['_parent_index'] ?? 0);
+    if (parentIdx === 0) continue; // ligne sans parent valide
     if (!personnesParParent.has(parentIdx)) personnesParParent.set(parentIdx, []);
     personnesParParent.get(parentIdx)!.push(p);
   }
+  console.debug('[FANISA XLSX] Index parents trouvés :', [...personnesParParent.keys()]);
 
   // Regrouper vahiny par _parent_index
   const vahinyParParent = new Map<number, Record<string, unknown>[]>();
@@ -71,10 +90,13 @@ export async function parseKoboXlsxMenage(file: File): Promise<KoboSubmission[]>
   }
 
   // Construire les soumissions avec sous-tableaux imbriqués
+  // Note : dans l'export Kobo, _index commence à 1 dans la feuille principale.
+  // sheet_to_json numérote les lignes à partir de 0 (i), donc idx = i + 1.
+  // On préfère _index du fichier si présent (soumission Kobo), sinon position.
   return mainRows.map((row, i) => {
-    const idx = Number(row['_index'] ?? i + 1);
-    const personnes = personnesParParent.get(idx) ?? [];
-    const vahiny = vahinyParParent.get(idx) ?? [];
+    const idx = Number(row['_index'] ?? (i + 1));
+    const personnes = personnesParParent.get(idx) ?? personnesParParent.get(i + 1) ?? [];
+    const vahiny = vahinyParParent.get(idx) ?? vahinyParParent.get(i + 1) ?? [];
 
     return {
       ...normaliseRowMenage(row),
@@ -116,11 +138,11 @@ export async function parseKoboXlsxFoncier(file: File): Promise<KoboSubmission[]
   }
 
   return mainRows.map((row, i) => {
-    const idx = Number(row['_index'] ?? i + 1);
+    const idx = Number(row['_index'] ?? (i + 1));
     const submission: Record<string, unknown> = { ...normaliseRowFoncier(row) };
 
     for (const [name, map] of Object.entries(subTables)) {
-      submission[name] = (map.get(idx) ?? []).map(r => r as KoboSubmission);
+      submission[name] = (map.get(idx) ?? map.get(i + 1) ?? []).map(r => r as KoboSubmission);
     }
 
     return submission as KoboSubmission;
