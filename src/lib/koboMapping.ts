@@ -786,6 +786,8 @@ function mapKoboMembre(
     ...(lieuTravail ? {} : {}), // pas de champ direct — ignoré
     est_vulnerable: false,
     vulnerabilite_categories: [],
+    niveau_priorite: 'Aucun' as const,
+    aides_obtenues: [],
     competences: [],
     vaccination: [],
     hypertension: 'Normal' as const,
@@ -820,6 +822,8 @@ function mapKoboVahiny(v: KoboSubmission, codeMenage: string, _warnings: string[
     niveau_etude: 'Non précisé',
     est_vulnerable: false,
     vulnerabilite_categories: [],
+    niveau_priorite: 'Aucun' as const,
+    aides_obtenues: [],
     competences: [],
     langues: ['Malagasy'],
     vaccination: [],
@@ -860,6 +864,13 @@ function mapKoboChefFromFlat(row: KoboSubmission, codeMenage: string, warnings: 
     telephone: koboGet(row, 'chef_telephone', 'telephone_chef', 'tel_contact'),
     competences: [],
     langues: ['Malagasy'],
+    vaccination: [],
+    hypertension: 'Normal' as const,
+    diabete: 'Normal' as const,
+    est_vulnerable: false,
+    vulnerabilite_categories: [],
+    niveau_priorite: 'Aucun' as const,
+    aides_obtenues: [],
   };
 }
 
@@ -884,6 +895,13 @@ function mapKoboMembrePlat(row: KoboSubmission, n: number, codeMenage: string, _
     profession: koboGet(row, ...prefix.map(p => `${p}_profession`)),
     competences: [],
     langues: ['Malagasy'],
+    vaccination: [],
+    hypertension: 'Normal' as const,
+    diabete: 'Normal' as const,
+    est_vulnerable: false,
+    vulnerabilite_categories: [],
+    niveau_priorite: 'Aucun' as const,
+    aides_obtenues: [],
   };
 }
 

@@ -203,11 +203,16 @@ export default function KoboSyncModule({ onImportDone }: Props) {
 
         // Insérer les membres
         for (const m of r.membres) {
+          const payload = { ...m, foyer_id: foyerId, created_at: new Date().toISOString() };
+          console.debug('[FANISA] Insert membre payload:', JSON.stringify(payload, null, 2));
           const { error: membreErr } = await supabase
             .from('membres')
-            .insert({ ...m, foyer_id: foyerId, created_at: new Date().toISOString() });
+            .insert(payload);
           if (membreErr) {
-            errors.push(`Membre ${m.nom} (${r.foyer.code_menage}) : ${membreErr.message}`);
+            const detail = (membreErr as unknown as { details?: string; hint?: string }).details || '';
+            const hint = (membreErr as unknown as { details?: string; hint?: string }).hint || '';
+            console.error('[FANISA] Erreur membre:', membreErr.message, detail, hint, 'payload:', payload);
+            errors.push(`Membre ${m.nom} (${r.foyer.code_menage}) : ${membreErr.message}${detail ? ' — ' + detail : ''}${hint ? ' — ' + hint : ''}`);
           }
         }
 
