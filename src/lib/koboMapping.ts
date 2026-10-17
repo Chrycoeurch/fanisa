@@ -78,32 +78,70 @@ export async function parseKoboXlsxMenage(file: File): Promise<KoboSubmission[]>
   }
 
   // Regrouper personnes par _parent_index
+  // IMPORTANT : chercher la clé _parent_index avec ou sans préfixe de groupe
+  // (SheetJS peut retourner la clé exacte ou avec préfixe selon la version du XLSX)
+  const findParentIdx = (p: Record<string, unknown>): number => {
+    // Clé exacte
+    if (p['_parent_index'] !== undefined && p['_parent_index'] !== null) {
+      const v = Number(p['_parent_index']);
+      if (!isNaN(v) && v > 0) return v;
+    }
+    // Chercher parmi toutes les clés
+    for (const [k, v] of Object.entries(p)) {
+      if (k === '_parent_index' || k.endsWith('/_parent_index') || k.endsWith('__parent_index')) {
+        const n = Number(v);
+        if (!isNaN(n) && n > 0) return n;
+      }
+    }
+    return 0;
+  };
+
   const personnesParParent = new Map<number, Record<string, unknown>[]>();
   for (const p of personnesRows) {
-    // _parent_index référence _index de la feuille principale (commence à 1)
-    const parentIdx = Number(p['_parent_index'] ?? 0);
-    if (parentIdx === 0) continue; // ligne sans parent valide
+    const parentIdx = findParentIdx(p);
+    if (parentIdx === 0) continue;
     if (!personnesParParent.has(parentIdx)) personnesParParent.set(parentIdx, []);
     personnesParParent.get(parentIdx)!.push(p);
   }
   console.debug('[FANISA XLSX] Index parents trouvés :', [...personnesParParent.keys()]);
+  console.debug('[FANISA XLSX] Nb personnes par parent :', Object.fromEntries(
+    [...personnesParParent.entries()].map(([k, v]) => [k, v.length])
+  ));
 
   // Regrouper vahiny par _parent_index
   const vahinyParParent = new Map<number, Record<string, unknown>[]>();
   for (const v of vahinyRows) {
-    const parentIdx = Number(v['_parent_index'] ?? 0);
+    const parentIdx = findParentIdx(v);
     if (!vahinyParParent.has(parentIdx)) vahinyParParent.set(parentIdx, []);
     vahinyParParent.get(parentIdx)!.push(v);
   }
 
   // Construire les soumissions avec sous-tableaux imbriqués
-  // Note : dans l'export Kobo, _index commence à 1 dans la feuille principale.
-  // sheet_to_json numérote les lignes à partir de 0 (i), donc idx = i + 1.
-  // On préfère _index du fichier si présent (soumission Kobo), sinon position.
+  // IMPORTANT : _index est à la colonne 346 (dernière) dans ce XLSX.
+  // sheet_to_json avec defval:null peut retourner null pour les cellules vides,
+  // mais _index a toujours une valeur. On cherche aussi avec préfixe.
+  const findMainIdx = (row: Record<string, unknown>, fallback: number): number => {
+    // Clé exacte
+    if (row['_index'] !== undefined && row['_index'] !== null) {
+      const v = Number(row['_index']);
+      if (!isNaN(v) && v > 0) return v;
+    }
+    // Chercher parmi toutes les clés (cas où SheetJS préfixe)
+    for (const [k, v] of Object.entries(row)) {
+      if (k === '_index' || k.endsWith('/_index')) {
+        const n = Number(v);
+        if (!isNaN(n) && n > 0) return n;
+      }
+    }
+    return fallback;
+  };
+
   return mainRows.map((row, i) => {
-    const idx = Number(row['_index'] ?? (i + 1));
-    const personnes = personnesParParent.get(idx) ?? personnesParParent.get(i + 1) ?? [];
-    const vahiny = vahinyParParent.get(idx) ?? vahinyParParent.get(i + 1) ?? [];
+    const idx = findMainIdx(row, i + 1);
+    const personnes = personnesParParent.get(idx) ?? [];
+    const vahiny = vahinyParParent.get(idx) ?? [];
+
+    console.debug(`[FANISA XLSX] Soumission ${i+1}: _index=${idx}, personnes=${personnes.length}, vahiny=${vahiny.length}`);
 
     return {
       ...normaliseRowMenage(row),

@@ -211,8 +211,9 @@ export default function KoboSyncModule({ onImportDone }: Props) {
           }
         }
 
-        // Log
-        await supabase.from('logs').insert({
+        // Log (ignoré si la table n'existe pas)
+        // Log (table optionnelle — on ignore l'erreur si elle n'existe pas)
+        void supabase.from('logs').insert({
           date: new Date().toISOString(),
           utilisateur: 'Import Kobo',
           action: forceUpdate ? 'IMPORT_KOBO_UPDATE' : 'IMPORT_KOBO',
