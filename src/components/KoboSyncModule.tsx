@@ -22,6 +22,110 @@ import {
   KoboImportResult, KoboFoncierResult
 } from '../lib/koboMapping';
 
+// ── Colonnes réelles de la table Supabase `membres` ─────────────────────────
+//
+// La table Supabase `membres` ne contient pas TOUS les champs du type TypeScript
+// `Membre`. On construit ici un payload limité aux colonnes effectivement
+// présentes en base, pour éviter les erreurs "column not found in schema cache".
+//
+// Colonnes ABSENTES de la table (à ne JAMAIS envoyer) :
+//   - assurance           (n'existe pas)
+//   - nationalite         (n'existe pas)
+//   - secteur_activite    (n'existe pas — c'est `secteur` en base)
+//   - situation_emploi    (n'existe pas)
+//   - statut_professionnel (n'existe pas)
+//   - employeur           (n'existe pas)
+//   - activite_secondaire (n'existe pas)
+//   - agr_types           (n'existe pas)
+//   - formations_pro      (n'existe pas)
+//   - handicap_oui        (n'existe pas — champ collecte mobile uniquement)
+//   - handicap_types      (n'existe pas)
+//   - handicap_precision  (n'existe pas)
+//   - handicap_autonomie  (n'existe pas)
+//   - handicap_carte      (n'existe pas)
+//   - acces_eau_individuel     (n'existe pas)
+//   - acces_internet_individuel (n'existe pas)
+//   - aide_sociale        (n'existe pas)
+//   - cotisation_a_jour   (n'existe pas)
+//   - role_communautaire  (n'existe pas)
+//   - reunion_presences   (n'existe pas)
+//   - dernier_evenement   (n'existe pas)
+//   - compte_bancaire     (n'existe pas)
+//   - e_poketra           (n'existe pas)
+//   - regime_emploi       (n'existe pas)
+//   - cin_est_duplicata   (n'existe pas)
+//   - cin_duplicata_date  (n'existe pas)
+//   - grossesse_*         (n'existent pas)
+//   - photo_carnet_vaccination / photo_carte_handicap / photo_document_medical
+
+import type { Membre } from '../types';
+
+function buildMembrePayloadForSupabase(m: Membre, foyer_id: string) {
+  return {
+    foyer_id,
+    // Identité de base
+    nom:                       m.nom,
+    prenom:                    m.prenom,
+    sexe:                      m.sexe,
+    date_naissance:            m.date_naissance ?? null,
+    lieu_naissance:            m.lieu_naissance ?? null,
+    cin:                       m.cin ?? null,
+    date_cin:                  m.date_cin ?? null,
+    situation_matrimoniale:    m.situation_matrimoniale ?? null,
+    religion:                  m.religion ?? null,
+    telephone:                 m.telephone ?? null,
+    email:                     m.email ?? null,
+    photo_url:                 m.photo_url ?? null,
+    statut:                    m.statut,
+    // Relation familiale
+    relation_chef:             m.relation_chef,
+    is_chef:                   m.is_chef,
+    conjoint_id:               m.conjoint_id ?? null,
+    pere_id:                   m.pere_id ?? null,
+    mere_id:                   m.mere_id ?? null,
+    pere_nom:                  m.pere_nom ?? null,
+    mere_nom:                  m.mere_nom ?? null,
+    // Éducation
+    niveau_etude:              m.niveau_etude || 'Non renseigné',
+    filiere_etudes:            m.filiere_etudes ?? null,
+    diplome:                   m.diplome ?? null,
+    competences:               m.competences ?? [],
+    langues:                   m.langues ?? [],
+    // Économie (colonnes existantes uniquement)
+    profession:                m.profession ?? null,
+    secteur:                   m.secteur ?? null,
+    revenu_estime:             m.revenu_estime ?? null,
+    revenu_fourchette:         m.revenu_fourchette ?? null,
+    // Santé
+    groupe_sanguin:            m.groupe_sanguin ?? null,
+    handicap:                  m.handicap ?? null,
+    hypertension:              m.hypertension,
+    diabete:                   m.diabete,
+    maladies_chroniques:       m.maladies_chroniques ?? [],
+    maladie_autre:             m.maladie_autre ?? null,
+    traitement_regulier:       m.traitement_regulier ?? null,
+    suivi_medical:             m.suivi_medical ?? null,
+    priorite_sanitaire:        m.priorite_sanitaire ?? null,
+    allergies:                 m.allergies ?? [],
+    allergies_precision:       m.allergies_precision ?? null,
+    vaccination:               m.vaccination ?? [],
+    statut_vaccinal:           m.statut_vaccinal ?? null,
+    poids:                     m.poids ?? null,
+    taille:                    m.taille ?? null,
+    // Contact urgence
+    contact_urgence_nom:       m.contact_urgence_nom ?? null,
+    contact_urgence_telephone: m.contact_urgence_telephone ?? null,
+    contact_urgence_lien:      m.contact_urgence_lien ?? null,
+    // Vulnérabilité
+    est_vulnerable:            m.est_vulnerable,
+    vulnerabilite_categories:  m.vulnerabilite_categories ?? [],
+    vulnerabilite_description: m.vulnerabilite_description ?? null,
+    niveau_priorite:           m.niveau_priorite,
+    aides_obtenues:            m.aides_obtenues ?? [],
+    created_at:                new Date().toISOString(),
+  };
+}
+
 // ── Types UI ──────────────────────────────────────────────────────────────────
 
 type SyncStep = 'idle' | 'testing' | 'fetching' | 'preview' | 'importing' | 'done' | 'error';
@@ -203,15 +307,14 @@ export default function KoboSyncModule({ onImportDone }: Props) {
 
         // Insérer les membres
         for (const m of r.membres) {
-          const payload = { ...m, foyer_id: foyerId, created_at: new Date().toISOString() };
-          console.debug('[FANISA] Insert membre payload:', JSON.stringify(payload, null, 2));
+          const payload = buildMembrePayloadForSupabase(m, foyerId);
           const { error: membreErr } = await supabase
             .from('membres')
             .insert(payload);
           if (membreErr) {
             const detail = (membreErr as unknown as { details?: string; hint?: string }).details || '';
             const hint = (membreErr as unknown as { details?: string; hint?: string }).hint || '';
-            console.error('[FANISA] Erreur membre:', membreErr.message, detail, hint, 'payload:', payload);
+            console.error('[FANISA] Erreur membre:', membreErr.message, detail, hint, 'payload:', JSON.stringify(payload));
             errors.push(`Membre ${m.nom} (${r.foyer.code_menage}) : ${membreErr.message}${detail ? ' — ' + detail : ''}${hint ? ' — ' + hint : ''}`);
           }
         }
