@@ -58,6 +58,7 @@ export default function KoboSyncModule({ onImportDone }: Props) {
   const [expandedWarnings, setExpandedWarnings] = useState(false);
   const [expandedDuplicates, setExpandedDuplicates] = useState(false);
   const [xlsxDragOver, setXlsxDragOver] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(false);
   const xlsxInputRef = useRef<HTMLInputElement>(null);
 
   // ── Tester la connexion ───────────────────────────────────────────────────
@@ -141,49 +142,82 @@ export default function KoboSyncModule({ onImportDone }: Props) {
       return;
     }
 
-    setState(s => ({ ...s, step: 'importing', progress: 0, total: state.results.length }));
+    // En mode "forcer mise à jour", on inclut aussi les doublons dans la liste à traiter
+    const toProcess = forceUpdate
+      ? [...state.results, ...state.duplicates.map(d => d.item)]
+      : state.results;
+
+    setState(s => ({ ...s, step: 'importing', progress: 0, total: toProcess.length }));
     let imported = 0;
     const errors: string[] = [];
 
-    for (const r of state.results) {
+    for (const r of toProcess) {
       try {
-        // 1. Insérer le foyer
-        const { data: foyer, error: foyerErr } = await supabase
-          .from('foyers')
-          .insert({
-            ...r.foyer,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single();
+        let foyerId: string;
 
-        if (foyerErr || !foyer) {
-          errors.push(`Foyer ${r.foyer.code_menage} : ${foyerErr?.message || 'Erreur inconnue'}`);
-          continue;
+        if (forceUpdate) {
+          // Upsert : mettre à jour le foyer existant ou créer s'il n'existe pas
+          const { data: existingFoyer } = await supabase
+            .from('foyers')
+            .select('id')
+            .eq('code_menage', r.foyer.code_menage)
+            .maybeSingle();
+
+          if (existingFoyer?.id) {
+            // Mettre à jour le foyer existant
+            const { error: updateErr } = await supabase
+              .from('foyers')
+              .update({ ...r.foyer, updated_at: new Date().toISOString() })
+              .eq('id', existingFoyer.id);
+            if (updateErr) {
+              errors.push(`Foyer ${r.foyer.code_menage} (màj) : ${updateErr.message}`);
+              continue;
+            }
+            // Supprimer les anciens membres pour les recréer proprement
+            await supabase.from('membres').delete().eq('foyer_id', existingFoyer.id);
+            foyerId = existingFoyer.id;
+          } else {
+            // Nouveau foyer
+            const { data: newFoyer, error: foyerErr } = await supabase
+              .from('foyers')
+              .insert({ ...r.foyer, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+              .select('id').single();
+            if (foyerErr || !newFoyer) {
+              errors.push(`Foyer ${r.foyer.code_menage} : ${foyerErr?.message || 'Erreur inconnue'}`);
+              continue;
+            }
+            foyerId = newFoyer.id;
+          }
+        } else {
+          // Mode normal : insertion simple
+          const { data: foyer, error: foyerErr } = await supabase
+            .from('foyers')
+            .insert({ ...r.foyer, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .select('id').single();
+          if (foyerErr || !foyer) {
+            errors.push(`Foyer ${r.foyer.code_menage} : ${foyerErr?.message || 'Erreur inconnue'}`);
+            continue;
+          }
+          foyerId = foyer.id;
         }
 
-        // 2. Insérer les membres
+        // Insérer les membres
         for (const m of r.membres) {
           const { error: membreErr } = await supabase
             .from('membres')
-            .insert({
-              ...m,
-              foyer_id: foyer.id,
-              created_at: new Date().toISOString(),
-            });
+            .insert({ ...m, foyer_id: foyerId, created_at: new Date().toISOString() });
           if (membreErr) {
             errors.push(`Membre ${m.nom} (${r.foyer.code_menage}) : ${membreErr.message}`);
           }
         }
 
-        // 3. Log Kobo sync
+        // Log
         await supabase.from('logs').insert({
           date: new Date().toISOString(),
           utilisateur: 'Import Kobo',
-          action: 'IMPORT_KOBO',
-          details: `Ménage importé depuis KoboToolbox (UUID: ${r.koboUuid})`,
-          foyer_id: foyer.id,
+          action: forceUpdate ? 'IMPORT_KOBO_UPDATE' : 'IMPORT_KOBO',
+          details: `Ménage ${forceUpdate ? 'mis à jour' : 'importé'} depuis KoboToolbox (UUID: ${r.koboUuid})`,
+          foyer_id: foyerId,
         });
 
         imported++;
@@ -199,7 +233,7 @@ export default function KoboSyncModule({ onImportDone }: Props) {
     }));
 
     if (imported > 0) onImportDone?.();
-  }, [state.results, formType, onImportDone]);
+  }, [state.results, state.duplicates, formType, forceUpdate, onImportDone]);
 
   // ── Import XLSX ───────────────────────────────────────────────────────────
 
@@ -578,6 +612,21 @@ export default function KoboSyncModule({ onImportDone }: Props) {
           </div>
 
           {/* Boutons confirmation */}
+          {/* Option forcer mise à jour */}
+          {state.duplicates.length > 0 && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <input
+                type="checkbox"
+                checked={forceUpdate}
+                onChange={e => setForceUpdate(e.target.checked)}
+                className="rounded accent-amber-600"
+              />
+              <span className="text-amber-800 font-medium">
+                Forcer la mise à jour des {state.duplicates.length} ménage{state.duplicates.length > 1 ? 's' : ''} déjà existant{state.duplicates.length > 1 ? 's' : ''}
+              </span>
+              <span className="text-amber-600 text-xs">(écrase les données et recrée les membres)</span>
+            </label>
+          )}
           <div className="flex gap-3">
             <button
               onClick={handleReset}
@@ -587,10 +636,13 @@ export default function KoboSyncModule({ onImportDone }: Props) {
             </button>
             <button
               onClick={handleImport}
-              disabled={state.results.length === 0}
+              disabled={state.results.length === 0 && !(forceUpdate && state.duplicates.length > 0)}
               className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Confirmer l'import ({state.results.length} ménages)
+              {forceUpdate && state.duplicates.length > 0
+                ? `Confirmer l'import (${state.results.length + state.duplicates.length} ménages)`
+                : `Confirmer l'import (${state.results.length} ménages)`
+              }
             </button>
           </div>
         </div>
