@@ -76,7 +76,10 @@ function buildMembrePayloadForSupabase(m: Membre, foyer_id: string) {
     telephone:                 m.telephone ?? null,
     email:                     m.email ?? null,
     photo_url:                 m.photo_url ?? null,
-    statut:                    m.statut,
+    // La contrainte CHECK membres_statut_check n'accepte que ces valeurs
+    statut: (['Actif', 'Décédé', 'Déménagé'] as const).includes(m.statut as 'Actif' | 'Décédé' | 'Déménagé')
+      ? m.statut
+      : 'Actif' as const,
     // Relation familiale
     relation_chef:             m.relation_chef,
     is_chef:                   m.is_chef,

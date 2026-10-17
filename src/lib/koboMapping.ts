@@ -812,7 +812,7 @@ function mapKoboVahiny(v: KoboSubmission, codeMenage: string, _warnings: string[
     nom: nom || '—',
     prenom: '',
     sexe,
-    statut: 'Visiteur' as unknown as import('../types').StatutMembre,
+    statut: 'Actif',
     is_chef: false,
     relation_chef: mapRelation(lienParente) || 'Autre',
     date_naissance: koboDate(dateNaissanceRaw),
