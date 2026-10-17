@@ -264,8 +264,9 @@ function koboBool(row: KoboSubmission, key: string): boolean | undefined {
 }
 
 /** Lit un nombre depuis une réponse Kobo */
-function koboNum(row: KoboSubmission, key: string): number | undefined {
-  const v = koboGet(row, key);
+function koboNum(row: KoboSubmission, ...keys: string[]): number | undefined {
+  const v = koboGet(row, ...keys);
+  if (!v) return undefined;
   const n = parseFloat(v);
   return isNaN(n) ? undefined : n;
 }
@@ -388,6 +389,60 @@ export function mapKoboMenage(row: KoboSubmission, idx: number): KoboImportResul
     'group_localisation/adresse', 'rue_quartier'
   );
 
+  // ── GPS : colonnes directes du XLSX (_gps_latitude/_gps_longitude) ────────
+  const gpsLat = koboNum(row, '_gps_latitude')
+    ?? koboNum(row, '_geolocation/0')
+    ?? koboNum(row, 'gps_lat')
+    ?? koboNum(row, 'localisation/_geolocation_latitude');
+  const gpsLng = koboNum(row, '_gps_longitude')
+    ?? koboNum(row, '_geolocation/1')
+    ?? koboNum(row, 'gps_lng')
+    ?? koboNum(row, 'localisation/_geolocation_longitude');
+
+  // ── Énergie : colonnes réelles du XLSX ────────────────────────────────────
+  const sourceElec = koboGet(row, 'source_electricite', 'source_eclairage', 'group_energie/source_eclairage');
+  const aElec = sourceElec
+    ? sourceElec !== 'aucun' && sourceElec !== 'non' && sourceElec !== ''
+    : (koboBool(row, 'a_electricite') ?? koboBool(row, 'electricite') ?? false);
+  const cuissonSource = koboGet(row,
+    'combustible_principal_final', 'combustible_principal',
+    'source_cuisson', 'cuisson', 'group_energie/source_cuisson'
+  );
+
+  // ── Eau : colonne réelle du XLSX ──────────────────────────────────────────
+  const eauSource = koboGet(row, 'acces_eau', 'source_eau', 'eau_source', 'group_eau/source_eau');
+
+  // ── Assainissement ────────────────────────────────────────────────────────
+  const toiletteType = koboGet(row,
+    'type_toilettes', 'type_toilette', 'toilette', 'group_assainissement/type_toilette'
+  );
+  const dechetsMode = koboGet(row, 'gestion_dechets', 'dechets_mode', 'evacuation_dechets');
+
+  // ── Connectivité ──────────────────────────────────────────────────────────
+  const accesConnectivite = koboGet(row, 'acces_connectivite', 'connectivite');
+  const aInternet = accesConnectivite
+    ? accesConnectivite !== 'aucun' && accesConnectivite !== ''
+    : (koboBool(row, 'acces_internet') ?? false);
+  const internetMoyens = accesConnectivite && accesConnectivite !== 'aucun'
+    ? accesConnectivite.split(' ').filter(Boolean)
+    : undefined;
+  // Mobile money / réseau
+  const operateurMM = koboGet(row, 'operateur_mobile_money', 'reseau_mobile', 'operateur_mobile');
+  const reseauMobile = operateurMM || koboGet(row, 'reseau_mobile', 'operateur_mobile');
+
+  // ── Aide sociale ──────────────────────────────────────────────────────────
+  const aideSociale = koboGet(row, 'aide_sociale');
+  const aideRecue = aideSociale ? aideSociale === 'oui' : undefined;
+  const aideTypes = koboGet(row, 'type_aide_sociale');
+  const aideDonateur = koboGet(row, 'donateur');
+
+  // ── Vulnérabilité ─────────────────────────────────────────────────────────
+  const niveauVulnerabilite = koboGet(row, 'niveau_vulnerabilite', 'niveau_vulnerabilite_global');
+  const scoreVulnerabilite = koboGet(row, 'score_vulnerabilite_total');
+  const estVulnerable = koboBool(row, 'est_vulnerable')
+    ?? koboBool(row, 'menage_vulnerable')
+    ?? (scoreVulnerabilite ? Number(scoreVulnerabilite) > 0 : undefined);
+
   const foyer: Partial<Foyer> = {
     code_menage: codeMenage,
     statut: 'Actif',
@@ -400,39 +455,55 @@ export function mapKoboMenage(row: KoboSubmission, idx: number): KoboImportResul
     // Lot et identifiants logement
     ...(numeroLot ? { numero_maison: numeroLot } : {}),
     ...(maisonId  ? { identification_logement: maisonId } : {}),
-    ...(uniteId   ? {} : {}), // unité stockée dans notes si besoin
+
+    // GPS (colonnes directes XLSX _gps_latitude/_gps_longitude)
+    ...(gpsLat != null ? { gps_lat: gpsLat } : {}),
+    ...(gpsLng != null ? { gps_lng: gpsLng } : {}),
 
     // Logement
     type_logement: koboGet(row, 'type_logement', 'type_habitat', 'group_logement/type_logement'),
-    nombre_pieces: koboNum(row, 'nombre_pieces') ?? koboNum(row, 'group_logement/nombre_pieces'),
+    nombre_pieces: koboNum(row, 'nombre_pieces', 'nb_pieces', 'group_logement/nombre_pieces') ?? undefined,
+    conditions_vie: koboGet(row, 'etat_logement', 'conditions_vie') || undefined,
     materiau_toiture: koboGet(row, 'materiau_toiture', 'group_logement/materiau_toiture'),
     materiau_mur: koboGet(row, 'materiau_mur', 'group_logement/materiau_mur'),
     materiau_plancher: koboGet(row, 'materiau_plancher', 'group_logement/materiau_plancher'),
     statut_occupant: koboGet(row, 'statut_occupant', 'statut_occupation', 'group_logement/statut_occupant'),
 
-    // GPS
-    gps_lat: koboNum(row, '_geolocation/0') ?? koboNum(row, 'gps_lat') ?? koboNum(row, 'localisation/_geolocation_latitude'),
-    gps_lng: koboNum(row, '_geolocation/1') ?? koboNum(row, 'gps_lng') ?? koboNum(row, 'localisation/_geolocation_longitude'),
-
-    // Eau
-    eau_source: koboGet(row, 'source_eau', 'eau_source', 'group_eau/source_eau'),
-    eau_potable: koboBool(row, 'eau_potable') ?? koboBool(row, 'group_eau/eau_potable'),
+    // Eau (colonne réelle XLSX : acces_eau)
+    eau_source: eauSource || undefined,
+    eau_potable: eauSource
+      ? ['robinet_logement', 'robinet_quartier', 'eau_minerale'].includes(eauSource)
+      : (koboBool(row, 'eau_potable') ?? undefined),
 
     // Assainissement
-    toilette_type: koboGet(row, 'type_toilette', 'toilette', 'group_assainissement/type_toilette'),
+    toilette_type: toiletteType || undefined,
+    dechets_mode: dechetsMode || undefined,
 
-    // Énergie
-    a_electricite: koboBool(row, 'a_electricite') ?? koboBool(row, 'electricite'),
-    eclairage_source: koboGet(row, 'source_eclairage', 'eclairage', 'group_energie/source_eclairage'),
-    cuisson_source: koboGet(row, 'source_cuisson', 'cuisson', 'group_energie/source_cuisson'),
+    // Énergie (colonnes réelles XLSX)
+    a_electricite: aElec || undefined,
+    eclairage_source: sourceElec || undefined,
+    cuisson_source: cuissonSource || undefined,
 
     // Connectivité
-    reseau_mobile: koboGet(row, 'reseau_mobile', 'operateur_mobile'),
-    acces_internet: koboBool(row, 'acces_internet'),
+    reseau_mobile: reseauMobile || undefined,
+    acces_internet: aInternet || undefined,
+    ...(internetMoyens ? { internet_moyens: internetMoyens } : {}),
 
-    // Vulnérabilité
-    est_vulnerable: koboBool(row, 'est_vulnerable') ?? koboBool(row, 'menage_vulnerable'),
-    difficulte_alimentaire: koboBool(row, 'difficulte_alimentaire') ?? koboBool(row, 'insecurite_alimentaire'),
+    // Aide sociale
+    ...(aideRecue !== undefined ? { aide_recue: aideRecue } : {}),
+    ...(aideTypes ? { aide_types: aideTypes.split(' ').filter(Boolean) } : {}),
+    ...(aideDonateur ? { aide_organismes: aideDonateur.split(' ').filter(Boolean) } : {}),
+
+    // Vulnérabilité ménage (colonnes réelles XLSX)
+    est_vulnerable: estVulnerable ?? undefined,
+    niveau_vulnerabilite_global: niveauVulnerabilite || undefined,
+    difficulte_alimentaire: koboBool(row, 'difficulte_alimentaire') ?? koboBool(row, 'insecurite_alimentaire') ?? undefined,
+    // Comptages démographiques depuis feuille principale
+    nb_enfants_moins5: koboNum(row, 'nb_moins_5') ?? undefined,
+    nb_personnes_agees: koboNum(row, 'nb_65_plus') ?? undefined,
+    nb_personnes_handicapees: koboNum(row, 'nb_handicap') ?? undefined,
+    nb_femmes_enceintes: koboNum(row, 'nb_enceintes') ?? undefined,
+    nb_maladies_chroniques: koboNum(row, 'nb_malades_chroniques') ?? undefined,
   };
 
   // Nettoyer les undefined
@@ -445,8 +516,8 @@ export function mapKoboMenage(row: KoboSubmission, idx: number): KoboImportResul
   // ── Membres ────────────────────────────────────────────────────────────────
   const membres: Partial<Membre>[] = [];
 
-  // Stratégie 1 : groupe repeat "membres" (KoboToolbox repeat group)
-  const membresRepeat = row['membres'] ?? row['group_membres'] ?? row['personnes'];
+  // Stratégie 1 : groupe repeat "personnes" (feuille XLSX ou KoboAPI repeat group)
+  const membresRepeat = row['personnes'] ?? row['membres'] ?? row['group_membres'];
   if (Array.isArray(membresRepeat) && membresRepeat.length > 0) {
     for (const m of membresRepeat as KoboSubmission[]) {
       membres.push(mapKoboMembre(m, codeMenage, membres.length, warnings));
@@ -464,6 +535,14 @@ export function mapKoboMenage(row: KoboSubmission, idx: number): KoboImportResul
       );
       if (!nom) break;
       membres.push(mapKoboMembrePlat(row, i, codeMenage, warnings));
+    }
+  }
+
+  // Vahiny (visiteurs) : feuille séparée dans le XLSX, aussi attachés à la submission
+  const vahinyRepeat = row['vahiny'] ?? row['visiteurs'];
+  if (Array.isArray(vahinyRepeat) && vahinyRepeat.length > 0) {
+    for (const v of vahinyRepeat as KoboSubmission[]) {
+      membres.push(mapKoboVahiny(v, codeMenage, warnings));
     }
   }
 
@@ -526,6 +605,13 @@ function mapKoboMembre(
     'situation_matrimoniale_finale', 'situation_matrimoniale', 'statut_matrimonial', 'fanambadiana'
   );
 
+  // Parent names and photo from real XLSX columns
+  const nomPere = koboGet(m, 'nom_pere', 'pere_nom', 'nom_du_pere');
+  const nomMere = koboGet(m, 'nom_mere', 'mere_nom', 'nom_de_la_mere');
+  const photoUrl = koboGet(m, 'photo_identite_URL', 'photo_url', 'photo_membre_URL');
+  // CIN : numero_cin dans les lignes, cin dans d'autres variantes
+  const cinNum = koboGet(m, 'numero_cin', 'cin', 'cin_number', 'num_cin');
+
   return {
     nom: nom || '—',
     prenom: '',  // prénom intégré dans nom_prenoms/nom_personne
@@ -536,13 +622,56 @@ function mapKoboMembre(
     date_naissance: koboDate(dateNaissanceRaw),
     lieu_naissance: koboGet(m, 'lieu_naissance', 'toerana_nahaterahan'),
     nationalite: koboGet(m, 'nationalite', 'nationality') || 'Malagasy',
-    cin: koboGet(m, 'numero_cin', 'cin', 'cin_number'),
-    situation_matrimoniale: situationMatri,
+    cin: cinNum || undefined,
+    ...(nomPere ? { pere_nom: nomPere } : {}),
+    ...(nomMere ? { mere_nom: nomMere } : {}),
+    ...(photoUrl ? { photo_url: photoUrl } : {}),
+    situation_matrimoniale: situationMatri || undefined,
     niveau_etude: niveauEtude,
-    profession: professionRaw,
-    telephone: koboGet(m, 'telephone', 'tel', 'finday'),
+    profession: professionRaw || undefined,
+    telephone: koboGet(m, 'telephone', 'tel', 'finday') || undefined,
+    est_vulnerable: false,
+    vulnerabilite_categories: [],
     competences: [],
     langues: ['Malagasy'],
+    vaccination: [],
+    hypertension: 'Inconnu' as const,
+    diabete: 'Inconnu' as const,
+  };
+}
+
+/** Mappe un vahiny (visiteur temporaire) depuis la feuille XLSX 'vahiny' */
+function mapKoboVahiny(v: KoboSubmission, codeMenage: string, _warnings: string[]): Partial<Membre> {
+  const nom = koboGet(v, 'v_nom', 'nom', 'nom_prenoms');
+  const sexeRaw = koboGet(v, 'v_sexe', 'sexe').toLowerCase();
+  const sexe: 'M' | 'F' = (
+    sexeRaw === 'f' || sexeRaw === 'féminin' || sexeRaw === 'feminin' ||
+    sexeRaw === 'vavy' || sexeRaw.startsWith('f')
+  ) ? 'F' : 'M';
+  const dateNaissanceRaw = koboGet(v, 'v_date_naissance', 'v_date_naissance_saisie', 'date_naissance');
+  const cinNum = koboGet(v, 'v_numero_cin', 'numero_cin', 'cin');
+  const lienParente = koboGet(v, 'v_lien', 'lien_parente', 'lien');
+
+  void codeMenage; // vahiny pas lié à un code ménage spécifique
+  return {
+    nom: nom || '—',
+    prenom: '',
+    sexe,
+    statut: 'Visiteur' as unknown as import('../types').StatutMembre,
+    is_chef: false,
+    relation_chef: mapRelation(lienParente) || 'Autre',
+    date_naissance: koboDate(dateNaissanceRaw),
+    nationalite: koboGet(v, 'v_nationalite', 'nationalite') || 'Malagasy',
+    cin: cinNum || undefined,
+    telephone: koboGet(v, 'v_telephone', 'telephone') || undefined,
+    niveau_etude: 'Non précisé',
+    est_vulnerable: false,
+    vulnerabilite_categories: [],
+    competences: [],
+    langues: ['Malagasy'],
+    vaccination: [],
+    hypertension: 'Inconnu' as const,
+    diabete: 'Inconnu' as const,
   };
 }
 
