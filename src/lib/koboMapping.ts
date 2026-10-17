@@ -605,12 +605,57 @@ function mapKoboMembre(
     'situation_matrimoniale_finale', 'situation_matrimoniale', 'statut_matrimonial', 'fanambadiana'
   );
 
-  // Parent names and photo from real XLSX columns
+  // CIN complet
+  const cinNum       = koboGet(m, 'numero_cin', 'cin', 'cin_number', 'num_cin', 'numero_serie_cin');
+  const dateCin      = koboDate(koboGet(m, 'date_delivrance_cin', 'date_delivrance_cin_saisie'));
+  const photoUrl     = koboGet(m, 'photo_identite_URL', 'photo_url', 'photo_membre_URL');
+
+  // Filiation
   const nomPere = koboGet(m, 'nom_pere', 'pere_nom', 'nom_du_pere');
   const nomMere = koboGet(m, 'nom_mere', 'mere_nom', 'nom_de_la_mere');
-  const photoUrl = koboGet(m, 'photo_identite_URL', 'photo_url', 'photo_membre_URL');
-  // CIN : numero_cin dans les lignes, cin dans d'autres variantes
-  const cinNum = koboGet(m, 'numero_cin', 'cin', 'cin_number', 'num_cin');
+
+  // Emploi / économie (colonnes XLSX réelles)
+  const statutActivite  = koboGet(m, 'statut_activite', 'situation_emploi', 'statut_emploi');
+  const statutEmploi    = koboGet(m, 'statut_emploi', 'type_emploi');
+  const employeur       = koboGet(m, 'societe', 'employeur', 'entreprise');
+  const activite        = koboGet(m, 'activite', 'secteur_activite', 'activite_principale');
+  const lieuTravail     = koboGet(m, 'lieu_travail', 'localite_travail');
+
+  // Scolarité
+  const frequenteEcole  = koboGet(m, 'frequente_ecole');
+  const mentionFiliere  = koboGet(m, 'mention_filiere', 'filiere_etudes');
+  const diplome         = koboGet(m, 'diplome_obtenu', 'diplome');
+  const saitLire        = koboGet(m, 'sait_lire_ecrire');
+
+  // Santé
+  const tailleCm        = koboNum(m, 'taille_cm', 'taille');
+  const poidsKg         = koboNum(m, 'poids_kg', 'poids');
+  const handicap        = koboGet(m, 'handicap');
+  const maladieChronique = koboGet(m, 'maladie_chronique', 'maladies_chroniques');
+  const couvertureSante = koboGet(m, 'couverture_sante_type', 'assurance', 'couverture_sante');
+  const vaccinStatut    = koboGet(m, 'vaccination_statut', 'statut_vaccinal');
+  const femmeEnceinte   = koboGet(m, 'femme_enceinte');
+  const grossesseCoursRaw = femmeEnceinte ? femmeEnceinte === 'oui' : undefined;
+
+  // Langues et religion
+  const languesParlees  = koboGet(m, 'langues_parlees', 'langue_principale', 'langues_autres');
+  const religion        = koboGet(m, 'religion', 'religion_choix');
+
+  // Langues : construire tableau depuis les colonnes multiples
+  const languesTab: string[] = ['Malagasy'];
+  if (languesParlees) {
+    languesParlees.split(' ').forEach(l => {
+      const lc = l.charAt(0).toUpperCase() + l.slice(1);
+      if (lc && !languesTab.includes(lc)) languesTab.push(lc);
+    });
+  }
+
+  // Handicap
+  const handicapOui = handicap === 'oui';
+  const wgFields    = ['wg_voir','wg_entendre','wg_marcher','wg_memoire','wg_soins','wg_communiquer'];
+  const handicapTypes = wgFields
+    .filter(f => koboGet(m, f) && koboGet(m, f) !== 'aucune' && koboGet(m, f) !== 'non')
+    .map(f => f.replace('wg_', ''));
 
   return {
     nom: nom || '—',
@@ -623,17 +668,42 @@ function mapKoboMembre(
     lieu_naissance: koboGet(m, 'lieu_naissance', 'toerana_nahaterahan'),
     nationalite: koboGet(m, 'nationalite', 'nationality') || 'Malagasy',
     cin: cinNum || undefined,
+    date_cin: dateCin || undefined,
     ...(nomPere ? { pere_nom: nomPere } : {}),
     ...(nomMere ? { mere_nom: nomMere } : {}),
     ...(photoUrl ? { photo_url: photoUrl } : {}),
     situation_matrimoniale: situationMatri || undefined,
-    niveau_etude: niveauEtude,
-    profession: professionRaw || undefined,
+    religion: religion || undefined,
     telephone: koboGet(m, 'telephone', 'tel', 'finday') || undefined,
+    // Éducation
+    niveau_etude: niveauEtude,
+    filiere_etudes: mentionFiliere || undefined,
+    diplome: diplome || undefined,
+    // Économie
+    profession: professionRaw || undefined,
+    statut_professionnel: statutEmploi || undefined,
+    situation_emploi: statutActivite || undefined,
+    secteur_activite: activite || undefined,
+    employeur: employeur || undefined,
+    // Santé
+    ...(tailleCm != null ? { taille: tailleCm } : {}),
+    ...(poidsKg  != null ? { poids: poidsKg }  : {}),
+    handicap_oui: handicapOui || undefined,
+    ...(handicapTypes.length > 0 ? { handicap_types: handicapTypes } : {}),
+    maladies_chroniques: maladieChronique && maladieChronique !== 'non'
+      ? [maladieChronique] : undefined,
+    assurance: couvertureSante || undefined,
+    statut_vaccinal: vaccinStatut || undefined,
+    // Grossesse (F seulement)
+    ...(sexe === 'F' && grossesseCoursRaw !== undefined ? { grossesse_cours: grossesseCoursRaw } : {}),
+    // Langues
+    langues: languesTab,
+    // Divers
+    ...(saitLire ? {} : {}), // pas de champ direct dans Membre — ignoré
+    ...(lieuTravail ? {} : {}), // pas de champ direct — ignoré
     est_vulnerable: false,
     vulnerabilite_categories: [],
     competences: [],
-    langues: ['Malagasy'],
     vaccination: [],
     hypertension: 'Inconnu' as const,
     diabete: 'Inconnu' as const,
