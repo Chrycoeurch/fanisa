@@ -47,8 +47,15 @@ export async function parseKoboXlsxMenage(file: File): Promise<KoboSubmission[]>
   }
 
   // Feuille personnes (repeat group) — cherche plusieurs variantes de nom
-  const personnesSheetName = wb.SheetNames.find(n =>
-    /^personnes?$/i.test(n.trim()) || /membre/i.test(n) || /person/i.test(n)
+  // KoboCollect exporte souvent : "personnes", "personnes_du_menage", "members", etc.
+  // On exclut la feuille principale (index 0) pour ne pas la confondre.
+  const personnesSheetName = wb.SheetNames.slice(1).find(n =>
+    /^personnes?/i.test(n.trim()) ||
+    /membre/i.test(n) ||
+    /person/i.test(n) ||
+    /^membres?/i.test(n.trim()) ||
+    /^foyer.membre/i.test(n.trim()) ||
+    /zanaka/i.test(n) // malgache: membres de la famille
   );
   const personnesSheet = personnesSheetName ? wb.Sheets[personnesSheetName] : undefined;
   let personnesRows: Record<string, unknown>[] = [];
@@ -246,11 +253,25 @@ export function idValide(saisie: string): boolean {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Lit un champ Kobo en gérant les variantes bilingues FR/MG et les _other */
+/** Lit un champ Kobo en gérant les variantes bilingues FR/MG et les _other.
+ *
+ * Dans l'export XLSX KoboCollect, les colonnes du repeat group ont souvent un
+ * préfixe de groupe : "personnes/nom_prenoms" au lieu de "nom_prenoms".
+ * Cette fonction essaie d'abord la clé exacte, puis recherche parmi toutes
+ * les clés de l'objet celles qui se terminent par "/clé".
+ */
 function koboGet(row: KoboSubmission, ...keys: string[]): string {
   for (const k of keys) {
+    // 1. Clé exacte
     const v = row[k];
     if (v !== undefined && v !== null && v !== '') return String(v).trim();
+    // 2. Clé avec préfixe de groupe (ex: "personnes/nom_prenoms")
+    for (const fullKey of Object.keys(row)) {
+      if (fullKey.endsWith('/' + k)) {
+        const vv = row[fullKey];
+        if (vv !== undefined && vv !== null && vv !== '') return String(vv).trim();
+      }
+    }
   }
   return '';
 }
@@ -517,7 +538,23 @@ export function mapKoboMenage(row: KoboSubmission, idx: number): KoboImportResul
   const membres: Partial<Membre>[] = [];
 
   // Stratégie 1 : groupe repeat "personnes" (feuille XLSX ou KoboAPI repeat group)
-  const membresRepeat = row['personnes'] ?? row['membres'] ?? row['group_membres'];
+  // Cherche d'abord les clés connues, puis n'importe quel tableau dans la submission
+  // dont le nom ressemble à un repeat group de membres (pour les exports XLSX dont
+  // le nom de feuille est différent de "personnes").
+  let membresRepeat: unknown = row['personnes'] ?? row['membres'] ?? row['group_membres'];
+  if (!Array.isArray(membresRepeat) || membresRepeat.length === 0) {
+    // Cherche parmi toutes les clés un tableau qui ressemble à des membres
+    for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+      if (
+        Array.isArray(v) && v.length > 0 &&
+        (/^personnes?/i.test(k) || /^membres?/i.test(k) || /person/i.test(k))
+      ) {
+        membresRepeat = v;
+        console.debug(`[FANISA] Repeat group membres trouvé sous la clé "${k}" (${v.length} entrées)`);
+        break;
+      }
+    }
+  }
   if (Array.isArray(membresRepeat) && membresRepeat.length > 0) {
     for (const m of membresRepeat as KoboSubmission[]) {
       membres.push(mapKoboMembre(m, codeMenage, membres.length, warnings));
@@ -705,8 +742,8 @@ function mapKoboMembre(
     vulnerabilite_categories: [],
     competences: [],
     vaccination: [],
-    hypertension: 'Inconnu' as const,
-    diabete: 'Inconnu' as const,
+    hypertension: 'Normal' as const,
+    diabete: 'Normal' as const,
   };
 }
 
@@ -740,8 +777,8 @@ function mapKoboVahiny(v: KoboSubmission, codeMenage: string, _warnings: string[
     competences: [],
     langues: ['Malagasy'],
     vaccination: [],
-    hypertension: 'Inconnu' as const,
-    diabete: 'Inconnu' as const,
+    hypertension: 'Normal' as const,
+    diabete: 'Normal' as const,
   };
 }
 
