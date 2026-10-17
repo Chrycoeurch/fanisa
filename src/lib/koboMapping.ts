@@ -611,7 +611,8 @@ function mapKoboMembre(
   //   - Autres: nom dans 'nom_prenoms' (col 15), 'nom_personne' peut aussi contenir le nom
   // → on essaie les deux dans les deux ordres selon le contexte
   const lienParente = koboGet(m, 'lien_parente', 'relation_chef', 'relation');
-  const isChef = idx === 0 || lienParente.toLowerCase().includes('chef');
+  // lien_parente='chef' est la source de vérité ; idx===0 seulement en fallback si lienParente absent
+  const isChef = lienParente.toLowerCase().includes('chef') || (idx === 0 && !lienParente);
 
   const nom = isChef
     ? koboGet(m, 'nom_personne', 'nom_prenoms', 'nom', 'nom_fr', 'anarana')
@@ -643,8 +644,8 @@ function mapKoboMembre(
   );
 
   // CIN complet
-  const cinNum       = koboGet(m, 'numero_cin', 'cin', 'cin_number', 'num_cin', 'numero_serie_cin');
-  const dateCin      = koboDate(koboGet(m, 'date_delivrance_cin', 'date_delivrance_cin_saisie'));
+  const cinNum       = koboGet(m, 'numero_cin', 'cin', 'cin_number', 'num_cin', 'numero_serie_cin', 'chef_cin_numero');
+  const dateCin      = koboDate(koboGet(m, 'date_delivrance_cin', 'date_delivrance_cin_saisie', 'chef_cin_date'));
   const photoUrl     = koboGet(m, 'photo_identite_URL', 'photo_url', 'photo_membre_URL');
 
   // Filiation
@@ -694,13 +695,20 @@ function mapKoboMembre(
     .filter(f => koboGet(m, f) && koboGet(m, f) !== 'aucune' && koboGet(m, f) !== 'non')
     .map(f => f.replace('wg_', ''));
 
+  // Pour 'enfant' générique, affiner selon le sexe
+  const relationChef: import('../types').RelationChef = isChef
+    ? 'Chef'
+    : (lienParente.toLowerCase() === 'enfant' || lienParente.toLowerCase().includes('zanaka'))
+      ? (sexe === 'F' ? 'Fille' : 'Fils')
+      : mapRelation(lienParente);
+
   return {
     nom: nom || '—',
     prenom: '',  // prénom intégré dans nom_prenoms/nom_personne
     sexe,
     statut: 'Actif',
     is_chef: isChef,
-    relation_chef: isChef ? 'Chef' : mapRelation(lienParente),
+    relation_chef: relationChef,
     date_naissance: koboDate(dateNaissanceRaw),
     lieu_naissance: koboGet(m, 'lieu_naissance', 'toerana_nahaterahan'),
     nationalite: koboGet(m, 'nationalite', 'nationality') || 'Malagasy',
@@ -807,7 +815,7 @@ function mapKoboChefFromFlat(row: KoboSubmission, codeMenage: string, warnings: 
     date_naissance: koboDate(koboGet(row, 'chef_date_naissance', 'date_naissance_chef')),
     lieu_naissance: koboGet(row, 'chef_lieu_naissance', 'lieu_naissance_chef'),
     nationalite: koboGet(row, 'chef_nationalite') || 'Malagasy',
-    cin: koboGet(row, 'chef_cin', 'cin_chef', 'numero_cin_chef'),
+    cin: koboGet(row, 'chef_cin_numero', 'chef_cin', 'cin_chef', 'numero_cin_chef'),
     situation_matrimoniale: koboGet(row, 'chef_situation_matrimoniale', 'situation_matrimoniale'),
     niveau_etude: koboGet(row, 'chef_niveau_etude', 'niveau_etude') || 'Non précisé',
     profession: koboGet(row, 'chef_profession', 'profession_chef'),
@@ -843,14 +851,22 @@ function mapKoboMembrePlat(row: KoboSubmission, n: number, codeMenage: string, _
 
 /** Mappe une relation Kobo vers le type RelationChef */
 function mapRelation(raw: string): import('../types').RelationChef {
-  const r = raw.toLowerCase();
-  if (r.includes('épou') || r.includes('femme') || r.includes('vady')) return 'Épouse/Époux';
-  if (r.includes('fils') || r.includes('lahy') && r.includes('zanaka')) return 'Fils';
-  if (r.includes('fille') || r.includes('vavy') && r.includes('zanaka')) return 'Fille';
+  const r = raw.toLowerCase().trim();
+  // Valeurs exactes du XLSX KoboCollect FANISA
+  if (r === 'marie' || r === 'marié' || r === 'mariee' || r === 'mariée') return 'Épouse/Époux';
+  if (r === 'conjoint') return 'Épouse/Époux';
+  if (r === 'enfant') return 'Fils'; // générique — sexe détermine si c'est fils ou fille
+  if (r === 'neveu') return 'Neveu';
+  if (r === 'niece' || r === 'nièce') return 'Nièce';
+  // Patterns plus larges
+  if (r.includes('épou') || r.includes('femme') || r.includes('vady') || r.includes('mari')) return 'Épouse/Époux';
+  if (r.includes('fils') || (r.includes('lahy') && r.includes('zanaka'))) return 'Fils';
+  if (r.includes('fille') || (r.includes('vavy') && r.includes('zanaka'))) return 'Fille';
+  if (r.includes('enfant') || r.includes('zanaka')) return 'Fils'; // sexe ignoré ici
   if (r.includes('père') || r.includes('papa') || r.includes('baba')) return 'Père';
   if (r.includes('mère') || r.includes('mama') || r.includes('neny')) return 'Mère';
   if (r.includes('frère') || r.includes('rahalahy')) return 'Frère';
-  if (r.includes('sœur') || r.includes('anabavy')) return 'Sœur';
+  if (r.includes('sœur') || r.includes('soeur') || r.includes('anabavy')) return 'Sœur';
   if (r.includes('grand-père') || r.includes('dadabe')) return 'Grand-père';
   if (r.includes('grand-mère') || r.includes('nenibe')) return 'Grand-mère';
   if (r.includes('petit-fils')) return 'Petit-fils';
@@ -858,7 +874,7 @@ function mapRelation(raw: string): import('../types').RelationChef {
   if (r.includes('oncle') || r.includes('rangahy')) return 'Oncle';
   if (r.includes('tante') || r.includes('rangahy vavy')) return 'Tante';
   if (r.includes('neveu')) return 'Neveu';
-  if (r.includes('nièce')) return 'Nièce';
+  if (r.includes('nièce') || r.includes('niece')) return 'Nièce';
   return 'Autre';
 }
 
