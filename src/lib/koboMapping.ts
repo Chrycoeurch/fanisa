@@ -489,40 +489,57 @@ function mapKoboMembre(
   idx: number,
   warnings: string[]
 ): Partial<Membre> {
-  // nom_personne = nom de la colonne dans l'export XLSX KoboCollect FANISA
-  const nom = koboGet(m,
-    'nom_personne', 'nom_prenoms',          // XLSX KoboCollect FANISA
-    'nom', 'nom_fr', 'anarana',             // API Kobo / autres variantes
-  );
-  // Pour le prénom : souvent intégré dans nom_prenoms, sinon champ séparé
-  const prenom = koboGet(m,
-    'prenom', 'prenom_fr', 'fanampin_anarana',
-  );
-  if (!nom) warnings.push(`Membre #${idx+1} sans nom dans le ménage ${codeMenage}`);
-
-  const sexeRaw = koboGet(m, 'sexe', 'genre', 'lahy_vavy').toLowerCase();
-  const sexe: 'M' | 'F' = (sexeRaw === 'f' || sexeRaw === 'féminin' || sexeRaw === 'vavy') ? 'F' : 'M';
-
-  // lien_parente = nom de la colonne dans le XLSX KoboCollect FANISA
+  // Structure XLSX KoboCollect FANISA :
+  //   - Chef  : lien_parente='chef', nom dans 'nom_personne' (col 16),
+  //             'nom_prenoms' (col 15) est NULL pour le chef
+  //   - Autres: nom dans 'nom_prenoms' (col 15), 'nom_personne' peut aussi contenir le nom
+  // → on essaie les deux dans les deux ordres selon le contexte
   const lienParente = koboGet(m, 'lien_parente', 'relation_chef', 'relation');
   const isChef = idx === 0 || lienParente.toLowerCase().includes('chef');
 
+  const nom = isChef
+    ? koboGet(m, 'nom_personne', 'nom_prenoms', 'nom', 'nom_fr', 'anarana')
+    : koboGet(m, 'nom_prenoms',  'nom_personne', 'nom', 'nom_fr', 'anarana');
+
+  if (!nom) warnings.push(`Membre #${idx+1} sans nom dans le ménage ${codeMenage}`);
+
+  // Sexe : le XLSX KoboCollect retourne 'masculin'/'feminin' (pas 'm'/'f')
+  const sexeRaw = koboGet(m, 'sexe', 'genre', 'lahy_vavy').toLowerCase();
+  const sexe: 'M' | 'F' = (
+    sexeRaw === 'f' || sexeRaw === 'féminin' || sexeRaw === 'feminin' ||
+    sexeRaw === 'vavy' || sexeRaw.startsWith('f')
+  ) ? 'F' : 'M';
+
+  // date_naissance : le XLSX retourne une date ISO avec timezone ex: "1990-04-08T00:00:00.000+03:00"
+  const dateNaissanceRaw = koboGet(m, 'date_naissance', 'date_naissance_saisie', 'naissance', 'daty_nahaterahan');
+
+  // niveau_instruction = colonne réelle dans XLSX (pas niveau_etude)
+  const niveauEtude = koboGet(m,
+    'niveau_instruction', 'niveau_etude', 'niveau_scolaire', 'fanabeazana'
+  ) || 'Non précisé';
+
+  // profession : 'statut_activite' + 'profession' + 'poste_occupe' dans XLSX
+  const professionRaw = koboGet(m, 'poste_occupe', 'profession', 'metier', 'asa');
+
+  // situation_matrimoniale_finale = valeur consolidée dans le XLSX
+  const situationMatri = koboGet(m,
+    'situation_matrimoniale_finale', 'situation_matrimoniale', 'statut_matrimonial', 'fanambadiana'
+  );
+
   return {
     nom: nom || '—',
-    prenom: prenom || '',
+    prenom: '',  // prénom intégré dans nom_prenoms/nom_personne
     sexe,
     statut: 'Actif',
     is_chef: isChef,
     relation_chef: isChef ? 'Chef' : mapRelation(lienParente),
-    date_naissance: koboDate(koboGet(m,
-      'date_naissance', 'naissance', 'daty_nahaterahan',
-    )),
+    date_naissance: koboDate(dateNaissanceRaw),
     lieu_naissance: koboGet(m, 'lieu_naissance', 'toerana_nahaterahan'),
     nationalite: koboGet(m, 'nationalite', 'nationality') || 'Malagasy',
-    cin: koboGet(m, 'numero_cin', 'cin', 'cin_number'),  // numero_cin = col XLSX
-    situation_matrimoniale: koboGet(m, 'situation_matrimoniale', 'statut_matrimonial', 'fanambadiana'),
-    niveau_etude: koboGet(m, 'niveau_etude', 'niveau_scolaire', 'fanabeazana') || 'Non précisé',
-    profession: koboGet(m, 'profession', 'metier', 'asa'),
+    cin: koboGet(m, 'numero_cin', 'cin', 'cin_number'),
+    situation_matrimoniale: situationMatri,
+    niveau_etude: niveauEtude,
+    profession: professionRaw,
     telephone: koboGet(m, 'telephone', 'tel', 'finday'),
     competences: [],
     langues: ['Malagasy'],
@@ -531,14 +548,18 @@ function mapKoboMembre(
 
 /** Mappe le chef de ménage depuis des champs plats (chef_nom, chef_prenom…) */
 function mapKoboChefFromFlat(row: KoboSubmission, codeMenage: string, warnings: string[]): Partial<Membre> | null {
-  const nom = koboGet(row, 'chef_nom', 'nom_chef', 'chef_menage_nom', 'nom_responsable');
+  // Colonne réelle dans le XLSX principal KoboCollect : 'nom_chef_menage'
+  const nom = koboGet(row, 'nom_chef_menage', 'chef_nom', 'nom_chef', 'chef_menage_nom', 'nom_responsable');
   if (!nom) {
     warnings.push(`Chef de ménage sans nom pour ${codeMenage}`);
     return null;
   }
 
   const sexeRaw = koboGet(row, 'chef_sexe', 'sexe_chef', 'genre_chef').toLowerCase();
-  const sexe: 'M' | 'F' = (sexeRaw === 'f' || sexeRaw === 'féminin' || sexeRaw === 'vavy') ? 'F' : 'M';
+  const sexe: 'M' | 'F' = (
+    sexeRaw === 'f' || sexeRaw === 'féminin' || sexeRaw === 'feminin' ||
+    sexeRaw === 'vavy' || sexeRaw.startsWith('f')
+  ) ? 'F' : 'M';
 
   return {
     nom,
