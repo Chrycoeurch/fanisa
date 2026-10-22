@@ -105,6 +105,47 @@ export interface Foyer {
   travaux_photo_url?: string;
   niveau_vulnerabilite_global?: string;
   observations_complementaires?: string;
+  // § Logement — état général (Kobo §10)
+  etat_logement?: string;
+  appartenance_maison?: string;
+  // § Aide sociale ménage (Kobo §7)
+  aide_sociale_menage?: string; // 'Oui' | 'Non' | 'Ne sait pas' | 'Refuse'
+  types_aide_sociale?: string[];
+  donateurs_aide_cash?: string[];
+  donateurs_aide_vivres?: string[];
+  donateurs_aide_sante?: string[];
+  donateurs_aide_education?: string[];
+  donateurs_aide_logement?: string[];
+  donateurs_aide_materiaux?: string[];
+  donateurs_aide_autre?: string[];
+  // § Équipements du ménage (Kobo §11)
+  moyen_transport?: string;
+  biens_menage?: string[];
+  nb_motos?: number;
+  nb_voitures?: number;
+  nb_cyclopousses?: number;
+  nb_bajaj?: number;
+  usage_vehicules?: string[];
+  // § Mobile Money (Kobo §12 connectivité)
+  utilise_mobile_money?: boolean;
+  operateurs_mobile_money?: string[];
+  // § Élevage (Kobo §12)
+  pratique_elevage?: boolean;
+  types_elevage?: string[];
+  nb_poules?: number;
+  nb_canards?: number;
+  nb_oies?: number;
+  nb_dindes?: number;
+  nb_porcs?: number;
+  nb_zebus?: number;
+  nb_chevres?: number;
+  nb_lapins?: number;
+  nb_bassins_pisciculture?: number;
+  nb_ruches?: number;
+  but_elevage?: string[];
+  lieu_elevage?: string;
+  carnet_eleveur?: boolean;
+  animaux_vaccines?: boolean;
   created_at?: string;
   updated_at?: string;
 }

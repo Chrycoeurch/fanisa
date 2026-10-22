@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Foyer } from '../types';
 import { supabase } from '../lib/supabase';
-import { X, Home, MapPin, Image, Loader2, Upload, Building2, UserCog, Droplets, Trash2, Wifi, AlertTriangle, Info, HeartCrack } from 'lucide-react';
+import { X, Home, MapPin, Image, Loader2, Upload, Building2, UserCog, Droplets, Trash2, Wifi, AlertTriangle, Info, HeartCrack, Tv, Beef } from 'lucide-react';
 
 interface Props {
   foyer?: Foyer;
@@ -9,6 +9,8 @@ interface Props {
   onSave: (foyer: Partial<Foyer>) => Promise<void>;
 }
 
+const ETATS_LOGEMENT = ['Bon', 'Moyen', 'Dégradé', 'Très dégradé'];
+const APPARTENANCE_MAISON = ['La famille élargie / héritage non partagé', 'Une autre personne (non membre du ménage)', 'Employeur / entreprise', 'État / Commune', 'Ne sait pas'];
 const TYPES_LOGEMENT = ['Maison traditionnelle', 'Villa', 'Appartement', 'Case en bois', 'Studio', 'Autres'];
 const MATERIAUX_TOITURE = ['Tôle', 'Tuile', 'Chaume / Ravinala', 'Béton', 'Bois', 'Autres'];
 const MATERIAUX_MUR = ['Brique', 'Parpaing / Béton', 'Bois', 'Terre battue', 'Ravinala / Falafa', 'Tôle', 'Autres'];
@@ -25,6 +27,7 @@ const CUISSON_SOURCES = ['Charbon', 'Bois de chauffe', 'Gaz', 'Electricite', 'Bi
 const DECHETS_MODES = ['Collecte communale', 'Collecte privee', 'Brulage', 'Enterrement', 'Compostage', 'Depot sauvage', 'Rejet dans la nature', 'Autre'];
 const RESEAU_NIVEAUX = ['Tres bonne', 'Bonne', 'Moyenne', 'Faible', 'Aucune'];
 const INTERNET_MOYENS = ['Donnees mobiles', 'Fibre optique', 'ADSL', 'Satellite', 'Starlink', 'Wi-Fi partage', 'Aucun'];
+const OPERATEURS_MOBILE_MONEY = ['MVola', 'Orange Money', 'Airtel Money', 'BNI Mobile', 'BRED Mobile'];
 const RISQUES_TYPES = ['Inondation', 'Cyclone', 'Glissement de terrain', 'Secheresse', 'Erosion', 'Incendie', 'Autre'];
 const CATASTROPHE_TYPES = ['Inondation', 'Cyclone', 'Incendie', 'Secheresse', 'Autre'];
 const CONDITIONS_VIE = ['Tres bonnes', 'Bonnes', 'Moyennes', 'Difficiles', 'Tres difficiles'];
@@ -39,6 +42,18 @@ const ORGANISMES_AIDE = ['Fokontany', 'Commune', 'District', 'BNGRC', 'FID', 'Cr
 const TYPES_AIDE = ['Vivres alimentaires', 'Riz', 'Huile', 'Eau potable', "Kit d'hygiene", 'Kit scolaire', 'Couvertures', 'Vetements', 'Ustensiles de cuisine', 'Materiaux de construction', 'Toles', 'Bois', 'Argent / Transfert monetaire', 'Relogement temporaire', 'Assistance medicale', 'Semences agricoles', 'Autre'];
 const TRAVAUX_TYPES = ['Aucune intervention', 'Reparation mineure', 'Renovation partielle', 'Renovation importante', 'Reconstruction complete'];
 const TRAVAUX_PARTIES = ['Toiture', 'Murs', 'Sol', 'Portes', 'Fenetres', 'Charpente', 'Installation electrique', 'Installation sanitaire', 'Ensemble de la maison'];
+
+// Équipements & biens (Kobo §11)
+const BIENS_MENAGE = ['Télévision', 'Réfrigérateur', 'Congélateur', 'Téléphone mobile', 'Ordinateur', 'Radio', 'Cuisinière à gaz', 'Cuisinière électrique', 'Machine à laver', 'Climatiseur', 'Ventilateur', 'Groupe électrogène', 'Panneau solaire', 'Moto / scooter', 'Voiture', 'Cyclo-pousse / pousse-pousse', 'Bajaj / tuk-tuk', 'Aucun'];
+const MOYENS_TRANSPORT = ['À pied', 'Vélo', 'Moto / scooter', 'Voiture', 'Taxi-brousse', 'Transport en commun', 'Cyclo-pousse / pousse-pousse', 'Bajaj / tuk-tuk', 'Autre', 'Aucun'];
+const USAGES_VEHICULES = ['Usage personnel / familial', 'Loué à une autre personne', 'Conduit par un membre du ménage pour gagner sa vie', 'Transport de marchandises / commerce', 'Autre', 'Ne sait pas'];
+const TYPES_AIDE_MENAGE = ['Cash / transfert monétaire', 'Vivres / denrées', 'Santé / soins', 'Éducation / scolarité', 'Logement / hébergement', 'Divers matériaux de construction', 'Autre'];
+const DONATEURS_AIDE = ['État / programme public', 'FID', 'BNGRC', 'Croix Rouge', 'PAM', 'Banque mondiale', 'ONG', 'Association locale', 'Église / organisation religieuse', 'Donateur privé / individu', 'Organisation internationale', 'Autre'];
+
+// Élevage (Kobo §12)
+const TYPES_ELEVAGE = ['Poules / poulets', 'Canards', 'Oies', 'Dindes', 'Porcs', 'Zébus / bovins', 'Chèvres / moutons', 'Lapins', 'Poissons (pisciculture)', 'Abeilles (apiculture)', 'Autre'];
+const BUTS_ELEVAGE = ['Consommation familiale', 'Vente', 'Épargne / cérémonies', 'Autre'];
+const LIEUX_ELEVAGE = ['Sur la parcelle du ménage (cour)', 'Ailleurs dans le Fokontany', 'Hors du Fokontany', 'Autre'];
 
 async function genCodeMenage(fokontany: string): Promise<string> {
   if (!fokontany.trim()) {
@@ -133,8 +148,8 @@ function UrgencyButtons({ label, value, onChange }: { label: string; value: stri
   );
 }
 
-type Tab = 'general' | 'logement' | 'eau_assainissement' | 'energie_dechets' | 'connectivite' | 'risques';
-const TAB_ORDER: Tab[] = ['general', 'logement', 'eau_assainissement', 'energie_dechets', 'connectivite', 'risques'];
+type Tab = 'general' | 'logement' | 'eau_assainissement' | 'energie_dechets' | 'connectivite' | 'risques' | 'equipements' | 'elevage';
+const TAB_ORDER: Tab[] = ['general', 'logement', 'eau_assainissement', 'energie_dechets', 'connectivite', 'risques', 'equipements', 'elevage'];
 
 export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
@@ -163,9 +178,9 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   const [nombre_etages, setNombreEtages] = useState(foyer?.nombre_etages?.toString() || '1');
   const [materiaux_toiture, setMateriauxToiture] = useState<string[]>(foyer?.materiaux_toiture || (foyer?.materiau_toiture ? [foyer.materiau_toiture] : []));
   const [materiaux_mur, setMateriauxMur] = useState<string[]>(foyer?.materiaux_mur || (foyer?.materiau_mur ? [foyer.materiau_mur] : []));
-  const [materiau_mur_autre, setMateriauMurAutre] = useState(foyer?.materiau_mur_autre || '');
-  const [note_agent_incomplete, setNoteAgentIncomplete] = useState(foyer?.note_agent_incomplete || '');
-  const [formations_pro_autre, setFormationsProAutre] = useState(foyer?.formations_pro_autre || '');
+  const [materiau_mur_autre, setMateriauMurAutre] = useState('');
+  const [note_agent_incomplete, setNoteAgentIncomplete] = useState('');
+  const [formations_pro_autre, setFormationsProAutre] = useState('');
   const [materiaux_plancher, setMateriauxPlancher] = useState<string[]>(foyer?.materiaux_plancher || (foyer?.materiau_plancher ? [foyer.materiau_plancher] : []));
   const [nombre_pieces, setNombrePieces] = useState(foyer?.nombre_pieces?.toString() || '');
   const [superficie_maison, setSuperficie] = useState(foyer?.superficie_maison?.toString() || '');
@@ -244,6 +259,52 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
   const [uploadingTravauxPhoto, setUploadingTravauxPhoto] = useState(false);
   const [niveau_vulnerabilite_global, setNiveauVulnerabiliteGlobal] = useState(foyer?.niveau_vulnerabilite_global || '');
   const [observations_complementaires, setObservationsComplementaires] = useState(foyer?.observations_complementaires || '');
+
+  // § Logement — état général & appartenance (Kobo §10 / §7)
+  const [etat_logement, setEtatLogement] = useState(foyer?.etat_logement || '');
+  const [appartenance_maison, setAppartenanceMaison] = useState(foyer?.appartenance_maison || '');
+
+  // § Aide sociale ménage (Kobo §7)
+  const [aide_sociale_menage, setAideSocialeMenage] = useState(foyer?.aide_sociale_menage || '');
+  const [types_aide_sociale, setTypesAideSociale] = useState<string[]>(foyer?.types_aide_sociale || []);
+  const [donateurs_aide_cash, setDonateursAideCash] = useState<string[]>(foyer?.donateurs_aide_cash || []);
+  const [donateurs_aide_vivres, setDonateursAideVivres] = useState<string[]>(foyer?.donateurs_aide_vivres || []);
+  const [donateurs_aide_sante, setDonateursAideSante] = useState<string[]>(foyer?.donateurs_aide_sante || []);
+  const [donateurs_aide_education, setDonateursAideEducation] = useState<string[]>(foyer?.donateurs_aide_education || []);
+  const [donateurs_aide_logement, setDonateursAideLogement] = useState<string[]>(foyer?.donateurs_aide_logement || []);
+  const [donateurs_aide_materiaux, setDonateursAideMateriaux] = useState<string[]>(foyer?.donateurs_aide_materiaux || []);
+  const [donateurs_aide_autre, setDonateursAideAutre] = useState<string[]>(foyer?.donateurs_aide_autre || []);
+
+  // § Mobile Money (Kobo §10 connectivité)
+  const [utilise_mobile_money, setUtiliseMobileMoney] = useState<boolean | undefined>(foyer?.utilise_mobile_money);
+  const [operateurs_mobile_money, setOperateursMobileMoney] = useState<string[]>(foyer?.operateurs_mobile_money || []);
+
+  // § Équipements du ménage (Kobo §11)
+  const [moyen_transport, setMoyenTransport] = useState(foyer?.moyen_transport || '');
+  const [biens_menage, setBiensMenage] = useState<string[]>(foyer?.biens_menage || []);
+  const [nb_motos, setNbMotos] = useState(foyer?.nb_motos?.toString() || '0');
+  const [nb_voitures, setNbVoitures] = useState(foyer?.nb_voitures?.toString() || '0');
+  const [nb_cyclopousses, setNbCyclopousses] = useState(foyer?.nb_cyclopousses?.toString() || '0');
+  const [nb_bajaj, setNbBajaj] = useState(foyer?.nb_bajaj?.toString() || '0');
+  const [usage_vehicules, setUsageVehicules] = useState<string[]>(foyer?.usage_vehicules || []);
+
+  // § Élevage (Kobo §12)
+  const [pratique_elevage, setPratiqueElevage] = useState<boolean | undefined>(foyer?.pratique_elevage);
+  const [types_elevage, setTypesElevage] = useState<string[]>(foyer?.types_elevage || []);
+  const [nb_poules, setNbPoules] = useState(foyer?.nb_poules?.toString() || '');
+  const [nb_canards, setNbCanards] = useState(foyer?.nb_canards?.toString() || '');
+  const [nb_oies, setNbOies] = useState(foyer?.nb_oies?.toString() || '');
+  const [nb_dindes, setNbDindes] = useState(foyer?.nb_dindes?.toString() || '');
+  const [nb_porcs, setNbPorcs] = useState(foyer?.nb_porcs?.toString() || '');
+  const [nb_zebus, setNbZebus] = useState(foyer?.nb_zebus?.toString() || '');
+  const [nb_chevres, setNbChevres] = useState(foyer?.nb_chevres?.toString() || '');
+  const [nb_lapins, setNbLapins] = useState(foyer?.nb_lapins?.toString() || '');
+  const [nb_bassins_pisciculture, setNbBassins] = useState(foyer?.nb_bassins_pisciculture?.toString() || '');
+  const [nb_ruches, setNbRuches] = useState(foyer?.nb_ruches?.toString() || '');
+  const [but_elevage, setButElevage] = useState<string[]>(foyer?.but_elevage || []);
+  const [lieu_elevage, setLieuElevage] = useState(foyer?.lieu_elevage || '');
+  const [carnet_eleveur, setCarnetEleveur] = useState<boolean | undefined>(foyer?.carnet_eleveur);
+  const [animaux_vaccines, setAnimauxVaccines] = useState<boolean | undefined>(foyer?.animaux_vaccines);
 
   const toggleArr = (arr: string[], val: string) => arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
   const isLastTab = tab === TAB_ORDER[TAB_ORDER.length - 1];
@@ -364,10 +425,7 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
       materiaux_toiture, materiaux_mur, materiaux_plancher,
       materiau_toiture: materiaux_toiture[0] || undefined,
       materiau_mur: materiaux_mur[0] || undefined,
-      materiau_mur_autre: materiaux_mur.includes('Autres') ? (materiau_mur_autre || undefined) : undefined,
       materiau_plancher: materiaux_plancher[0] || undefined,
-      note_agent_incomplete: note_agent_incomplete || undefined,
-      formations_pro_autre: formations_pro_autre || undefined,
       nombre_pieces: nombre_pieces ? parseInt(nombre_pieces) : undefined, superficie_maison: superficie_maison ? parseFloat(superficie_maison) : undefined,
       photo_maison_url: photo_maison_url || undefined,
       statut_occupant,
@@ -404,6 +462,47 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
       travaux_photo_url: travaux_photo_url || undefined,
       niveau_vulnerabilite_global: niveau_vulnerabilite_global || undefined,
       observations_complementaires: observations_complementaires || undefined,
+      // § Logement état & appartenance
+      etat_logement: etat_logement || undefined,
+      appartenance_maison: appartenance_maison || undefined,
+      // § Aide sociale ménage
+      aide_sociale_menage: aide_sociale_menage || undefined,
+      types_aide_sociale,
+      donateurs_aide_cash,
+      donateurs_aide_vivres,
+      donateurs_aide_sante,
+      donateurs_aide_education,
+      donateurs_aide_logement,
+      donateurs_aide_materiaux,
+      donateurs_aide_autre,
+      // § Mobile Money
+      utilise_mobile_money,
+      operateurs_mobile_money,
+      // § Équipements
+      moyen_transport: moyen_transport || undefined,
+      biens_menage,
+      nb_motos: parseInt(nb_motos) || 0,
+      nb_voitures: parseInt(nb_voitures) || 0,
+      nb_cyclopousses: parseInt(nb_cyclopousses) || 0,
+      nb_bajaj: parseInt(nb_bajaj) || 0,
+      usage_vehicules,
+      // § Élevage
+      pratique_elevage,
+      types_elevage,
+      nb_poules: nb_poules ? parseInt(nb_poules) : undefined,
+      nb_canards: nb_canards ? parseInt(nb_canards) : undefined,
+      nb_oies: nb_oies ? parseInt(nb_oies) : undefined,
+      nb_dindes: nb_dindes ? parseInt(nb_dindes) : undefined,
+      nb_porcs: nb_porcs ? parseInt(nb_porcs) : undefined,
+      nb_zebus: nb_zebus ? parseInt(nb_zebus) : undefined,
+      nb_chevres: nb_chevres ? parseInt(nb_chevres) : undefined,
+      nb_lapins: nb_lapins ? parseInt(nb_lapins) : undefined,
+      nb_bassins_pisciculture: nb_bassins_pisciculture ? parseInt(nb_bassins_pisciculture) : undefined,
+      nb_ruches: nb_ruches ? parseInt(nb_ruches) : undefined,
+      but_elevage,
+      lieu_elevage: lieu_elevage || undefined,
+      carnet_eleveur,
+      animaux_vaccines,
     });
     setSaving(false);
   };
@@ -415,6 +514,8 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
     { key: 'energie_dechets', label: 'Énergie & Déchets', icon: Trash2 },
     { key: 'connectivite', label: 'Connectivité', icon: Wifi },
     { key: 'risques', label: 'Risques & Vie', icon: AlertTriangle },
+    { key: 'equipements', label: 'Équipements', icon: Tv },
+    { key: 'elevage', label: 'Élevage', icon: Beef },
   ] as const;
 
   return (
@@ -599,6 +700,12 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
                   )}
                 </div>
 
+                <div className="border-t border-slate-100 pt-4 space-y-4">
+                  <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">État & appartenance (Kobo §7 / §10)</h3>
+                  <ChoiceGroup label="État général du logement" options={ETATS_LOGEMENT} value={etat_logement} onChange={setEtatLogement} cols={4} />
+                  <ChoiceGroup label="À qui appartient cette maison ?" options={APPARTENANCE_MAISON} value={appartenance_maison} onChange={setAppartenanceMaison} cols={2} />
+                </div>
+
                 <div className="border-t border-slate-100 pt-4 space-y-3">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Image className="h-3.5 w-3.5" />Photo de la maison</h3>
                   {photo_maison_url ? (
@@ -657,6 +764,13 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
                 {acces_internet && (
                   <CheckGroup label="Moyen principal d'accès à Internet" options={INTERNET_MOYENS} values={internet_moyens} onToggle={v => setInternetMoyens(prev => toggleArr(prev, v))} />
                 )}
+                <div className="border-t border-slate-100 pt-4 space-y-4">
+                  <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Mobile Money (Kobo §10)</h3>
+                  <YesNo label="Le ménage utilise-t-il le Mobile Money ?" value={utilise_mobile_money} onChange={setUtiliseMobileMoney} />
+                  {utilise_mobile_money && (
+                    <CheckGroup label="Opérateurs utilisés" options={OPERATEURS_MOBILE_MONEY} values={operateurs_mobile_money} onToggle={v => setOperateursMobileMoney(prev => toggleArr(prev, v))} />
+                  )}
+                </div>
               </div>
             )}
 
@@ -677,6 +791,126 @@ export default function FoyerForm({ foyer, onClose, onSave }: Props) {
                 <YesNo label="Difficultés régulières d'accès à l'eau ?" value={difficulte_eau} onChange={setDifficulteEau} />
                 <YesNo label="Coupures d'électricité régulières ?" value={difficulte_electricite} onChange={setDifficulteElectricite} />
                 <ChoiceGroup label="Le ménage estime ses conditions de vie :" options={CONDITIONS_VIE} value={conditions_vie} onChange={setConditionsVie} required cols={3} />
+
+                <div className="border-t border-slate-100 pt-4 space-y-4">
+                  <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">8. Aide sociale du ménage (Kobo §7)</h3>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 uppercase block mb-1.5">Le ménage reçoit-il une aide sociale ?</label>
+                    <div className="flex flex-wrap gap-2">
+                      {['Oui', 'Non', 'Ne sait pas', 'Refuse de répondre'].map(opt => (
+                        <label key={opt} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border cursor-pointer text-xs font-semibold transition ${aide_sociale_menage === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                          <input type="radio" className="hidden" checked={aide_sociale_menage === opt} onChange={() => setAideSocialeMenage(opt)} />{opt}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {aide_sociale_menage === 'Oui' && (
+                    <>
+                      <CheckGroup label="Types d'aide reçue" options={TYPES_AIDE_MENAGE} values={types_aide_sociale} onToggle={v => setTypesAideSociale(prev => toggleArr(prev, v))} />
+                      {types_aide_sociale.includes('Cash / transfert monétaire') && (
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Donateurs — Cash</p>
+                          <CheckGroup label="" options={DONATEURS_AIDE} values={donateurs_aide_cash} onToggle={v => setDonateursAideCash(prev => toggleArr(prev, v))} />
+                        </div>
+                      )}
+                      {types_aide_sociale.includes('Vivres / denrées') && (
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Donateurs — Vivres</p>
+                          <CheckGroup label="" options={DONATEURS_AIDE} values={donateurs_aide_vivres} onToggle={v => setDonateursAideVivres(prev => toggleArr(prev, v))} />
+                        </div>
+                      )}
+                      {types_aide_sociale.includes('Santé / soins') && (
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Donateurs — Santé</p>
+                          <CheckGroup label="" options={DONATEURS_AIDE} values={donateurs_aide_sante} onToggle={v => setDonateursAideSante(prev => toggleArr(prev, v))} />
+                        </div>
+                      )}
+                      {types_aide_sociale.includes('Éducation / scolarité') && (
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Donateurs — Éducation</p>
+                          <CheckGroup label="" options={DONATEURS_AIDE} values={donateurs_aide_education} onToggle={v => setDonateursAideEducation(prev => toggleArr(prev, v))} />
+                        </div>
+                      )}
+                      {types_aide_sociale.includes('Logement / hébergement') && (
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Donateurs — Logement</p>
+                          <CheckGroup label="" options={DONATEURS_AIDE} values={donateurs_aide_logement} onToggle={v => setDonateursAideLogement(prev => toggleArr(prev, v))} />
+                        </div>
+                      )}
+                      {types_aide_sociale.includes('Divers matériaux de construction') && (
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Donateurs — Matériaux</p>
+                          <CheckGroup label="" options={DONATEURS_AIDE} values={donateurs_aide_materiaux} onToggle={v => setDonateursAideMateriaux(prev => toggleArr(prev, v))} />
+                        </div>
+                      )}
+                      {types_aide_sociale.includes('Autre') && (
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Donateurs — Autre aide</p>
+                          <CheckGroup label="" options={DONATEURS_AIDE} values={donateurs_aide_autre} onToggle={v => setDonateursAideAutre(prev => toggleArr(prev, v))} />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── ÉQUIPEMENTS & BIENS ── */}
+            {tab === 'equipements' && (
+              <div className="space-y-5">
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">9. Équipements & biens du ménage (Kobo §11)</h3>
+                <ChoiceGroup label="Moyen de transport principal du ménage" options={MOYENS_TRANSPORT} value={moyen_transport} onChange={setMoyenTransport} cols={2} />
+                <CheckGroup label="Biens possédés par le ménage" options={BIENS_MENAGE} values={biens_menage} onToggle={v => setBiensMenage(prev => toggleArr(prev, v))} />
+
+                {/* Compter les véhicules si sélectionnés */}
+                {(biens_menage.includes('Moto / scooter') || biens_menage.includes('Voiture') || biens_menage.includes('Cyclo-pousse / pousse-pousse') || biens_menage.includes('Bajaj / tuk-tuk')) && (
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase">Nombre de véhicules</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {biens_menage.includes('Moto / scooter') && <NumberInput label="Motos / Scooters" value={nb_motos} onChange={setNbMotos} />}
+                      {biens_menage.includes('Voiture') && <NumberInput label="Voitures" value={nb_voitures} onChange={setNbVoitures} />}
+                      {biens_menage.includes('Cyclo-pousse / pousse-pousse') && <NumberInput label="Cyclo-pousses" value={nb_cyclopousses} onChange={setNbCyclopousses} />}
+                      {biens_menage.includes('Bajaj / tuk-tuk') && <NumberInput label="Bajaj / Tuk-tuk" value={nb_bajaj} onChange={setNbBajaj} />}
+                    </div>
+                    <CheckGroup label="Usage des véhicules" options={USAGES_VEHICULES} values={usage_vehicules} onToggle={v => setUsageVehicules(prev => toggleArr(prev, v))} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── ÉLEVAGE ── */}
+            {tab === 'elevage' && (
+              <div className="space-y-5">
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider">10. Élevage (Kobo §12)</h3>
+                <YesNo label="Le ménage pratique-t-il l'élevage ?" value={pratique_elevage} onChange={setPratiqueElevage} />
+                {pratique_elevage && (
+                  <>
+                    <CheckGroup label="Types d'animaux élevés" options={TYPES_ELEVAGE} values={types_elevage} onToggle={v => setTypesElevage(prev => toggleArr(prev, v))} />
+
+                    {types_elevage.length > 0 && (
+                      <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                        <p className="text-xs font-bold text-slate-500 uppercase">Nombre par espèce</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {types_elevage.includes('Poules / poulets') && <NumberInput label="Poules / Poulets" value={nb_poules} onChange={setNbPoules} />}
+                          {types_elevage.includes('Canards') && <NumberInput label="Canards" value={nb_canards} onChange={setNbCanards} />}
+                          {types_elevage.includes('Oies') && <NumberInput label="Oies" value={nb_oies} onChange={setNbOies} />}
+                          {types_elevage.includes('Dindes') && <NumberInput label="Dindes" value={nb_dindes} onChange={setNbDindes} />}
+                          {types_elevage.includes('Porcs') && <NumberInput label="Porcs" value={nb_porcs} onChange={setNbPorcs} />}
+                          {types_elevage.includes('Zébus / bovins') && <NumberInput label="Zébus / Bovins" value={nb_zebus} onChange={setNbZebus} />}
+                          {types_elevage.includes('Chèvres / moutons') && <NumberInput label="Chèvres / Moutons" value={nb_chevres} onChange={setNbChevres} />}
+                          {types_elevage.includes('Lapins') && <NumberInput label="Lapins" value={nb_lapins} onChange={setNbLapins} />}
+                          {types_elevage.includes('Poissons (pisciculture)') && <NumberInput label="Bassins pisciculture" value={nb_bassins_pisciculture} onChange={setNbBassins} />}
+                          {types_elevage.includes('Abeilles (apiculture)') && <NumberInput label="Ruches" value={nb_ruches} onChange={setNbRuches} />}
+                        </div>
+                      </div>
+                    )}
+
+                    <CheckGroup label="But principal de l'élevage" options={BUTS_ELEVAGE} values={but_elevage} onToggle={v => setButElevage(prev => toggleArr(prev, v))} />
+                    <ChoiceGroup label="Lieu de l'élevage" options={LIEUX_ELEVAGE} value={lieu_elevage} onChange={setLieuElevage} cols={2} />
+                    <YesNo label="Possède un carnet d'éleveur ?" value={carnet_eleveur} onChange={setCarnetEleveur} />
+                    <YesNo label="Animaux vaccinés ?" value={animaux_vaccines} onChange={setAnimauxVaccines} />
+                  </>
+                )}
               </div>
             )}
 
