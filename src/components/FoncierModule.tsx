@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Foyer, Membre, Parcelle, Batiment, TitulaireFoncier, Detenteur, ProprietaireBatiment, OccupantReel, MiseEnValeur } from '../types';
 import {
   Building2, Plus, X, Edit2, Trash2, Search, MapPin, Home,
-  ChevronDown, ChevronRight, User, Loader2, Upload, FileText,
+  ChevronDown, ChevronRight, User, Users, Loader2, Upload, FileText,
   Landmark, Eye, Save, AlertCircle
 } from 'lucide-react';
 
@@ -340,15 +340,31 @@ export default function FoncierModule({ foyers, membres }: Props) {
   useEffect(() => { load(); }, []);
 
   const loadDetails = async (id: string) => {
-    const [t, d, b, v] = await Promise.all([
+    // Lire depuis les anciennes tables (saisie manuelle) ET les nouvelles tables Kobo
+    const [t, d, b, v, dKobo, bKobo, jKobo] = await Promise.all([
       supabase.from('titulaires_fonciers').select('*').eq('parcelle_id', id),
       supabase.from('detenteurs').select('*').eq('parcelle_id', id),
       supabase.from('batiments').select('*').eq('parcelle_id', id),
       supabase.from('mises_en_valeur').select('*').eq('parcelle_id', id),
+      // Tables Kobo
+      supabase.from('detenteurs_foncier').select('*').eq('parcelle_id', id),
+      supabase.from('constructions_foncier').select('*').eq('parcelle_id', id),
+      supabase.from('jorolava_foncier').select('*').eq('parcelle_id', id),
     ]);
+    // Fusion : priorité aux données Kobo si présentes
+    const detenteurKobo = dKobo.data?.[0];
+    const detenteurManuel = d.data?.[0];
+    const batimentsKobo = bKobo.data || [];
+    const batimentsManuel = b.data || [];
     setDetails(prev => ({ ...prev, [id]: {
-      titulaire: t.data?.[0], detenteur: d.data?.[0],
-      batiments: b.data || [], valeur: v.data?.[0]
+      titulaire: t.data?.[0],
+      detenteur: detenteurManuel,
+      detenteurKobo: detenteurKobo,
+      tousDetenteurs: dKobo.data || [],
+      batiments: batimentsManuel,
+      constructions: batimentsKobo,
+      jorolava: jKobo.data || [],
+      valeur: v.data?.[0]
     }}));
   };
 
@@ -475,54 +491,111 @@ export default function FoncierModule({ foyers, membres }: Props) {
 
                 {/* Détails expandés */}
                 {isExpanded && det && (
-                  <div className="border-t border-slate-100 bg-slate-50 p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                    {/* Titulaire */}
-                    <div className="bg-white border border-slate-200 rounded-lg p-3">
-                      <p className="font-bold text-amber-600 uppercase text-[10px] mb-1.5 flex items-center gap-1"><Landmark className="h-3 w-3" />Titulaire foncier</p>
-                      {det.titulaire ? (
-                        <>
-                          <p className="font-semibold text-slate-800">{det.titulaire.nom} {det.titulaire.prenom}</p>
-                          <p className="text-slate-500">{det.titulaire.type_titulaire}</p>
-                          {det.titulaire.cin && <p className="font-mono text-slate-400">{det.titulaire.cin}</p>}
-                        </>
-                      ) : <p className="text-slate-400 italic">Non défini</p>}
+                  <div className="border-t border-slate-100 bg-slate-50 p-4 space-y-3 text-xs">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {/* Titulaire */}
+                      <div className="bg-white border border-slate-200 rounded-lg p-3">
+                        <p className="font-bold text-amber-600 uppercase text-[10px] mb-1.5 flex items-center gap-1"><Landmark className="h-3 w-3" />Titulaire foncier</p>
+                        {det.titulaire ? (
+                          <>
+                            <p className="font-semibold text-slate-800">{det.titulaire.nom} {det.titulaire.prenom}</p>
+                            <p className="text-slate-500">{det.titulaire.type_titulaire}</p>
+                            {det.titulaire.cin && <p className="font-mono text-slate-400">{det.titulaire.cin}</p>}
+                          </>
+                        ) : <p className="text-slate-400 italic">Non défini</p>}
+                      </div>
+                      {/* Détenteur (manuel ou Kobo) */}
+                      <div className="bg-white border border-slate-200 rounded-lg p-3">
+                        <p className="font-bold text-blue-600 uppercase text-[10px] mb-1.5 flex items-center gap-1"><User className="h-3 w-3" />Détenteur</p>
+                        {det.detenteur ? (
+                          <>
+                            <p className="font-semibold text-slate-800">{det.detenteur.nom} {det.detenteur.prenom}</p>
+                            <p className="text-slate-500">{det.detenteur.type_detention}</p>
+                          </>
+                        ) : det.detenteurKobo ? (
+                          <>
+                            <p className="font-semibold text-slate-800">{det.detenteurKobo.nom} {det.detenteurKobo.prenom}</p>
+                            <p className="text-slate-500">{det.detenteurKobo.lien_parcelle}</p>
+                            {det.detenteurKobo.cin && <p className="font-mono text-slate-400">CIN : {det.detenteurKobo.cin}</p>}
+                            {det.detenteurKobo.telephone && <p className="text-slate-400">☎ {det.detenteurKobo.telephone}</p>}
+                          </>
+                        ) : <p className="text-slate-400 italic">Non défini</p>}
+                      </div>
+                      {/* Constructions (Kobo) ou Bâtiments (manuel) */}
+                      <div className="bg-white border border-slate-200 rounded-lg p-3">
+                        <p className="font-bold text-indigo-600 uppercase text-[10px] mb-1.5 flex items-center gap-1">
+                          <Building2 className="h-3 w-3" />Bâtiments ({(det.constructions?.length || 0) + (det.batiments?.length || 0)})
+                        </p>
+                        {det.constructions?.length > 0 ? det.constructions.map((c: any, i: number) => (
+                          <div key={c.id || i} className="mb-1.5 pb-1.5 border-b border-slate-50 last:border-0">
+                            <p className="font-semibold text-slate-700">{c.type_construction || '—'}</p>
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {c.etat && <span className="bg-slate-100 text-slate-600 px-1 py-0.5 rounded text-[9px]">{c.etat}</span>}
+                              {c.usage && <span className="bg-blue-50 text-blue-600 px-1 py-0.5 rounded text-[9px]">{c.usage}</span>}
+                              {c.surface_m2 && <span className="text-slate-400 text-[9px]">{c.surface_m2} m²</span>}
+                              {c.nb_pieces && <span className="text-slate-400 text-[9px]">{c.nb_pieces} pièces</span>}
+                            </div>
+                            {c.proprio_nom && <p className="text-slate-400 mt-0.5">Proprio : {c.proprio_nom}</p>}
+                          </div>
+                        )) : det.batiments?.length > 0 ? det.batiments.map((b: Batiment) => (
+                          <div key={b.id} className="mb-1">
+                            <p className="font-mono font-semibold text-slate-700">{b.reference_batiment}</p>
+                            <p className="text-slate-400">{b.type_batiment} · {b.etat}</p>
+                          </div>
+                        )) : <p className="text-slate-400 italic">Aucun bâtiment</p>}
+                      </div>
+                      {/* Mise en valeur / Jorolava */}
+                      <div className="bg-white border border-slate-200 rounded-lg p-3">
+                        <p className="font-bold text-emerald-600 uppercase text-[10px] mb-1.5 flex items-center gap-1"><Home className="h-3 w-3" />Mise en valeur</p>
+                        {/* Kobo: champ mise_en_valeur sur la parcelle */}
+                        {(p as any).mise_en_valeur?.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {((p as any).mise_en_valeur as string[]).map((v: string) => (
+                              <span key={v} className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">{v}</span>
+                            ))}
+                          </div>
+                        ) : det.valeur ? (
+                          <div className="flex flex-wrap gap-1">
+                            {det.valeur.maison && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Maison</span>}
+                            {det.valeur.cloture && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Clôture</span>}
+                            {det.valeur.cultures && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Cultures</span>}
+                            {det.valeur.elevage && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Élevage</span>}
+                            {det.valeur.electricite && <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Électricité</span>}
+                            {det.valeur.eau && <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Eau</span>}
+                          </div>
+                        ) : <p className="text-slate-400 italic">Non renseigné</p>}
+                      </div>
                     </div>
-                    {/* Détenteur */}
-                    <div className="bg-white border border-slate-200 rounded-lg p-3">
-                      <p className="font-bold text-blue-600 uppercase text-[10px] mb-1.5 flex items-center gap-1"><User className="h-3 w-3" />Détenteur JOROLAVA</p>
-                      {det.detenteur ? (
-                        <>
-                          <p className="font-semibold text-slate-800">{det.detenteur.nom} {det.detenteur.prenom}</p>
-                          <p className="text-slate-500">{det.detenteur.type_detention}</p>
-                          {det.detenteur.date_debut_occupation && <p className="text-slate-400">Depuis {new Date(det.detenteur.date_debut_occupation).toLocaleDateString('fr-FR')}</p>}
-                        </>
-                      ) : <p className="text-slate-400 italic">Non défini</p>}
-                    </div>
-                    {/* Bâtiments */}
-                    <div className="bg-white border border-slate-200 rounded-lg p-3">
-                      <p className="font-bold text-indigo-600 uppercase text-[10px] mb-1.5 flex items-center gap-1"><Building2 className="h-3 w-3" />Bâtiments ({det.batiments?.length || 0})</p>
-                      {det.batiments?.length > 0 ? det.batiments.map((b: Batiment) => (
-                        <div key={b.id} className="mb-1">
-                          <p className="font-mono font-semibold text-slate-700">{b.reference_batiment}</p>
-                          <p className="text-slate-400">{b.type_batiment} · {b.etat}</p>
+                    {/* Jorolava (Kobo uniquement) */}
+                    {det.jorolava?.length > 0 && (
+                      <div className="bg-white border border-slate-200 rounded-lg p-3">
+                        <p className="font-bold text-purple-600 uppercase text-[10px] mb-2 flex items-center gap-1"><FileText className="h-3 w-3" />Registre Jorolava ({det.jorolava.length})</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {det.jorolava.map((j: any, i: number) => (
+                            <div key={j.id || i} className="bg-purple-50 rounded p-2">
+                              <p className="font-semibold text-purple-800 text-[10px]">#{j.numero_jorolava || i+1} {j.annee ? `(${j.annee})` : ''}</p>
+                              {j.nom_inscrit && <p className="text-purple-600 text-[10px]">{j.nom_inscrit}</p>}
+                              {j.reference && <p className="font-mono text-purple-400 text-[9px]">{j.reference}</p>}
+                            </div>
+                          ))}
                         </div>
-                      )) : <p className="text-slate-400 italic">Aucun bâtiment</p>}
-                    </div>
-                    {/* Mise en valeur */}
-                    <div className="bg-white border border-slate-200 rounded-lg p-3">
-                      <p className="font-bold text-emerald-600 uppercase text-[10px] mb-1.5 flex items-center gap-1"><Home className="h-3 w-3" />Mise en valeur</p>
-                      {det.valeur ? (
-                        <div className="flex flex-wrap gap-1">
-                          {det.valeur.maison && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Maison</span>}
-                          {det.valeur.cloture && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Clôture</span>}
-                          {det.valeur.cultures && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Cultures</span>}
-                          {det.valeur.elevage && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-semibent">Élevage</span>}
-                          {det.valeur.electricite && <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Électricité</span>}
-                          {det.valeur.eau && <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Eau</span>}
-                          {det.valeur.annee_debut && <p className="text-slate-400 w-full mt-1">Depuis {det.valeur.annee_debut}</p>}
+                      </div>
+                    )}
+                    {/* Tous les détenteurs Kobo */}
+                    {(det as any).tousDetenteurs?.length > 1 && (
+                      <div className="bg-white border border-slate-200 rounded-lg p-3">
+                        <p className="font-bold text-blue-600 uppercase text-[10px] mb-2 flex items-center gap-1"><Users className="h-3 w-3" />Tous les détenteurs ({(det as any).tousDetenteurs.length})</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {(det as any).tousDetenteurs.map((d: any, i: number) => (
+                            <div key={d.id || i} className="bg-blue-50 rounded p-2">
+                              <p className="font-semibold text-blue-800 text-[10px]">{d.nom} {d.prenom}</p>
+                              {d.lien_parcelle && <p className="text-blue-600 text-[10px]">{d.lien_parcelle}</p>}
+                              {d.cin && <p className="font-mono text-blue-400 text-[9px]">CIN : {d.cin}</p>}
+                            </div>
+                          ))}
                         </div>
-                      ) : <p className="text-slate-400 italic">Non renseigné</p>}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
