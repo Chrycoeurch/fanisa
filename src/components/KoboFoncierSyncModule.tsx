@@ -55,9 +55,13 @@ interface FoncierDetenteur {
   nationalite?: string;
   cin?: string;
   cin_date?: string;
+  cin_lieu?: string;
   telephone?: string;
   reside_fkt?: boolean;
   adresse?: string;
+  present_sur_place?: boolean;
+  source_information?: string;
+  detenteur_connu_valeur?: string;
 }
 
 interface FoncierDocument {
@@ -106,17 +110,24 @@ interface FoncierParcelle {
   // Surfaces
   superficie_declaree?: number;
   superficie_estimee?: number;
+  superficie_gps?: number;
 
   // Statut foncier
   statut_propriete?: string;
   occupation_terrain?: string;
+  annee_debut_occupation?: number;
   nature_terrain?: string;
   origine_droit?: string;
+  origine_droit_detail?: string;
+  annee_acquisition?: number;
   justif_propriete?: string;
+  documents_propriete?: string;
+  autres_documents?: string[];
 
   // Constructions
   presence_constructions?: boolean;
   nb_constructions?: number;
+  constructions_concernees?: string;
   detenteur_connu?: boolean;
 
   // Mise en valeur
@@ -130,6 +141,9 @@ interface FoncierParcelle {
   // Collecte
   statut_collecte?: string;
   difficulte_rencontree?: string;
+  personne_rencontree?: string;
+  besoin_verification?: boolean;
+  dossier_a_completer?: boolean;
   observations?: string;
   code_agent?: string;
   date_collecte?: string;
@@ -266,6 +280,24 @@ async function parseFoncierXlsx(file: File): Promise<FoncierImportResult[]> {
     const dateCollecteRaw = get(row, 'date_collecte', '_submission_time');
     const dateCollecte = getDate(dateCollecteRaw);
 
+    // Superficie GPS (calculée par le formulaire depuis le polygone)
+    const superficieGps = getNum(row, 'superficie_gps', 'gps_superficie', '_superficie_gps');
+
+    // Documents justificatifs (select_one + select_multiple)
+    const documentsProprietRaw = get(row, 'documents_etablissant_propriete', 'justif_doc', 'documents_propriete');
+    const autresDocumentsRaw = getMultiSelect(row, 'autres_documents');
+
+    // Origine du droit
+    const origineRaw = get(row, 'origine_droit', 'origine_droit_declare');
+    const origineDetail = get(row, 'origine_droit_precis', 'origine_droit_detail',
+      'vendeur', 'donateur', 'nom_defunt') || undefined;
+    const anneeAcquisition = getNum(row, 'annee_acquisition', 'annee_achat');
+
+    // Collecte — agent & observations
+    const personneRencontree = get(row, 'personne_rencontree') || undefined;
+    const besoinVerif = getBool(row, 'besoin_verification');
+    const dossierACompleter = getBool(row, 'dossier_a_completer');
+
     const parcelle: FoncierParcelle = {
       foncier_id:            get(row, 'foncier_id') || undefined,
       lot_id:                lotId || undefined,
@@ -282,15 +314,22 @@ async function parseFoncierXlsx(file: File): Promise<FoncierImportResult[]> {
 
       superficie_declaree:   getNum(row, 'superficie_declaree'),
       superficie_estimee:    getNum(row, 'superficie_estimee'),
+      superficie_gps:        superficieGps,
 
       statut_propriete:      get(row, 'statut_propriete', 'statut_foncier'),
       occupation_terrain:    get(row, 'occupation_terrain'),
+      annee_debut_occupation: getNum(row, 'annee_debut_occupation'),
       nature_terrain:        get(row, 'nature_terrain'),
-      origine_droit:         get(row, 'origine_droit'),
-      justif_propriete:      get(row, 'justif_propriete'),
+      origine_droit:         origineRaw || undefined,
+      origine_droit_detail:  origineDetail,
+      annee_acquisition:     anneeAcquisition,
+      justif_propriete:      get(row, 'justif_propriete') || undefined,
+      documents_propriete:   documentsProprietRaw || undefined,
+      autres_documents:      autresDocumentsRaw.length > 0 ? autresDocumentsRaw : undefined,
 
       presence_constructions: getBool(row, 'presence_constructions') ?? (getNum(row, 'nb_constructions') ?? 0) > 0,
       nb_constructions:      getNum(row, 'nb_constructions') ?? 0,
+      constructions_concernees: get(row, 'constructions_concernees') || undefined,
       detenteur_connu:       getBool(row, 'detenteur_connu'),
 
       mise_en_valeur:        miseEnValeur.length > 0 ? miseEnValeur : undefined,
@@ -301,7 +340,10 @@ async function parseFoncierXlsx(file: File): Promise<FoncierImportResult[]> {
 
       statut_collecte:       get(row, 'statut_collecte') || 'a_verifier',
       difficulte_rencontree: get(row, 'difficulte_rencontree') || undefined,
-      observations:          get(row, 'observations') || undefined,
+      personne_rencontree:   personneRencontree,
+      besoin_verification:   besoinVerif,
+      dossier_a_completer:   dossierACompleter,
+      observations:          get(row, 'observations', 'observations_libres', 'description_observation') || undefined,
       code_agent:            get(row, 'agent', 'code_agent') || undefined,
       date_collecte:         dateCollecte,
       nb_menages_lot:        getNum(row, 'nb_menages_lot'),
@@ -349,18 +391,28 @@ async function parseFoncierXlsx(file: File): Promise<FoncierImportResult[]> {
     const detenteurRows = subTables['detenteurs']?.get(submissionId) ?? [];
     const detenteurs: FoncierDetenteur[] = detenteurRows.map((r): FoncierDetenteur => {
       const cinDateRaw = get(r, 'det_cin_date');
+      // type_personne : Kobo peut envoyer personne_physique / couple / indivision /
+      // association / entreprise / etat_commune / autre / inconnu
+      const typePersonne = get(r, 'det_type', 'type_detenteur', 'det_type_personne') || 'personne_physique';
+      // lien_parcelle : detenteur_declare / ayant_droit_declare / proprietaire_titre /
+      // heritier_declare / gestionnaire / bailleur / autre
+      const lienParcelle = get(r, 'det_lien', 'lien_parcelle', 'det_lien_parcelle');
       return {
-        kobo_parent_id: submissionId,
-        nom:              get(r, 'det_nom'),
-        prenom:           get(r, 'det_prenom'),
-        type_personne:    get(r, 'det_type') || 'personne_physique',
-        lien_parcelle:    get(r, 'det_lien'),
-        nationalite:      get(r, 'det_nationalite') || 'Malagasy',
-        cin:              get(r, 'det_cin'),
-        cin_date:         getDate(cinDateRaw),
-        telephone:        get(r, 'det_telephone'),
-        reside_fkt:       getBool(r, 'det_reside_fkt'),
-        adresse:          get(r, 'det_adresse'),
+        kobo_parent_id:         submissionId,
+        nom:                    get(r, 'det_nom'),
+        prenom:                 get(r, 'det_prenom'),
+        type_personne:          typePersonne,
+        lien_parcelle:          lienParcelle || undefined,
+        nationalite:            get(r, 'det_nationalite') || 'Malagasy',
+        cin:                    get(r, 'det_cin'),
+        cin_date:               getDate(cinDateRaw),
+        cin_lieu:               get(r, 'det_cin_lieu') || undefined,
+        telephone:              get(r, 'det_telephone'),
+        reside_fkt:             getBool(r, 'det_reside_fkt'),
+        adresse:                get(r, 'det_adresse'),
+        present_sur_place:      getBool(r, 'det_present'),
+        source_information:     get(r, 'det_source_info', 'source_information') || undefined,
+        detenteur_connu_valeur: get(r, 'detenteur_connu') || undefined,
       };
     });
 

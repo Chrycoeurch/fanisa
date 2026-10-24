@@ -515,11 +515,29 @@ export default function FoncierModule({ foyers, membres }: Props) {
                         ) : det.detenteurKobo ? (
                           <>
                             <p className="font-semibold text-slate-800">{det.detenteurKobo.nom} {det.detenteurKobo.prenom}</p>
-                            <p className="text-slate-500">{det.detenteurKobo.lien_parcelle}</p>
-                            {det.detenteurKobo.cin && <p className="font-mono text-slate-400">CIN : {det.detenteurKobo.cin}</p>}
+                            {det.detenteurKobo.type_personne && det.detenteurKobo.type_personne !== 'personne_physique' && (
+                              <p className="text-[9px] bg-slate-100 text-slate-600 px-1 py-0.5 rounded inline-block mb-0.5">{det.detenteurKobo.type_personne}</p>
+                            )}
+                            {det.detenteurKobo.lien_parcelle && <p className="text-slate-500">{det.detenteurKobo.lien_parcelle}</p>}
+                            {det.detenteurKobo.cin && <p className="font-mono text-slate-400">CIN : {det.detenteurKobo.cin}{det.detenteurKobo.cin_lieu ? ` (${det.detenteurKobo.cin_lieu})` : ''}</p>}
                             {det.detenteurKobo.telephone && <p className="text-slate-400">☎ {det.detenteurKobo.telephone}</p>}
+                            {det.detenteurKobo.source_information && <p className="text-[9px] text-slate-400 mt-0.5">Source : {det.detenteurKobo.source_information}</p>}
                           </>
                         ) : <p className="text-slate-400 italic">Non défini</p>}
+                        {/* Infos parcelle : occupation & documents */}
+                        {((p as any).annee_debut_occupation || (p as any).documents_propriete) && (
+                          <div className="mt-1.5 pt-1.5 border-t border-slate-100 space-y-0.5">
+                            {(p as any).annee_debut_occupation && <p className="text-[9px] text-slate-400">Occupation depuis : <span className="font-semibold text-slate-600">{(p as any).annee_debut_occupation}</span></p>}
+                            {(p as any).documents_propriete && <p className="text-[9px] text-slate-400">Doc. propriété : <span className="font-semibold text-slate-600">{(p as any).documents_propriete}</span></p>}
+                            {(p as any).autres_documents?.length > 0 && (
+                              <div className="flex flex-wrap gap-0.5 mt-0.5">
+                                {((p as any).autres_documents as string[]).map((d: string) => (
+                                  <span key={d} className="bg-violet-50 text-violet-600 px-1 py-0.5 rounded text-[8px]">{d}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       {/* Constructions (Kobo) ou Bâtiments (manuel) */}
                       <div className="bg-white border border-slate-200 rounded-lg p-3">
@@ -590,9 +608,38 @@ export default function FoncierModule({ foyers, membres }: Props) {
                             <div key={d.id || i} className="bg-blue-50 rounded p-2">
                               <p className="font-semibold text-blue-800 text-[10px]">{d.nom} {d.prenom}</p>
                               {d.lien_parcelle && <p className="text-blue-600 text-[10px]">{d.lien_parcelle}</p>}
+                              {d.type_personne && d.type_personne !== 'personne_physique' && <p className="text-blue-400 text-[9px]">{d.type_personne}</p>}
                               {d.cin && <p className="font-mono text-blue-400 text-[9px]">CIN : {d.cin}</p>}
+                              {d.telephone && <p className="text-blue-400 text-[9px]">☎ {d.telephone}</p>}
+                              {d.source_information && <p className="text-blue-300 text-[8px]">Source : {d.source_information}</p>}
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Informations collecte agent */}
+                    {((p as any).personne_rencontree || (p as any).origine_droit || (p as any).observations) && (
+                      <div className="bg-white border border-slate-200 rounded-lg p-3">
+                        <p className="font-bold text-slate-500 uppercase text-[10px] mb-2 flex items-center gap-1"><AlertCircle className="h-3 w-3" />Observations agent</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-[10px]">
+                          {(p as any).origine_droit && (
+                            <div><span className="text-slate-400">Origine droit : </span><span className="font-semibold text-slate-700">{(p as any).origine_droit}{(p as any).annee_acquisition ? ` (${(p as any).annee_acquisition})` : ''}</span></div>
+                          )}
+                          {(p as any).personne_rencontree && (
+                            <div><span className="text-slate-400">Personne rencontrée : </span><span className="font-semibold text-slate-700">{(p as any).personne_rencontree}</span></div>
+                          )}
+                          {(p as any).difficulte_rencontree && (
+                            <div><span className="text-slate-400">Difficulté : </span><span className="font-semibold text-slate-700">{(p as any).difficulte_rencontree}</span></div>
+                          )}
+                          {(p as any).besoin_verification && (
+                            <div><span className="bg-amber-100 text-amber-700 px-1 py-0.5 rounded">⚠ Vérification requise</span></div>
+                          )}
+                          {(p as any).dossier_a_completer && (
+                            <div><span className="bg-red-100 text-red-700 px-1 py-0.5 rounded">📋 Dossier à compléter</span></div>
+                          )}
+                          {(p as any).observations && (
+                            <div className="col-span-full mt-1"><span className="text-slate-400">Observations : </span><span className="text-slate-600">{(p as any).observations}</span></div>
+                          )}
                         </div>
                       </div>
                     )}
