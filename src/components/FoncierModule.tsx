@@ -144,7 +144,7 @@ function ParcelleModal({ parcelle, foyers, membres, onClose, onSave }: {
             <div className="bg-indigo-600 p-2 rounded-xl"><Building2 className="h-5 w-5 text-white" /></div>
             <div>
               <h2 className="text-base font-bold text-slate-900">{parcelle ? 'Modifier la parcelle' : 'Nouvelle parcelle'}</h2>
-              {data.numero_lot && <p className="text-xs text-indigo-600 font-mono font-bold">LOT {data.numero_lot}</p>}
+              {((data as any).lot_id || data.numero_lot) && <p className="text-xs text-indigo-600 font-mono font-bold">LOT {(data as any).lot_id || data.numero_lot}</p>}
             </div>
           </div>
           <button onClick={onClose}><X className="h-5 w-5 text-slate-500" /></button>
@@ -366,7 +366,8 @@ export default function FoncierModule({ foyers, membres }: Props) {
 
   const filtered = parcelles.filter(p => {
     const q = search.toLowerCase();
-    return (p.numero_lot || '').toLowerCase().includes(q) || (p.adresse || '').toLowerCase().includes(q) || (p.fokontany || '').toLowerCase().includes(q);
+    const lot = ((p as any).lot_id || p.numero_lot || '').toLowerCase();
+    return lot.includes(q) || (p.adresse || '').toLowerCase().includes(q) || (p.fokontany || '').toLowerCase().includes(q);
   });
 
   const BADGE_USAGE: Record<string, string> = {
@@ -449,14 +450,17 @@ export default function FoncierModule({ foyers, membres }: Props) {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono font-bold text-indigo-700 text-sm">LOT {p.numero_lot}</span>
-                      {p.usage && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${BADGE_USAGE[p.usage] || 'bg-slate-100 text-slate-600'}`}>{p.usage}</span>}
+                      <span className="font-mono font-bold text-indigo-700 text-sm">LOT {(p as any).lot_id || p.numero_lot || '—'}</span>
+                      {((p as any).statut_propriete || p.usage) && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${BADGE_USAGE[(p as any).statut_propriete || p.usage || ''] || 'bg-slate-100 text-slate-600'}`}>{(p as any).statut_propriete || p.usage}</span>}
+                      {((p as any).statut_collecte) && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{(p as any).statut_collecte}</span>}
                       {p.titre_foncier && <span className="text-[10px] text-slate-400 font-mono">{p.titre_foncier}</span>}
                     </div>
-                    <p className="text-sm text-slate-600 mt-0.5">{p.adresse || '—'}</p>
+                    <p className="text-sm text-slate-600 mt-0.5">{p.adresse || (p as any).quartier || '—'}</p>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400">
                       {p.fokontany && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{p.fokontany}</span>}
-                      {p.superficie_m2 && <span>{p.superficie_m2} m²</span>}
+                      {((p as any).superficie_declaree || p.superficie_m2) && <span>{(p as any).superficie_declaree || p.superficie_m2} m²</span>}
+                      {(p as any).nb_constructions > 0 && <span>🏗 {(p as any).nb_constructions} construction{(p as any).nb_constructions > 1 ? 's' : ''}</span>}
+                      {(p as any).code_agent && <span>Agent : {(p as any).code_agent}</span>}
                       {p.gps_lat && <span className="font-mono">📍 {p.gps_lat?.toFixed(4)}, {p.gps_lng?.toFixed(4)}</span>}
                     </div>
                   </div>
