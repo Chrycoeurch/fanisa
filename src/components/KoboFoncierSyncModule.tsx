@@ -267,11 +267,11 @@ async function parseFoncierXlsx(file: File): Promise<FoncierImportResult[]> {
     const dateCollecte = getDate(dateCollecteRaw);
 
     const parcelle: FoncierParcelle = {
-      foncier_id:            get(row, 'foncier_id'),
-      lot_id:                lotId,
-      lot_norm:              get(row, 'lot_norm'),
-      lot_prefixe:           get(row, 'lot_prefixe'),
-      kobo_uuid:             get(row, '_uuid'),
+      foncier_id:            get(row, 'foncier_id') || undefined,
+      lot_id:                lotId || undefined,
+      lot_norm:              get(row, 'lot_norm') || undefined,
+      lot_prefixe:           get(row, 'lot_prefixe') || undefined,
+      kobo_uuid:             get(row, '_uuid') || undefined,
       kobo_submission_id:    submissionId,
 
       fokontany:             get(row, 'fokontany', 'Fokontany') || 'Ambodisaina',
