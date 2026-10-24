@@ -49,25 +49,17 @@ DECLARE
   t TEXT;
 BEGIN
   FOREACH t IN ARRAY tables LOOP
-    -- Politique anon select
-    EXECUTE format(
-      'CREATE POLICY IF NOT EXISTS "%s_anon_select" ON %I FOR SELECT TO anon USING (true)',
-      t, t
-    );
-    -- Politique anon insert
-    EXECUTE format(
-      'CREATE POLICY IF NOT EXISTS "%s_anon_insert" ON %I FOR INSERT TO anon WITH CHECK (true)',
-      t, t
-    );
-    -- Politique anon update
-    EXECUTE format(
-      'CREATE POLICY IF NOT EXISTS "%s_anon_update" ON %I FOR UPDATE TO anon USING (true) WITH CHECK (true)',
-      t, t
-    );
-    -- Politique anon delete
-    EXECUTE format(
-      'CREATE POLICY IF NOT EXISTS "%s_anon_delete" ON %I FOR DELETE TO anon USING (true)',
-      t, t
-    );
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = t AND policyname = t || '_anon_select') THEN
+      EXECUTE format('CREATE POLICY "%s_anon_select" ON %I FOR SELECT TO anon USING (true)', t, t);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = t AND policyname = t || '_anon_insert') THEN
+      EXECUTE format('CREATE POLICY "%s_anon_insert" ON %I FOR INSERT TO anon WITH CHECK (true)', t, t);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = t AND policyname = t || '_anon_update') THEN
+      EXECUTE format('CREATE POLICY "%s_anon_update" ON %I FOR UPDATE TO anon USING (true) WITH CHECK (true)', t, t);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = t AND policyname = t || '_anon_delete') THEN
+      EXECUTE format('CREATE POLICY "%s_anon_delete" ON %I FOR DELETE TO anon USING (true)', t, t);
+    END IF;
   END LOOP;
 END $$;
