@@ -15,6 +15,7 @@ import StatsView from './components/StatsView';
 import CRAADModule from './components/CRAADModule';
 import VieCommunautaireModule from './components/VieCommunautaireModule';
 import KoboSyncModule from './components/KoboSyncModule';
+import KoboFoncierSyncModule from './components/KoboFoncierSyncModule';
 import CollecteModule from './components/CollecteModule';
 import CotisationsModule from './components/CotisationsModule';
 import PresenceModule from './components/PresenceModule';
@@ -25,6 +26,37 @@ import {
   Package, Loader2, Home, Filter, Award, BarChart2, Download, RefreshCw,
   Coins, CalendarCheck, ClipboardList
 } from 'lucide-react';
+
+// ── Wrapper KoboSync : toggle ménage / foncier ─────────────────────────────
+function KoboTabWrapper({ onMenageImportDone }: { onMenageImportDone: () => void }) {
+  const [mode, setMode] = React.useState<'menage' | 'foncier'>('menage');
+  return (
+    <div className="space-y-4">
+      {/* Sélecteur de mode */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <p className="text-xs text-slate-500 mb-3 font-medium uppercase tracking-wide">Type d'import KoboToolbox</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMode('menage')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition ${mode === 'menage' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            🏠 Ménage (recensement)
+          </button>
+          <button
+            onClick={() => setMode('foncier')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition ${mode === 'foncier' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            📍 Foncier (parcelles)
+          </button>
+        </div>
+      </div>
+      {mode === 'menage'
+        ? <KoboSyncModule onImportDone={onMenageImportDone} />
+        : <KoboFoncierSyncModule />
+      }
+    </div>
+  );
+}
 
 export default function App() {
   const [foyers, setFoyers] = useState<Foyer[]>([]);
@@ -411,14 +443,16 @@ export default function App() {
         {activeTab === 'patrimoine' && <PatrimoineModule foyers={foyers} />}
         {activeTab === 'collecte' && <CollecteModule />}
         {activeTab === 'kobo' && (
-          <KoboSyncModule onImportDone={async () => {
-            const [{ data: f }, { data: m }] = await Promise.all([
-              supabase.from('foyers').select('*').order('created_at', { ascending: false }),
-              supabase.from('membres').select('*').order('created_at'),
-            ]);
-            setFoyers((f as Foyer[]) || []);
-            setMembres((m as Membre[]) || []);
-          }} />
+          <KoboTabWrapper
+            onMenageImportDone={async () => {
+              const [{ data: f }, { data: m }] = await Promise.all([
+                supabase.from('foyers').select('*').order('created_at', { ascending: false }),
+                supabase.from('membres').select('*').order('created_at'),
+              ]);
+              setFoyers((f as Foyer[]) || []);
+              setMembres((m as Membre[]) || []);
+            }}
+          />
         )}
         {activeTab === 'cotisations' && <CotisationsModule agentNom="Chef Fokontany (Admin)" />}
         {activeTab === 'presences' && <PresenceModule agentNom="Chef Fokontany (Admin)" />}
