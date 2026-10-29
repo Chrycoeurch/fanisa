@@ -17,12 +17,16 @@ import VieCommunautaireModule from './components/VieCommunautaireModule';
 import KoboSyncModule from './components/KoboSyncModule';
 import KoboFoncierSyncModule from './components/KoboFoncierSyncModule';
 import CollecteModule from './components/CollecteModule';
+import GestionUtilisateurs from './components/GestionUtilisateurs';
+import LoginScreen from './components/LoginScreen';
+import { useAuth } from './lib/AuthContext';
+import { labelRole, couleurRole } from './lib/auth';
 import { FOKONTANY_LIST } from './seedData';
 import {
   FolderLock, Users, HeartPulse, History, PlusCircle, Search,
   RotateCcw, ShieldCheck, Building, FileSignature, Landmark,
   Package, Loader2, Home, Filter, Award, BarChart2, Download, RefreshCw,
-  ClipboardList
+  ClipboardList, LogOut, Shield
 } from 'lucide-react';
 
 // ── Wrapper KoboSync : toggle ménage / foncier ─────────────────────────────
@@ -57,6 +61,30 @@ function KoboTabWrapper({ onMenageImportDone }: { onMenageImportDone: () => void
 }
 
 export default function App() {
+  const { user, permissions, loading: authLoading, logout } = useAuth();
+
+  // ── Attente auth ────────────────────────────────────────────
+  if (authLoading) return (
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+      <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+    </div>
+  );
+
+  // ── Non connecté → LoginScreen ───────────────────────────────
+  if (!user || !permissions) return <LoginScreen />;
+
+  return <AppContent user={user} permissions={permissions} logout={logout} />;
+}
+
+function AppContent({
+  user,
+  permissions,
+  logout,
+}: {
+  user: import('./lib/auth').UtilisateurConnecte;
+  permissions: import('./lib/auth').Permissions;
+  logout: () => void;
+}) {
   const [foyers, setFoyers] = useState<Foyer[]>([]);
   const [membres, setMembres] = useState<Membre[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
@@ -65,7 +93,8 @@ export default function App() {
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'patrimoine'|'land'|'collecte'|'kobo'|'logs'>('annuaire');
+  type TabKey = 'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'patrimoine'|'land'|'collecte'|'kobo'|'logs'|'utilisateurs';
+  const [activeTab, setActiveTab] = useState<TabKey>('annuaire');
   const [searchQuery, setSearchQuery] = useState('');
   const [fokontanyFilter, setFokontanyFilter] = useState('Tous');
   const [statutFilter, setStatutFilter] = useState('Tous');
@@ -121,7 +150,7 @@ export default function App() {
 
   // ── Log ──────────────────────────────────────────────────────
   const addLog = async (action: string, details: string, foyer_id?: string, membre_id?: string) => {
-    const log = { date: new Date().toISOString(), utilisateur: 'Chef Fokontany (Admin)', action, details, foyer_id: foyer_id || null, membre_id: membre_id || null };
+    const log = { date: new Date().toISOString(), utilisateur: user.nom_complet || user.nom_utilisateur, action, details, foyer_id: foyer_id || null, membre_id: membre_id || null };
     const { data } = await supabase.from('logs').insert(log).select().single();
     if (data) setLogs(prev => [data, ...prev]);
   };
@@ -282,11 +311,35 @@ export default function App() {
               </h1>
             </div>
           </div>
-          {activeTab === 'annuaire' && (
-            <button onClick={() => { setEditingFoyer(undefined); setShowFoyerForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition">
-              <PlusCircle className="h-4 w-4" />Nouveau foyer
-            </button>
-          )}
+
+          {/* Droite : bouton + profil utilisateur */}
+          <div className="flex items-center gap-3">
+            {activeTab === 'annuaire' && permissions.annuaire && permissions.peutEcrire && (
+              <button onClick={() => { setEditingFoyer(undefined); setShowFoyerForm(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition">
+                <PlusCircle className="h-4 w-4" />Nouveau foyer
+              </button>
+            )}
+
+            {/* Profil connecté */}
+            <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
+              <div className="text-right hidden sm:block">
+                <p className="text-xs font-bold text-slate-700">{user.nom_complet || user.nom_utilisateur}</p>
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${couleurRole(user.role)}`}>
+                  {labelRole(user.role)}
+                </span>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
+                {(user.nom_complet || user.nom_utilisateur).charAt(0).toUpperCase()}
+              </div>
+              <button
+                onClick={logout}
+                title="Se déconnecter"
+                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -296,59 +349,70 @@ export default function App() {
 
           {/* ── Groupe 1 : Registre ── */}
           {([
-            ['annuaire', Home, `Foyers (${foyers.length})`],
-            ['documents', FileSignature, 'Actes & Docs'],
-            ['statistics', HeartPulse, 'Statistiques'],
-            ['craad', BarChart2, 'CRAAD'],
-          ] as const).map(([key, Icon, label]) => (
-            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+            ['annuaire', Home, `Foyers (${foyers.length})`, permissions.annuaire],
+            ['documents', FileSignature, 'Actes & Docs', permissions.documents],
+            ['statistics', HeartPulse, 'Statistiques', permissions.statistics],
+            ['craad', BarChart2, 'CRAAD', permissions.craad],
+          ] as [TabKey, any, string, boolean][]).filter(([,,, ok]) => ok).map(([key, Icon, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
               <Icon className="h-3.5 w-3.5" />{label}
             </button>
           ))}
 
           {/* Séparateur */}
-          <div className="w-px bg-slate-200 my-2 mx-1" />
+          {(permissions.vie_comm || permissions.finances) && <div className="w-px bg-slate-200 my-2 mx-1" />}
 
           {/* ── Groupe 2 : Communauté ── */}
           {([
-            ['vie_comm', Users, 'Vie Communautaire'],
-            ['finances', Landmark, 'Finances'],
-          ] as const).map(([key, Icon, label]) => (
-            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-emerald-600 text-emerald-700 bg-emerald-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+            ['vie_comm', Users, 'Vie Communautaire', permissions.vie_comm],
+            ['finances', Landmark, 'Finances', permissions.finances],
+          ] as [TabKey, any, string, boolean][]).filter(([,,, ok]) => ok).map(([key, Icon, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-emerald-600 text-emerald-700 bg-emerald-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
               <Icon className="h-3.5 w-3.5" />{label}
             </button>
           ))}
 
           {/* Séparateur */}
-          <div className="w-px bg-slate-200 my-2 mx-1" />
+          {(permissions.materials || permissions.patrimoine || permissions.land) && <div className="w-px bg-slate-200 my-2 mx-1" />}
 
           {/* ── Groupe 3 : Patrimoine & Foncier ── */}
           {([
-            ['materials', Package, 'Matériels'],
-            ['patrimoine', Award, 'Patrimoine'],
-            ['land', Building, 'Foncier'],
-          ] as const).map(([key, Icon, label]) => (
-            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-amber-600 text-amber-700 bg-amber-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+            ['materials', Package, 'Matériels', permissions.materials],
+            ['patrimoine', Award, 'Patrimoine', permissions.patrimoine],
+            ['land', Building, 'Foncier', permissions.land],
+          ] as [TabKey, any, string, boolean][]).filter(([,,, ok]) => ok).map(([key, Icon, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-amber-600 text-amber-700 bg-amber-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
               <Icon className="h-3.5 w-3.5" />{label}
             </button>
           ))}
 
           {/* Séparateur */}
-          <div className="w-px bg-slate-200 my-2 mx-1" />
+          {(permissions.collecte || permissions.kobo || permissions.logs || permissions.peutGererUsers) && <div className="w-px bg-slate-200 my-2 mx-1" />}
 
           {/* ── Groupe 4 : Administration ── */}
           {([
-            ['collecte', ClipboardList, 'Collecte'],
-            ['kobo', RefreshCw, 'KoboSync'],
-            ['logs', History, `Journal (${logs.length})`],
-          ] as const).map(([key, Icon, label]) => (
-            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-slate-600 text-slate-700 bg-slate-100/60' : 'border-transparent text-slate-400 hover:text-slate-700'}`}>
+            ['collecte', ClipboardList, 'Collecte', permissions.collecte],
+            ['kobo', RefreshCw, 'KoboSync', permissions.kobo],
+            ['logs', History, `Journal (${logs.length})`, permissions.logs],
+            ['utilisateurs', Shield, 'Utilisateurs', permissions.peutGererUsers],
+          ] as [TabKey, any, string, boolean][]).filter(([,,, ok]) => ok).map(([key, Icon, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-slate-600 text-slate-700 bg-slate-100/60' : 'border-transparent text-slate-400 hover:text-slate-700'}`}>
               <Icon className="h-3.5 w-3.5" />{label}
             </button>
           ))}
 
         </nav>
       </div>
+
+      {/* Bannière lecture seule (superviseur) */}
+      {!permissions.peutEcrire && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2">
+          <p className="text-xs text-amber-800 font-semibold text-center max-w-7xl mx-auto flex items-center justify-center gap-2">
+            <Shield className="h-3.5 w-3.5" />
+            Mode lecture seule — Votre rôle (Superviseur) ne permet pas de modifier les données.
+          </p>
+        </div>
+      )}
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-5">
 
@@ -451,9 +515,11 @@ export default function App() {
                 <Home className="h-12 w-12 text-slate-200 mx-auto mb-4" />
                 <p className="font-bold text-slate-700 text-lg">Aucun foyer enregistré</p>
                 <p className="text-sm text-slate-500 mt-1">Commencez par créer le premier foyer du registre.</p>
-                <button onClick={() => { setEditingFoyer(undefined); setShowFoyerForm(true); }} className="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition flex items-center gap-2 mx-auto">
-                  <PlusCircle className="h-4 w-4" />Créer le premier foyer
-                </button>
+                {permissions.peutEcrire && (
+                  <button onClick={() => { setEditingFoyer(undefined); setShowFoyerForm(true); }} className="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition flex items-center gap-2 mx-auto">
+                    <PlusCircle className="h-4 w-4" />Créer le premier foyer
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -487,7 +553,11 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'logs' && (
+        {activeTab === 'utilisateurs' && permissions.peutGererUsers && (
+          <GestionUtilisateurs currentUserId={user.id} />
+        )}
+
+        {activeTab === 'logs' && permissions.logs && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <div className="relative"><Search className="h-4 w-4 text-slate-400 absolute left-3 top-3" /><input value={logSearch} onChange={e => setLogSearch(e.target.value)} placeholder="Rechercher…" className="w-full text-xs pl-9 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" /></div>
