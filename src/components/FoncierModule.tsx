@@ -4,8 +4,9 @@ import { Foyer, Membre, Parcelle, Batiment, TitulaireFoncier, Detenteur, Proprie
 import {
   Building2, Plus, X, Edit2, Trash2, Search, MapPin, Home,
   ChevronDown, ChevronRight, User, Users, Loader2, Upload, FileText,
-  Landmark, Eye, Save, AlertCircle
+  Landmark, Eye, Save, AlertCircle, Printer
 } from 'lucide-react';
+import { imprimerFicheParcellaire } from '../lib/ficheParcellairePDF';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; }
 
@@ -729,6 +730,13 @@ export default function FoncierModule({ foyers, membres }: Props) {
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => toggleExpand(p.id)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
                       {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+                    <button
+                      onClick={() => imprimerFicheParcellaire(p)}
+                      title="Générer fiche PDF"
+                      className="p-1.5 hover:bg-amber-50 rounded-lg text-slate-400 hover:text-amber-600"
+                    >
+                      <Printer className="h-4 w-4" />
                     </button>
                     <button onClick={() => { setEditingParcelle(p); setShowModal(true); }} className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600"><Edit2 className="h-4 w-4" /></button>
                     <button onClick={() => deleteParcelle(p.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
