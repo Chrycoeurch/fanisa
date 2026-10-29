@@ -301,16 +301,61 @@ function DoleancesTab({ foyers, membres }: Props) {
 }
 
 // ── SOUS-MODULE ÉVÉNEMENTS ────────────────────────────────────────
+// Règles automatiques de ciblage participants selon le type d'événement
+// Chaque règle retourne un sous-ensemble de foyers/membres
+function ciblerParticipants(
+  typeEvt: string,
+  foyers: Foyer[],
+  membres: Membre[]
+): Foyer[] {
+  const t = (typeEvt || '').toLowerCase();
+  if (t.includes('vaccination') || t.includes('santé')) {
+    // Tous les foyers (toute la communauté)
+    return foyers;
+  }
+  if (t.includes('distribution') || t.includes('aide')) {
+    // Tous les foyers (campagne large)
+    return foyers;
+  }
+  if (t.includes('assemblée') || t.includes('communautaire') || t.includes('urgence') || t.includes('catastrophe')) {
+    // Tous les foyers
+    return foyers;
+  }
+  if (t.includes('formation') || t.includes('sensibilisation')) {
+    // Tous les foyers (formation ouverte)
+    return foyers;
+  }
+  if (t.includes('bureau') || t.includes('médiation') || t.includes('ordinaire') || t.includes('extraordinaire')) {
+    // Réunions restreintes : chef de ménage uniquement → tous les foyers restent mais on affiche juste le chef
+    return foyers;
+  }
+  // Par défaut : tous
+  return foyers;
+}
+
+// Label descriptif du ciblage
+function labelCiblage(typeEvt: string): string {
+  const t = (typeEvt || '').toLowerCase();
+  if (t.includes('vaccination') || t.includes('santé')) return 'Tous les ménages — santé publique';
+  if (t.includes('distribution') || t.includes('aide')) return 'Tous les ménages — distribution';
+  if (t.includes('assemblée') || t.includes('communautaire')) return 'Tous les ménages — assemblée';
+  if (t.includes('urgence') || t.includes('catastrophe')) return 'Tous les ménages — urgence';
+  if (t.includes('formation') || t.includes('sensibilisation')) return 'Tous les ménages — formation ouverte';
+  if (t.includes('bureau') || t.includes('médiation')) return 'Réunion restreinte — chefs de ménage';
+  return 'Tous les ménages';
+}
+
 function EvenementsTab({ foyers, membres }: Props) {
   const [evenements, setEvenements] = useState<Evenement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<Evenement | null>(null);
   const [filtreStatut, setFiltreStatut] = useState('');
+  const [filtreFokontany, setFiltreFokontany] = useState('');
+  const [filtreRecherche, setFiltreRecherche] = useState('');  // filtre texte dans la liste participants
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [participants, setParticipants] = useState<any[]>([]);
-  const [searchParticipant, setSearchParticipant] = useState('');
   const [editingSection, setEditingSection] = useState<string|null>(null);
   const [sectionValue, setSectionValue] = useState('');
 
@@ -332,8 +377,6 @@ function EvenementsTab({ foyers, membres }: Props) {
     const { data } = await supabase.from('evenements_participants').select('*').eq('evenement_id', id);
     setParticipants(data||[]);
   };
-
-  const ouvrir = async (e: Evenement) => { setSelected(e); await loadParticipants(e.id); };
 
   const creer = async () => {
     if (!form.titre || !form.type || !form.date_evenement) { alert('Titre, type et date sont obligatoires.'); return; }
@@ -360,17 +403,54 @@ function EvenementsTab({ foyers, membres }: Props) {
     await load();
   };
 
-  const ajouterParticipant = async (foyer: Foyer) => {
-    if (!selected) return;
-    const exist = participants.find(p=>p.foyer_id===foyer.id);
-    if (exist) return;
-    await supabase.from('evenements_participants').insert({ evenement_id: selected.id, foyer_id: foyer.id, present: false });
-    await loadParticipants(selected.id);
-    await supabase.from('evenements').update({ nb_presents: participants.length + 1 }).eq('id', selected.id);
+  // Charger OU créer automatiquement les lignes participants selon le ciblage
+  const chargerOuInitParticipants = async (evt: Evenement) => {
+    const { data: existing } = await supabase
+      .from('evenements_participants')
+      .select('*')
+      .eq('evenement_id', evt.id);
+
+    if (existing && existing.length > 0) {
+      setParticipants(existing);
+      return;
+    }
+
+    // Aucun participant encore — pré-remplir selon le ciblage automatique
+    const cibles = ciblerParticipants(evt.type, foyers, membres);
+    if (cibles.length === 0) { setParticipants([]); return; }
+
+    const rows = cibles.map(f => ({
+      evenement_id: evt.id,
+      foyer_id: f.id,
+      present: false,
+    }));
+
+    // Insérer par lots de 50
+    for (let i = 0; i < rows.length; i += 50) {
+      await supabase.from('evenements_participants').insert(rows.slice(i, i + 50));
+    }
+    await supabase.from('evenements').update({ nb_presents: 0 }).eq('id', evt.id);
+    const { data: fresh } = await supabase
+      .from('evenements_participants')
+      .select('*')
+      .eq('evenement_id', evt.id);
+    setParticipants(fresh || []);
+  };
+
+  const ouvrir = async (e: Evenement) => {
+    setSelected(e);
+    setFiltreRecherche('');
+    setFiltreFokontany('');
+    await chargerOuInitParticipants(e);
   };
 
   const togglePresence = async (partId: string, present: boolean) => {
     await supabase.from('evenements_participants').update({ present: !present }).eq('id', partId);
+    // Mettre à jour nb_presents
+    const newPresent = !present;
+    const nb = participants.filter(p => p.id === partId ? newPresent : p.present).length + (newPresent ? 0 : 0);
+    const nbPresents = participants.filter(p => (p.id === partId ? newPresent : p.present)).length;
+    await supabase.from('evenements').update({ nb_presents: nbPresents }).eq('id', selected!.id);
     await loadParticipants(selected!.id);
   };
 
@@ -380,10 +460,22 @@ function EvenementsTab({ foyers, membres }: Props) {
     return true;
   });
 
-  const participantSearch = foyers.filter(f =>
-    searchParticipant && (f.code_menage.toLowerCase().includes(searchParticipant.toLowerCase()) ||
-    membres.find(m=>m.foyer_id===f.id&&m.is_chef&&`${m.nom} ${m.prenom}`.toLowerCase().includes(searchParticipant.toLowerCase())))
-  ).slice(0, 6);
+  // Fokontany disponibles dans la liste des foyers
+  const fokontanyList = [...new Set(foyers.map(f => (f as any).fokontany).filter(Boolean))].sort();
+
+  // Participants filtrés (pour l'affichage dans le dossier)
+  const participantsFiltres = participants.filter(p => {
+    const f = foyers.find(ff => ff.id === p.foyer_id);
+    const chef = membres.find(m => m.foyer_id === p.foyer_id && m.is_chef);
+    if (filtreFokontany && (f as any)?.fokontany !== filtreFokontany) return false;
+    if (filtreRecherche) {
+      const q = filtreRecherche.toLowerCase();
+      const codeMatch = f?.code_menage?.toLowerCase().includes(q);
+      const nomMatch = chef && `${chef.nom} ${chef.prenom}`.toLowerCase().includes(q);
+      if (!codeMatch && !nomMatch) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-4">
@@ -502,33 +594,82 @@ function EvenementsTab({ foyers, membres }: Props) {
                 </div>
               ))}
 
-              {/* Participants */}
-              <div className="border border-slate-200 rounded-xl p-4">
-                <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Participants ({participants.length})</h3>
-                <div className="relative mb-3"><Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none"/>
-                  <input value={searchParticipant} onChange={e=>setSearchParticipant(e.target.value)} placeholder="Ajouter un ménage..." className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none"/>
-                  {searchParticipant && participantSearch.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl mt-1 max-h-40 overflow-y-auto">
-                      {participantSearch.map(f=>{
-                        const chef=membres.find(m=>m.foyer_id===f.id&&m.is_chef);
-                        return <button key={f.id} onMouseDown={()=>{ajouterParticipant(f);setSearchParticipant('');}} className="w-full text-left px-3 py-2 hover:bg-violet-50 flex items-center gap-2 text-xs">
-                          <span className="font-mono text-violet-600">{f.code_menage}</span>{chef&&<span>{chef.nom} {chef.prenom}</span>}
-                        </button>;
-                      })}
+              {/* Participants — liste automatique selon le type */}
+              <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+                {/* En-tête avec ciblage automatique */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-500 uppercase">
+                      Participants ({participantsFiltres.length}/{participants.length})
+                    </h3>
+                    <p className="text-[10px] text-violet-500 font-medium mt-0.5">
+                      🎯 {labelCiblage(selected.type)}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
+                    {participants.filter(p=>p.present).length} présent{participants.filter(p=>p.present).length>1?'s':''}
+                  </span>
+                </div>
+
+                {/* Filtres */}
+                <div className="flex gap-2 flex-wrap">
+                  <div className="relative flex-1 min-w-32">
+                    <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none"/>
+                    <input
+                      value={filtreRecherche}
+                      onChange={e=>setFiltreRecherche(e.target.value)}
+                      placeholder="Rechercher ménage ou chef…"
+                      className="w-full pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-violet-400"
+                    />
+                  </div>
+                  {fokontanyList.length > 1 && (
+                    <select
+                      value={filtreFokontany}
+                      onChange={e=>setFiltreFokontany(e.target.value)}
+                      className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-violet-400"
+                    >
+                      <option value="">Tous les fokontany</option>
+                      {fokontanyList.map(fk=><option key={fk} value={fk}>{fk}</option>)}
+                    </select>
+                  )}
+                  {/* Toggle présents / tous */}
+                  <button
+                    onClick={()=>setFiltreRecherche(filtreRecherche === '__presents__' ? '' : '__presents__')}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition ${filtreRecherche==='__presents__'?'bg-emerald-50 border-emerald-300 text-emerald-700':'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    ✓ Présents only
+                  </button>
+                </div>
+
+                {/* Liste */}
+                <div className="space-y-1 max-h-56 overflow-y-auto">
+                  {(filtreRecherche === '__presents__'
+                    ? participantsFiltres.filter(p=>p.present)
+                    : participantsFiltres
+                  ).map(p=>{
+                    const f=foyers.find(ff=>ff.id===p.foyer_id);
+                    const chef=membres.find(m=>m.foyer_id===p.foyer_id&&m.is_chef);
+                    return (
+                      <div key={p.id} className={`flex items-center justify-between rounded-lg px-3 py-2 transition ${p.present?'bg-emerald-50':'bg-slate-50'}`}>
+                        <div>
+                          <span className="text-xs font-mono text-violet-600 font-semibold">{f?.code_menage||'—'}</span>
+                          {chef&&<span className="text-xs text-slate-600 ml-2">{chef.nom} {chef.prenom}</span>}
+                          {(f as any)?.fokontany&&<span className="text-[10px] text-slate-400 ml-2">{(f as any).fokontany}</span>}
+                        </div>
+                        <button
+                          onClick={()=>togglePresence(p.id,p.present)}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition ${p.present?'bg-emerald-100 text-emerald-700 hover:bg-emerald-200':'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                        >
+                          {p.present?'✓ Présent':'Marquer présent'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {participantsFiltres.length === 0 && (
+                    <div className="py-6 text-center text-slate-400 text-xs">
+                      Aucun participant ne correspond aux filtres.
                     </div>
                   )}
-                </div>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
-                  {participants.map(p=>{
-                    const foyer=foyers.find(f=>f.id===p.foyer_id);
-                    const chef=membres.find(m=>m.foyer_id===p.foyer_id&&m.is_chef);
-                    return <div key={p.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
-                      <span className="text-xs"><span className="font-mono text-violet-600">{foyer?.code_menage}</span>{chef&&` · ${chef.nom} ${chef.prenom}`}</span>
-                      <button onClick={()=>togglePresence(p.id,p.present)} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.present?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-500'}`}>
-                        {p.present?'✓ Présent':'Absent'}
-                      </button>
-                    </div>;
-                  })}
                 </div>
               </div>
             </div>

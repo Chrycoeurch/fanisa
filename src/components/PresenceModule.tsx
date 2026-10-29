@@ -1,15 +1,16 @@
 /**
- * PresenceModule.tsx — Module Présence aux réunions pour FANISA
+ * PresenceModule.tsx — Pointage de présence aux réunions & événements
  *
- * Workflow :
- *  1. Agent sélectionne ou crée une réunion
- *  2. Scanne le QR carnet du ménage (ou saisie manuelle)
+ * Workflow simplifié :
+ *  1. Agent sélectionne une réunion/événement EN COURS depuis la liste (lecture seule)
+ *  2. Scanne le QR carnet du ménage (ou saisie manuelle du code)
  *  3. Choisit le membre présent parmi les membres du foyer
  *  4. Enregistre la présence (max 1 membre par ménage par réunion)
  *
- * Tables Supabase :
- *  - reunions (id, titre, date, lieu, type, created_at)
- *  - presences (id, reunion_id, foyer_id, menage_id, membre_id, agent, notes, created_at)
+ * Sources de données :
+ *  - reunions (réunions communautaires créées dans Vie Communautaire)
+ *  - evenements (événements planifiés, même source que Réunions & Événements)
+ *  - presences (enregistrements de pointage)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -17,22 +18,22 @@ import { supabase } from '../lib/supabase';
 import { idValide, normaliserId } from '../lib/qrScanner';
 import QrScannerModal from './QrScannerModal';
 import {
-  QrCode, Users, Calendar, Plus, CheckCircle2, XCircle,
+  QrCode, Users, Calendar, CheckCircle2,
   Loader2, ChevronDown, ChevronUp, AlertTriangle, Search,
-  MapPin, Edit3, X, ClipboardList
+  MapPin, X, ClipboardList, Tag
 } from 'lucide-react';
 
 interface Props {
   agentNom?: string;
 }
 
-interface Reunion {
+interface SessionPointage {
   id: string;
   titre: string;
-  date: string;
+  date: string;       // YYYY-MM-DD ou ISO
   lieu?: string;
   type?: string;
-  created_at: string;
+  source: 'reunion' | 'evenement';  // pour distinguer l'origine
 }
 
 interface Presence {
@@ -44,9 +45,6 @@ interface Presence {
   agent?: string;
   notes?: string;
   created_at: string;
-  // Joints
-  membre_nom?: string;
-  membre_prenom?: string;
 }
 
 interface FoyerInfo {
@@ -64,107 +62,26 @@ interface MembreInfo {
   relation_chef?: string;
 }
 
-// ── Formulaire de création de réunion ────────────────────────────────────────
-
-function ReunionForm({ onSave, onClose }: { onSave: (r: Partial<Reunion>) => void; onClose: () => void }) {
-  const today = new Date().toISOString().split('T')[0];
-  const [titre, setTitre] = useState('');
-  const [date, setDate] = useState(today);
-  const [lieu, setLieu] = useState('');
-  const [type, setType] = useState('Assemblée générale');
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!titre.trim()) return;
-    setSaving(true);
-    await onSave({ titre: titre.trim(), date, lieu: lieu.trim() || undefined, type });
-    setSaving(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-slate-900">Nouvelle réunion</h3>
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Titre *</label>
-            <input
-              autoFocus
-              value={titre}
-              onChange={e => setTitre(e.target.value)}
-              placeholder="Assemblée générale Octobre 2026"
-              className="w-full text-sm px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:border-indigo-400"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Date *</label>
-              <input
-                type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                className="w-full text-sm px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:border-indigo-400"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Type</label>
-              <select
-                value={type}
-                onChange={e => setType(e.target.value)}
-                className="w-full text-sm px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:border-indigo-400 bg-white"
-              >
-                <option>Assemblée générale</option>
-                <option>Réunion ordinaire</option>
-                <option>Réunion extraordinaire</option>
-                <option>Formation</option>
-                <option>Sensibilisation</option>
-                <option>Autre</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Lieu</label>
-            <input
-              value={lieu}
-              onChange={e => setLieu(e.target.value)}
-              placeholder="Salle communautaire Amboriala…"
-              className="w-full text-sm px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:border-indigo-400"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-3 pt-1">
-          <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 font-semibold hover:bg-slate-50 transition">
-            Annuler
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!titre.trim() || saving}
-            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Créer
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Couleur badge selon type
+const typeBadgeColor = (type?: string): string => {
+  const t = (type || '').toLowerCase();
+  if (t.includes('assemblée')) return 'bg-indigo-100 text-indigo-700';
+  if (t.includes('formation') || t.includes('sensibilisation')) return 'bg-teal-100 text-teal-700';
+  if (t.includes('médiation')) return 'bg-amber-100 text-amber-700';
+  if (t.includes('urgence') || t.includes('catastrophe')) return 'bg-red-100 text-red-700';
+  if (t.includes('vaccination') || t.includes('distribution')) return 'bg-emerald-100 text-emerald-700';
+  if (t.includes('culturelle') || t.includes('sportive')) return 'bg-violet-100 text-violet-700';
+  return 'bg-slate-100 text-slate-600';
+};
 
 // ── Module principal ──────────────────────────────────────────────────────────
 
 export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) {
-  // Réunions
-  const [reunions, setReunions] = useState<Reunion[]>([]);
-  const [reunionActive, setReunionActive] = useState<Reunion | null>(null);
-  const [showReunionForm, setShowReunionForm] = useState(false);
-  const [loadingReunions, setLoadingReunions] = useState(true);
+  // Liste sessions (reunions + evenements fusionnés)
+  const [sessions, setSessions] = useState<SessionPointage[]>([]);
+  const [sessionActive, setSessionActive] = useState<SessionPointage | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [filtreType, setFiltreType] = useState('');   // filtre sur la liste
 
   // Scan / Recherche
   const [scanInput, setScanInput] = useState('');
@@ -177,65 +94,86 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
   const [membres, setMembres] = useState<MembreInfo[]>([]);
   const [membreChoisi, setMembreChoisi] = useState<string>('');
 
-  // Présences de la réunion active
+  // Présences de la session active
   const [presences, setPresences] = useState<Presence[]>([]);
   const [loadingPresences, setLoadingPresences] = useState(false);
+  const [showPresences, setShowPresences] = useState(false);
 
   // État
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [notes, setNotes] = useState('');
-  const [showHistory, setShowHistory] = useState(false);
 
-  // ── Chargement des réunions ──────────────────────────────────
+  // ── Chargement des sessions (reunions + evenements) ──────────
   useEffect(() => {
-    loadReunions();
+    loadSessions();
   }, []);
 
-  const loadReunions = async () => {
-    setLoadingReunions(true);
-    const { data } = await supabase
+  const loadSessions = async () => {
+    setLoading(true);
+    const today = new Date().toISOString().split('T')[0];
+
+    // Réunions (table reunions)
+    const { data: reunionsData } = await supabase
       .from('reunions')
-      .select('*')
+      .select('id, titre, date, lieu, type')
       .order('date', { ascending: false })
-      .limit(30);
-    setReunions(data || []);
-    if (data && data.length > 0 && !reunionActive) {
-      setReunionActive(data[0]);
+      .limit(50);
+
+    // Événements planifiés ou en cours (table evenements)
+    const { data: evenementsData } = await supabase
+      .from('evenements')
+      .select('id, titre, type, date_evenement, lieu, statut')
+      .in('statut', ['Planifié', 'En cours'])
+      .order('date_evenement', { ascending: false })
+      .limit(50);
+
+    const fromReunions: SessionPointage[] = (reunionsData || []).map((r: any) => ({
+      id: r.id,
+      titre: r.titre,
+      date: r.date,
+      lieu: r.lieu,
+      type: r.type,
+      source: 'reunion' as const,
+    }));
+
+    const fromEvenements: SessionPointage[] = (evenementsData || []).map((e: any) => ({
+      id: e.id,
+      titre: e.titre,
+      date: e.date_evenement,
+      lieu: e.lieu,
+      type: e.type,
+      source: 'evenement' as const,
+    }));
+
+    // Fusionner et trier par date desc
+    const all = [...fromReunions, ...fromEvenements].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    setSessions(all);
+    // Auto-sélectionner la plus récente
+    if (all.length > 0 && !sessionActive) {
+      setSessionActive(all[0]);
     }
-    setLoadingReunions(false);
+    setLoading(false);
   };
 
-  // ── Charger présences de la réunion active ───────────────────
+  // ── Charger présences de la session active ───────────────────
   useEffect(() => {
-    if (!reunionActive) return;
-    loadPresences(reunionActive.id);
-  }, [reunionActive]);
+    if (!sessionActive) return;
+    loadPresences(sessionActive.id);
+  }, [sessionActive]);
 
-  const loadPresences = async (reunionId: string) => {
+  const loadPresences = async (sessionId: string) => {
     setLoadingPresences(true);
     const { data } = await supabase
       .from('presences')
       .select('*')
-      .eq('reunion_id', reunionId)
+      .eq('reunion_id', sessionId)
       .order('created_at', { ascending: false });
     setPresences(data || []);
     setLoadingPresences(false);
-  };
-
-  // ── Créer réunion ────────────────────────────────────────────
-  const handleCreateReunion = async (partial: Partial<Reunion>) => {
-    const { data, error } = await supabase
-      .from('reunions')
-      .insert({ ...partial, created_at: new Date().toISOString() })
-      .select()
-      .single();
-    if (!error && data) {
-      setReunions(prev => [data, ...prev]);
-      setReunionActive(data);
-      setShowReunionForm(false);
-      resetSearch();
-    }
   };
 
   // ── Rechercher le ménage ─────────────────────────────────────
@@ -253,7 +191,6 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
     setMembreChoisi('');
     setSuccessMsg('');
 
-    // Chercher le foyer
     const { data: foyerData, error: foyerErr } = await supabase
       .from('foyers')
       .select('id, code_menage, fokontany, adresse')
@@ -261,12 +198,11 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
       .single();
 
     if (foyerErr || !foyerData) {
-      setSearchError(`Ménage introuvable : ${normalised}. Vérifiez l'identifiant ou synchronisez KoboToolbox.`);
+      setSearchError(`Ménage introuvable : ${normalised}`);
       setSearching(false);
       return;
     }
 
-    // Membres du foyer
     const { data: membresData } = await supabase
       .from('membres')
       .select('id, nom, prenom, is_chef, relation_chef')
@@ -275,7 +211,6 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
 
     setFoyer(foyerData);
     setMembres(membresData || []);
-    // Pré-sélectionner le chef
     const chef = (membresData || []).find((m: MembreInfo) => m.is_chef);
     setMembreChoisi(chef?.id || (membresData?.[0]?.id ?? ''));
     setSearching(false);
@@ -302,21 +237,20 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
 
   // ── Enregistrer présence ─────────────────────────────────────
   const handleEnregistrer = async () => {
-    if (!reunionActive || !foyer || !membreChoisi) return;
+    if (!sessionActive || !foyer || !membreChoisi) return;
 
     setSaving(true);
     setSuccessMsg('');
 
-    // Vérifier si ce ménage est déjà enregistré pour cette réunion
     const { data: existing } = await supabase
       .from('presences')
       .select('id')
-      .eq('reunion_id', reunionActive.id)
+      .eq('reunion_id', sessionActive.id)
       .eq('foyer_id', foyer.id)
       .single();
 
     if (existing) {
-      setSearchError(`Le ménage ${foyer.code_menage} est déjà enregistré pour cette réunion.`);
+      setSearchError(`Le ménage ${foyer.code_menage} est déjà enregistré pour cette session.`);
       setSaving(false);
       return;
     }
@@ -325,7 +259,7 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
     const now = new Date().toISOString();
 
     const { error } = await supabase.from('presences').insert({
-      reunion_id: reunionActive.id,
+      reunion_id: sessionActive.id,
       foyer_id: foyer.id,
       menage_id: foyer.code_menage,
       membre_id: membreChoisi,
@@ -334,23 +268,19 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
       created_at: now,
     });
 
-    // Log
     await supabase.from('logs').insert({
       date: now,
       utilisateur: agentNom,
       action: 'Présence',
-      details: `Présence enregistrée — Ménage ${foyer.code_menage} · ${membreInfo ? `${membreInfo.nom} ${membreInfo.prenom}` : ''} · Réunion : ${reunionActive.titre}`,
+      details: `Présence — Ménage ${foyer.code_menage} · ${membreInfo ? `${membreInfo.nom} ${membreInfo.prenom}` : ''} · Session : ${sessionActive.titre}`,
       foyer_id: foyer.id,
       membre_id: membreChoisi,
     });
 
     if (!error) {
       setSuccessMsg(`✓ Présence enregistrée — ${membreInfo ? `${membreInfo.nom} ${membreInfo.prenom}` : foyer.code_menage}`);
-      await loadPresences(reunionActive.id);
-      // Reset pour le ménage suivant
-      setTimeout(() => {
-        resetSearch();
-      }, 1500);
+      await loadPresences(sessionActive.id);
+      setTimeout(() => resetSearch(), 1500);
     } else {
       setSearchError(`Erreur : ${error.message}`);
     }
@@ -358,61 +288,92 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
     setSaving(false);
   };
 
-  // ── Vérifier si le ménage courant est déjà présent ──────────
-  const dejaPresent = foyer
-    ? presences.some(p => p.foyer_id === foyer.id)
-    : false;
+  const dejaPresent = foyer ? presences.some(p => p.foyer_id === foyer.id) : false;
+
+  // Filtrage de la liste des sessions
+  const typesDisponibles = [...new Set(sessions.map(s => s.type).filter(Boolean))];
+  const sessionsFiltrees = sessions.filter(s => !filtreType || s.type === filtreType);
 
   // ── Render ───────────────────────────────────────────────────
   return (
     <div className="space-y-5">
 
-      {/* ── Sélection réunion ── */}
+      {/* ── Sélection session ── */}
       <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-indigo-600" />
-            Réunion active
+            <Calendar className="h-4 w-4 text-emerald-600" />
+            Sélectionner une réunion / événement
           </h2>
           <button
-            onClick={() => setShowReunionForm(true)}
-            className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-semibold transition"
+            onClick={loadSessions}
+            title="Actualiser la liste"
+            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
           >
-            <Plus className="h-3.5 w-3.5" />Nouvelle réunion
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <path d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0115 0M20 15a9 9 0 01-15 0" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
         </div>
 
-        {loadingReunions ? (
-          <div className="flex items-center gap-2 text-slate-400 text-sm">
+        {/* Filtre type */}
+        {typesDisponibles.length > 1 && (
+          <div className="flex items-center gap-2 mb-3">
+            <Tag className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+            <select
+              value={filtreType}
+              onChange={e => setFiltreType(e.target.value)}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-emerald-400"
+            >
+              <option value="">Tous les types</option>
+              {typesDisponibles.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <span className="text-xs text-slate-400">{sessionsFiltrees.length} session{sessionsFiltrees.length > 1 ? 's' : ''}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center gap-2 text-slate-400 text-sm py-4">
             <Loader2 className="h-4 w-4 animate-spin" />Chargement…
           </div>
-        ) : reunions.length === 0 ? (
+        ) : sessionsFiltrees.length === 0 ? (
           <div className="text-center py-8 text-slate-400 text-sm">
             <Calendar className="h-10 w-10 mx-auto mb-2 opacity-30" />
-            Aucune réunion. Créez-en une pour commencer.
+            {sessions.length === 0
+              ? 'Aucune réunion ni événement planifié. Créez-en un dans l\'onglet « Réunions & Événements ».'
+              : 'Aucune session correspondant au filtre.'}
           </div>
         ) : (
-          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-            {reunions.map(r => (
+          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+            {sessionsFiltrees.map(s => (
               <button
-                key={r.id}
-                onClick={() => { setReunionActive(r); resetSearch(); }}
+                key={`${s.source}-${s.id}`}
+                onClick={() => { setSessionActive(s); resetSearch(); }}
                 className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition ${
-                  reunionActive?.id === r.id
-                    ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
+                  sessionActive?.id === s.id && sessionActive?.source === s.source
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
                     : 'border-slate-200 hover:bg-slate-50 text-slate-700'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">{r.titre}</span>
-                  {reunionActive?.id === r.id && (
-                    <span className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold">Active</span>
-                  )}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold truncate">{s.titre}</span>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {s.type && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${typeBadgeColor(s.type)}`}>
+                        {s.type}
+                      </span>
+                    )}
+                    {sessionActive?.id === s.id && sessionActive?.source === s.source && (
+                      <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">Active</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
-                  <span>{new Date(r.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                  {r.lieu && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{r.lieu}</span>}
-                  {r.type && <span className="text-indigo-500 font-medium">{r.type}</span>}
+                  <span>{new Date(s.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                  {s.lieu && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{s.lieu}</span>}
+                  <span className="text-slate-300">
+                    {s.source === 'evenement' ? '📅 Événement' : '🗓 Réunion'}
+                  </span>
                 </div>
               </button>
             ))}
@@ -420,13 +381,13 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
         )}
       </div>
 
-      {/* ── Scan + saisie ── */}
-      {reunionActive && (
+      {/* ── Zone de scan / saisie ── */}
+      {sessionActive && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <QrCode className="h-4 w-4 text-indigo-600" />
-            Scanner le carnet du ménage
-            <span className="text-xs font-normal text-slate-400 ml-1">· {reunionActive.titre}</span>
+            <QrCode className="h-4 w-4 text-emerald-600" />
+            Scanner ou saisir le code du ménage
+            <span className="text-xs font-normal text-slate-400 ml-1">· {sessionActive.titre}</span>
           </h2>
 
           <div className="flex gap-2">
@@ -438,14 +399,14 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
                 onKeyDown={handleKeyDown}
                 placeholder="AMB-TRV-26-T-XXXXX"
                 className={`w-full font-mono text-sm pl-10 pr-4 py-2.5 border rounded-xl outline-none transition ${
-                  searchError ? 'border-red-400 bg-red-50' : 'border-slate-200 focus:border-indigo-400'
+                  searchError ? 'border-red-400 bg-red-50' : 'border-slate-200 focus:border-emerald-400'
                 }`}
                 maxLength={20}
               />
             </div>
             <button
               onClick={() => setShowScanner(true)}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition flex items-center gap-2"
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition flex items-center gap-2"
               title="Scanner avec la caméra"
             >
               <QrCode className="h-4 w-4" />
@@ -453,10 +414,10 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
             </button>
             <button
               onClick={() => rechercherMenage(scanInput)}
-              disabled={searching}
+              disabled={searching || !scanInput.trim()}
               className="px-4 py-2.5 bg-slate-700 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl transition text-xs font-semibold"
             >
-              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Rechercher'}
+              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Chercher'}
             </button>
           </div>
 
@@ -476,7 +437,7 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
             </div>
           )}
 
-          {/* Résultat — foyer trouvé */}
+          {/* Foyer trouvé */}
           {foyer && !successMsg && (
             <div className="border border-slate-200 rounded-xl overflow-hidden">
 
@@ -488,7 +449,7 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
                 </div>
                 {dejaPresent ? (
                   <span className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-lg">
-                    <AlertTriangle className="h-3.5 w-3.5" />Déjà enregistré
+                    <AlertTriangle className="h-3.5 w-3.5" />Déjà pointé
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg">
@@ -497,14 +458,12 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
                 )}
               </div>
 
-              {/* Déjà présent — avertissement */}
               {dejaPresent && (
                 <div className="px-4 py-3 bg-amber-50 border-t border-amber-100 text-xs text-amber-800">
-                  Ce ménage a déjà été enregistré pour cette réunion. Un seul représentant par ménage est autorisé.
+                  Ce ménage a déjà été pointé pour cette session. Un seul représentant par ménage est autorisé.
                 </div>
               )}
 
-              {/* Choix membre + Notes (masqué si déjà présent) */}
               {!dejaPresent && (
                 <div className="p-4 space-y-3">
                   {membres.length === 0 ? (
@@ -521,7 +480,7 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
                             key={m.id}
                             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition ${
                               membreChoisi === m.id
-                                ? 'border-indigo-300 bg-indigo-50'
+                                ? 'border-emerald-300 bg-emerald-50'
                                 : 'border-slate-200 hover:bg-slate-50'
                             }`}
                           >
@@ -531,7 +490,7 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
                               value={m.id}
                               checked={membreChoisi === m.id}
                               onChange={() => setMembreChoisi(m.id)}
-                              className="accent-indigo-600"
+                              className="accent-emerald-600"
                             />
                             <span className="text-sm font-semibold text-slate-800">{m.nom} {m.prenom}</span>
                             <span className="text-xs text-slate-400 ml-auto">
@@ -549,7 +508,7 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
                       placeholder="Représentant désigné, absent excusé…"
-                      className="w-full text-sm px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-400"
+                      className="w-full text-sm px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-emerald-400"
                     />
                   </div>
 
@@ -563,13 +522,13 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
                     <button
                       onClick={handleEnregistrer}
                       disabled={saving || !membreChoisi || membres.length === 0}
-                      className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-bold rounded-xl transition flex items-center justify-center gap-2"
+                      className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-bold rounded-xl transition flex items-center justify-center gap-2"
                     >
                       {saving
                         ? <Loader2 className="h-4 w-4 animate-spin" />
                         : <CheckCircle2 className="h-4 w-4" />
                       }
-                      Enregistrer la présence
+                      Valider la présence
                     </button>
                   </div>
                 </div>
@@ -580,23 +539,23 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
       )}
 
       {/* ── Liste des présences ── */}
-      {reunionActive && (
+      {sessionActive && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <button
-            onClick={() => setShowHistory(!showHistory)}
+            onClick={() => setShowPresences(!showPresences)}
             className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition"
           >
             <div className="flex items-center gap-2">
-              <ClipboardList className="h-4 w-4 text-indigo-600" />
-              <span className="text-sm font-bold text-slate-900">Présences enregistrées</span>
-              <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded-full">
+              <ClipboardList className="h-4 w-4 text-emerald-600" />
+              <span className="text-sm font-bold text-slate-900">Présences pointées</span>
+              <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full">
                 {loadingPresences ? '…' : presences.length}
               </span>
             </div>
-            {showHistory ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+            {showPresences ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
           </button>
 
-          {showHistory && (
+          {showPresences && (
             <div className="border-t border-slate-100">
               {loadingPresences ? (
                 <div className="flex items-center gap-2 p-5 text-slate-400 text-sm">
@@ -605,14 +564,14 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
               ) : presences.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-sm">
                   <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  Aucune présence enregistrée pour cette réunion.
+                  Aucune présence encore enregistrée pour cette session.
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
                   {presences.map((p, i) => (
                     <div key={p.id} className="flex items-center justify-between px-5 py-3 hover:bg-slate-50">
                       <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono text-slate-400 w-6 text-right">{presences.length - i}</span>
+                        <span className="text-xs font-mono text-slate-300 w-5 text-right">{presences.length - i}</span>
                         <div>
                           <p className="text-sm font-semibold text-slate-800 font-mono">{p.menage_id}</p>
                           {p.notes && <p className="text-xs text-slate-400 italic">{p.notes}</p>}
@@ -629,15 +588,12 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
                 </div>
               )}
 
-              {/* Résumé */}
               {presences.length > 0 && (
                 <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-xs text-slate-500">
                     Total : <strong className="text-slate-800">{presences.length} ménage{presences.length > 1 ? 's' : ''}</strong>
                   </span>
-                  <span className="text-xs text-indigo-600 font-semibold">
-                    {reunionActive.titre}
-                  </span>
+                  <span className="text-xs text-emerald-600 font-semibold">{sessionActive.titre}</span>
                 </div>
               )}
             </div>
@@ -646,9 +602,6 @@ export default function PresenceModule({ agentNom = 'Agent Fokontany' }: Props) 
       )}
 
       {/* Modals */}
-      {showReunionForm && (
-        <ReunionForm onSave={handleCreateReunion} onClose={() => setShowReunionForm(false)} />
-      )}
       {showScanner && (
         <QrScannerModal onResult={handleScanResult} onClose={() => setShowScanner(false)} />
       )}
