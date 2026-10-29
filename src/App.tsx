@@ -67,7 +67,7 @@ export default function App() {
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'logs'|'land'|'patrimoine'|'kobo'|'cotisations'|'presences'|'collecte'>('annuaire');
+  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'cotisations'|'materials'|'patrimoine'|'land'|'collecte'|'kobo'|'presences'|'logs'>('annuaire');
   const [searchQuery, setSearchQuery] = useState('');
   const [fokontanyFilter, setFokontanyFilter] = useState('Tous');
   const [statutFilter, setStatutFilter] = useState('Tous');
@@ -294,27 +294,63 @@ export default function App() {
 
       {/* Nav */}
       <div className="bg-white border-b border-slate-200 px-6 overflow-x-auto">
-        <nav className="max-w-7xl mx-auto flex space-x-1 min-w-max">
+        <nav className="max-w-7xl mx-auto flex items-stretch min-w-max">
+
+          {/* ── Groupe 1 : Registre ── */}
           {([
-            ['annuaire', Home, `Foyers (${foyers.length}) · ${totalMembres} personnes`],
+            ['annuaire', Home, `Foyers (${foyers.length})`],
             ['documents', FileSignature, 'Actes & Docs'],
             ['statistics', HeartPulse, 'Statistiques'],
             ['craad', BarChart2, 'CRAAD'],
-            ['vie_comm', Users, 'Vie Communautaire'],
-            ['finances', Landmark, 'Finances'],
-            ['materials', Package, 'Matériels'],
-            ['land', Building, 'Foncier'],
-            ['patrimoine', Award, 'Patrimoine'],
-            ['collecte', ClipboardList, 'Collecte'],
-            ['kobo', RefreshCw, 'KoboSync'],
-            ['cotisations', Coins, 'Cotisations'],
-            ['presences', CalendarCheck, 'Présences'],
-            ['logs', History, `Journal (${logs.length})`],
           ] as const).map(([key, Icon, label]) => (
-            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-2 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
-              <Icon className="h-4 w-4" />{label}
+            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+              <Icon className="h-3.5 w-3.5" />{label}
             </button>
           ))}
+
+          {/* Séparateur */}
+          <div className="w-px bg-slate-200 my-2 mx-1" />
+
+          {/* ── Groupe 2 : Communauté ── */}
+          {([
+            ['vie_comm', Users, 'Vie Communautaire'],
+            ['presences', CalendarCheck, 'Présences'],
+            ['cotisations', Coins, 'Cotisations'],
+            ['finances', Landmark, 'Finances'],
+          ] as const).map(([key, Icon, label]) => (
+            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-emerald-600 text-emerald-700 bg-emerald-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+              <Icon className="h-3.5 w-3.5" />{label}
+            </button>
+          ))}
+
+          {/* Séparateur */}
+          <div className="w-px bg-slate-200 my-2 mx-1" />
+
+          {/* ── Groupe 3 : Patrimoine & Foncier ── */}
+          {([
+            ['materials', Package, 'Matériels'],
+            ['patrimoine', Award, 'Patrimoine'],
+            ['land', Building, 'Foncier'],
+          ] as const).map(([key, Icon, label]) => (
+            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-amber-600 text-amber-700 bg-amber-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+              <Icon className="h-3.5 w-3.5" />{label}
+            </button>
+          ))}
+
+          {/* Séparateur */}
+          <div className="w-px bg-slate-200 my-2 mx-1" />
+
+          {/* ── Groupe 4 : Administration ── */}
+          {([
+            ['collecte', ClipboardList, 'Collecte'],
+            ['kobo', RefreshCw, 'KoboSync'],
+            ['logs', History, `Journal (${logs.length})`],
+          ] as const).map(([key, Icon, label]) => (
+            <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-slate-600 text-slate-700 bg-slate-100/60' : 'border-transparent text-slate-400 hover:text-slate-700'}`}>
+              <Icon className="h-3.5 w-3.5" />{label}
+            </button>
+          ))}
+
         </nav>
       </div>
 
