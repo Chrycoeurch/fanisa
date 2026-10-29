@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight, User, Users, Loader2, Upload, FileText,
   Landmark, Eye, Save, AlertCircle, Printer
 } from 'lucide-react';
-import { imprimerFicheParcellaire } from '../lib/ficheParcellairePDF';
+import { ApercuFicheParcellaireModal } from '../lib/ficheParcellairePDF';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; }
 
@@ -574,6 +574,7 @@ export default function FoncierModule({ foyers, membres }: Props) {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingParcelle, setEditingParcelle] = useState<Parcelle | undefined>();
+  const [apercuParcelle, setApercuParcelle] = useState<any>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, any>>({});
 
@@ -732,8 +733,8 @@ export default function FoncierModule({ foyers, membres }: Props) {
                       {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
                     <button
-                      onClick={() => imprimerFicheParcellaire(p)}
-                      title="Générer fiche PDF"
+                      onClick={() => setApercuParcelle(p)}
+                      title="Aperçu fiche PDF"
                       className="p-1.5 hover:bg-amber-50 rounded-lg text-slate-400 hover:text-amber-600"
                     >
                       <Printer className="h-4 w-4" />
@@ -912,6 +913,13 @@ export default function FoncierModule({ foyers, membres }: Props) {
           membres={membres}
           onClose={() => { setShowModal(false); setEditingParcelle(undefined); }}
           onSave={() => { setShowModal(false); setEditingParcelle(undefined); load(); }}
+        />
+      )}
+
+      {apercuParcelle && (
+        <ApercuFicheParcellaireModal
+          parcelle={apercuParcelle}
+          onClose={() => setApercuParcelle(null)}
         />
       )}
     </div>

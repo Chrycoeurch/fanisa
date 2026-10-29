@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Document, Page, View, Text, StyleSheet, pdf,
+  Document, Page, View, Text, StyleSheet, pdf, PDFViewer,
 } from '@react-pdf/renderer';
 import { supabase } from './supabase';
 import { telechargerPDF } from './documents';
+import { X, Download, Loader2 } from 'lucide-react';
 
 // ── Palette ──────────────────────────────────────────────────────
 const P = {
@@ -486,20 +487,97 @@ function FicheParcellaire({ parcelle, detenteurs, constructions }: {
   );
 }
 
-// ── Export public ─────────────────────────────────────────────────
-export async function imprimerFicheParcellaire(parcelle: any) {
-  // Charger détenteurs et constructions
+// ── Chargement des données liées ─────────────────────────────────
+export async function chargerDonneesFiche(parcelle: any) {
   const [{ data: detenteurs }, { data: constructions }] = await Promise.all([
     supabase.from('detenteurs_foncier').select('*').eq('parcelle_id', parcelle.id).order('created_at', { ascending: true }),
     supabase.from('constructions_foncier').select('*').eq('parcelle_id', parcelle.id).order('c_num', { ascending: true }),
   ]);
+  return { detenteurs: detenteurs || [], constructions: constructions || [] };
+}
 
+// ── Modal d'aperçu avant impression ──────────────────────────────
+export function ApercuFicheParcellaireModal({ parcelle, onClose }: { parcelle: any; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [detenteurs, setDetenteurs] = useState<any[]>([]);
+  const [constructions, setConstructions] = useState<any[]>([]);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    chargerDonneesFiche(parcelle).then(({ detenteurs: d, constructions: c }) => {
+      setDetenteurs(d);
+      setConstructions(c);
+      setLoading(false);
+    });
+  }, [parcelle.id]);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    const blob = await pdf(
+      <FicheParcellaire parcelle={parcelle} detenteurs={detenteurs} constructions={constructions} />
+    ).toBlob();
+    const buf = await blob.arrayBuffer();
+    await telechargerPDF(
+      new Uint8Array(buf),
+      `FICHE_PARCELLAIRE_LOT_${(parcelle.lot_id || parcelle.numero_lot || 'INCONNU').replace(/[^A-Z0-9]/gi, '_')}.pdf`
+    );
+    setDownloading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[92vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-500 p-2 rounded-xl">
+              <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Aperçu — Fiche Parcellaire</h2>
+              <p className="text-xs text-amber-600 font-mono font-bold">LOT {parcelle.lot_id || parcelle.numero_lot || '—'}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownload}
+              disabled={loading || downloading}
+              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition"
+            >
+              {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              Télécharger PDF
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">
+              <X className="h-5 w-5 text-slate-500" />
+            </button>
+          </div>
+        </div>
+
+        {/* Corps */}
+        <div className="flex-1 overflow-hidden bg-slate-100 relative">
+          {loading ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="h-8 w-8 text-amber-500 animate-spin" />
+              <p className="text-sm text-slate-500">Chargement de la fiche…</p>
+            </div>
+          ) : (
+            <PDFViewer width="100%" height="100%" showToolbar={false} style={{ border: 'none' }}>
+              <FicheParcellaire parcelle={parcelle} detenteurs={detenteurs} constructions={constructions} />
+            </PDFViewer>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Export public ─────────────────────────────────────────────────
+export async function imprimerFicheParcellaire(parcelle: any) {
+  const { detenteurs, constructions } = await chargerDonneesFiche(parcelle);
   const blob = await pdf(
-    <FicheParcellaire
-      parcelle={parcelle}
-      detenteurs={detenteurs || []}
-      constructions={constructions || []}
-    />
+    <FicheParcellaire parcelle={parcelle} detenteurs={detenteurs} constructions={constructions} />
   ).toBlob();
   const buf = await blob.arrayBuffer();
   await telechargerPDF(
