@@ -6,8 +6,10 @@ import {
   Plus, X, Search, Loader2, AlertCircle, CheckCircle,
   Clock, Filter, Eye, Edit2, ChevronDown, ChevronRight,
   Users, MapPin, Phone, FileText, Send, BarChart2,
-  Trash2, Save, RefreshCw, Flag, Star
+  Trash2, Save, RefreshCw, Flag, Star, QrCode, Coins
 } from 'lucide-react';
+import PresenceModule from './PresenceModule';
+import CotisationsModule from './CotisationsModule';
 
 interface Props { foyers: Foyer[]; membres: Membre[]; }
 
@@ -1024,15 +1026,17 @@ function TableauDeBord() {
 }
 
 // ── COMPOSANT PRINCIPAL ───────────────────────────────────────────
-type Tab = 'dashboard' | 'doleances' | 'evenements' | 'campagnes' | 'suivi' | 'sms';
+type Tab = 'dashboard' | 'doleances' | 'evenements' | 'presences' | 'cotisations' | 'campagnes' | 'suivi' | 'sms';
 
 const TABS: { key: Tab; label: string; icon: any; color: string }[] = [
-  { key:'dashboard',  label:'Tableau de bord',    icon:BarChart2,       color:'text-indigo-600' },
-  { key:'doleances',  label:'Doléances',           icon:MessageSquare,   color:'text-rose-600' },
-  { key:'evenements', label:'Événements',          icon:Calendar,        color:'text-violet-600' },
-  { key:'campagnes',  label:'Aides & Distributions',icon:Gift,           color:'text-emerald-600' },
-  { key:'suivi',      label:'Suivi social',        icon:Heart,           color:'text-pink-600' },
-  { key:'sms',        label:'Communication',       icon:Radio,           color:'text-cyan-600' },
+  { key:'dashboard',  label:'Tableau de bord',      icon:BarChart2,     color:'text-indigo-600' },
+  { key:'doleances',  label:'Doléances',             icon:MessageSquare, color:'text-rose-600' },
+  { key:'evenements', label:'Réunions & Événements', icon:Calendar,      color:'text-violet-600' },
+  { key:'presences',  label:'Présences',             icon:QrCode,        color:'text-emerald-600' },
+  { key:'cotisations',label:'Cotisations',           icon:Coins,         color:'text-amber-600' },
+  { key:'campagnes',  label:'Aides & Distributions', icon:Gift,          color:'text-teal-600' },
+  { key:'suivi',      label:'Suivi social',          icon:Heart,         color:'text-pink-600' },
+  { key:'sms',        label:'Communication',         icon:Radio,         color:'text-cyan-600' },
 ];
 
 export default function VieCommunautaireModule({ foyers, membres }: Props) {
@@ -1059,12 +1063,14 @@ export default function VieCommunautaireModule({ foyers, membres }: Props) {
         </div>
       </div>
 
-      {tab === 'dashboard'  && <TableauDeBord />}
-      {tab === 'doleances'  && <DoleancesTab foyers={foyers} membres={membres}/>}
-      {tab === 'evenements' && <EvenementsTab foyers={foyers} membres={membres}/>}
-      {tab === 'campagnes'  && <CampagnesSocialesTab foyers={foyers} membres={membres}/>}
-      {tab === 'suivi'      && <SuiviSocialTab foyers={foyers} membres={membres}/>}
-      {tab === 'sms'        && <SMSTab foyers={foyers} membres={membres}/>}
+      {tab === 'dashboard'   && <TableauDeBord />}
+      {tab === 'doleances'   && <DoleancesTab foyers={foyers} membres={membres}/>}
+      {tab === 'evenements'  && <EvenementsTab foyers={foyers} membres={membres}/>}
+      {tab === 'presences'   && <PresenceModule agentNom="Chef Fokontany (Admin)" />}
+      {tab === 'cotisations' && <CotisationsModule agentNom="Chef Fokontany (Admin)" />}
+      {tab === 'campagnes'   && <CampagnesSocialesTab foyers={foyers} membres={membres}/>}
+      {tab === 'suivi'       && <SuiviSocialTab foyers={foyers} membres={membres}/>}
+      {tab === 'sms'         && <SMSTab foyers={foyers} membres={membres}/>}
     </div>
   );
 }

@@ -17,14 +17,12 @@ import VieCommunautaireModule from './components/VieCommunautaireModule';
 import KoboSyncModule from './components/KoboSyncModule';
 import KoboFoncierSyncModule from './components/KoboFoncierSyncModule';
 import CollecteModule from './components/CollecteModule';
-import CotisationsModule from './components/CotisationsModule';
-import PresenceModule from './components/PresenceModule';
 import { FOKONTANY_LIST } from './seedData';
 import {
   FolderLock, Users, HeartPulse, History, PlusCircle, Search,
   RotateCcw, ShieldCheck, Building, FileSignature, Landmark,
   Package, Loader2, Home, Filter, Award, BarChart2, Download, RefreshCw,
-  Coins, CalendarCheck, ClipboardList
+  ClipboardList
 } from 'lucide-react';
 
 // ── Wrapper KoboSync : toggle ménage / foncier ─────────────────────────────
@@ -67,7 +65,7 @@ export default function App() {
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'cotisations'|'materials'|'patrimoine'|'land'|'collecte'|'kobo'|'presences'|'logs'>('annuaire');
+  const [activeTab, setActiveTab] = useState<'annuaire'|'documents'|'statistics'|'craad'|'vie_comm'|'finances'|'materials'|'patrimoine'|'land'|'collecte'|'kobo'|'logs'>('annuaire');
   const [searchQuery, setSearchQuery] = useState('');
   const [fokontanyFilter, setFokontanyFilter] = useState('Tous');
   const [statutFilter, setStatutFilter] = useState('Tous');
@@ -314,8 +312,6 @@ export default function App() {
           {/* ── Groupe 2 : Communauté ── */}
           {([
             ['vie_comm', Users, 'Vie Communautaire'],
-            ['presences', CalendarCheck, 'Présences'],
-            ['cotisations', Coins, 'Cotisations'],
             ['finances', Landmark, 'Finances'],
           ] as const).map(([key, Icon, label]) => (
             <button key={key} onClick={() => setActiveTab(key as any)} className={`flex items-center gap-1.5 py-3.5 px-3 text-xs font-semibold border-b-2 whitespace-nowrap transition ${activeTab === key ? 'border-emerald-600 text-emerald-700 bg-emerald-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
@@ -490,8 +486,6 @@ export default function App() {
             }}
           />
         )}
-        {activeTab === 'cotisations' && <CotisationsModule agentNom="Chef Fokontany (Admin)" />}
-        {activeTab === 'presences' && <PresenceModule agentNom="Chef Fokontany (Admin)" />}
 
         {activeTab === 'logs' && (
           <div className="space-y-4">
