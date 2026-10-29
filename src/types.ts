@@ -291,7 +291,37 @@ export interface HistoriqueLog { id: string; date: string; utilisateur: string; 
 export interface TransfertOrigine { id: string; date: string; typeTransfert: 'Achat' | 'Succession' | 'Don' | 'Partage' | 'Mutation' | 'Autre'; description: string; montantTransaction?: number; ancienProprietaire?: string; nouveauProprietaire: string; piecesJustificatives?: string; }
 export interface LotFoncier { id: string; numeroLot: string; titreFoncier?: string; cadastreRef?: string; superficie: number; adresse: string; statutOccupant: 'Propriétaire' | 'Locataire' | 'Occupant à titre gratuit' | 'Indivis Civils' | 'Litigieux'; occupantsMenageCode?: string; typeUsage: 'Habitation' | 'Commercial' | 'Agricole' | 'Mixte'; historiqueSuccessions: TransfertOrigine[]; notes?: string; }
 export interface Transaction { id: string; date: string; type: 'recette' | 'depense'; montant: number; categorie: 'Subvention' | 'Droits administratifs' | 'Dons & Cotisations' | 'Taxes locales' | 'Achat matériel' | 'Fournitures' | 'Entretien' | 'Social' | 'Événements' | 'Autre'; description: string; responsable: string; justificatifRef?: string; }
-export interface Materiel { id: string; nom: string; categorie: 'Mobilier' | 'Informatique' | 'Logistique' | 'Événementiel' | 'Sécurité' | 'Autre'; quantiteTotal: number; quantiteDisponible: number; etat: 'Excellent' | 'Bon' | 'Moyen' | 'Détérioré' | 'En panne'; dateAcquisition: string; valeurEstimee: number; responsable: string; lieuStockage: string; }
+export interface Materiel {
+  id: string;
+  nom: string;
+  categorie: 'Mobilier' | 'Informatique' | 'Logistique' | 'Événementiel' | 'Sécurité' | 'Autre';
+  quantite_total: number;
+  quantite_disponible: number;
+  etat: 'Excellent' | 'Bon' | 'Moyen' | 'Détérioré' | 'En panne';
+  date_acquisition?: string;
+  valeur_unitaire: number;      // prix unitaire (Ar)
+  prix_location: number;        // tarif location/unité/jour (0 = gratuit)
+  responsable: string;
+  lieu_stockage: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MaterielPret {
+  id: string;
+  materiel_id: string;
+  emprunteur: string;
+  foyer_id?: string;
+  quantite: number;
+  date_emprunt: string;
+  date_retour_prevue: string;
+  date_retour_reel?: string;
+  tarif_total: number;
+  statut: 'En cours' | 'Retourné';
+  notes?: string;
+  finance_id?: string;
+  created_at?: string;
+}
 export interface CotisationAdidy { id: string; codeMenage: string; habitantId?: string; annee: number; mois: number; montant: number; datePaiement: string; responsable: string; recuNo: string; }
 
 // ── Types fonciers ────────────────────────────────────────────

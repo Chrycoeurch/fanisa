@@ -1,730 +1,730 @@
-import React, { useState } from 'react';
-import { Materiel } from '../types';
-import { 
-  Package, Wrench, Shield, CheckCircle, AlertTriangle, 
-  Search, Plus, X, Calendar, MapPin, User, Tag, 
-  HelpCircle, Trash2, ArrowRightLeft, Landmark
+/**
+ * MaterialsModule.tsx — Gestion des matériels du Fokontany
+ * - Stock persisté en Supabase
+ * - Valeur globale = valeur_unitaire × quantite_total
+ * - Prix de location configurable par matériel
+ * - Prêts persistés + retour stock
+ * - Si prêt payant → crée une recette dans la table finances
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
+import { Materiel, MaterielPret, Foyer } from '../types';
+import {
+  Package, Wrench, CheckCircle, AlertTriangle, Search, Plus, X,
+  Calendar, MapPin, Trash2, ArrowRightLeft, Landmark, Loader2,
+  RotateCcw, Tag, Save, Edit2, TrendingUp, DollarSign
 } from 'lucide-react';
 
-interface MaterialsModuleProps {
-  materiels: Materiel[];
-  onAddMateriel: (newMat: Omit<Materiel, 'id'>) => void;
-  onUpdateMateriel: (updatedMat: Materiel) => void;
-  onDeleteMateriel: (id: string) => void;
-  habitantsList?: { id: string; nom: string; prenom: string }[];
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmt = (n: number) => n.toLocaleString('fr-FR');
+
+function etatColor(etat: Materiel['etat']) {
+  switch (etat) {
+    case 'Excellent': return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+    case 'Bon':       return 'bg-cyan-50 text-cyan-800 border-cyan-200';
+    case 'Moyen':     return 'bg-blue-50 text-blue-800 border-blue-200';
+    case 'Détérioré': return 'bg-amber-50 text-amber-800 border-amber-200';
+    case 'En panne':  return 'bg-rose-50 text-rose-800 border-rose-200';
+    default:          return 'bg-slate-50 text-slate-700';
+  }
 }
 
-interface LoanRecord {
-  id: string;
-  materielId: string;
-  borrowerName: string;
-  dateEmprunt: string;
-  dateRetourPrevue: string;
-  quantite: number;
-  statut: 'En cours' | 'Retourné';
+function joursEntre(d1: string, d2: string): number {
+  const diff = new Date(d2).getTime() - new Date(d1).getTime();
+  return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
 
-export default function MaterialsModule({
-  materiels,
-  onAddMateriel,
-  onUpdateMateriel,
-  onDeleteMateriel,
-  habitantsList = []
-}: MaterialsModuleProps) {
-  // Filters state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [filterEtat, setFilterEtat] = useState<string>('all');
-  
-  // New asset form state
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [formNom, setFormNom] = useState('');
-  const [formCategorie, setFormCategorie] = useState<Materiel['categorie']>('Mobilier');
-  const [formQtyTotal, setFormQtyTotal] = useState<number>(1);
-  const [formEtat, setFormEtat] = useState<Materiel['etat']>('Excellent');
-  const [formValeur, setFormValeur] = useState<number>(0);
-  const [formResponsable, setFormResponsable] = useState('Secrétaire Fokontany');
-  const [formStockage, setFormStockage] = useState('Grande salle du Fokontany');
+// ── Formulaire ajout/édition matériel ────────────────────────────────────────
+function FormMateriel({
+  materiel,
+  onSave,
+  onClose,
+}: {
+  materiel?: Materiel;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  const isEdit = !!materiel;
+  const [nom, setNom] = useState(materiel?.nom || '');
+  const [categorie, setCategorie] = useState<Materiel['categorie']>(materiel?.categorie || 'Mobilier');
+  const [qty, setQty] = useState(materiel?.quantite_total || 1);
+  const [etat, setEtat] = useState<Materiel['etat']>(materiel?.etat || 'Bon');
+  const [valeurUnitaire, setValeurUnitaire] = useState(materiel?.valeur_unitaire || 0);
+  const [prixLocation, setPrixLocation] = useState(materiel?.prix_location || 0);
+  const [responsable, setResponsable] = useState(materiel?.responsable || 'Secrétaire Fokontany');
+  const [stockage, setStockage] = useState(materiel?.lieu_stockage || 'Grande salle du Fokontany');
+  const [saving, setSaving] = useState(false);
 
-  const [loans, setLoans] = useState<LoanRecord[]>([]);
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nom.trim()) return;
+    setSaving(true);
 
-  const syncLoans = (updated: LoanRecord[]) => {
-    setLoans(updated);
+    const payload: Partial<Materiel> = {
+      nom: nom.trim(),
+      categorie,
+      quantite_total: qty,
+      etat,
+      valeur_unitaire: valeurUnitaire,
+      prix_location: prixLocation,
+      responsable: responsable.trim(),
+      lieu_stockage: stockage.trim(),
+    };
+
+    if (isEdit) {
+      // Si on augmente la quantité totale, on augmente la dispo du même delta
+      const delta = qty - materiel!.quantite_total;
+      if (delta > 0) {
+        payload.quantite_disponible = materiel!.quantite_disponible + delta;
+      }
+      payload.updated_at = new Date().toISOString();
+      await supabase.from('materiels').update(payload).eq('id', materiel!.id);
+    } else {
+      payload.quantite_disponible = qty;
+      payload.date_acquisition = new Date().toISOString().split('T')[0];
+      await supabase.from('materiels').insert(payload);
+    }
+
+    setSaving(false);
+    onSave();
   };
 
-  // Loan Form State
-  const [isLoanOpen, setIsLoanOpen] = useState(false);
-  const [selectedMatForLoan, setSelectedMatForLoan] = useState<Materiel | null>(null);
-  const [loanQty, setLoanQty] = useState(1);
-  const [loanBorrower, setLoanBorrower] = useState('');
-  const [loanReturnDate, setLoanReturnDate] = useState('');
+  const valeurGlobale = valeurUnitaire * qty;
 
-  // Computations
-  const totalQuantity = materiels.reduce((sum, m) => sum + m.quantiteTotal, 0);
-  const availableQuantity = materiels.reduce((sum, m) => sum + m.quantiteDisponible, 0);
-  const totalDamagedItems = materiels.filter(m => m.etat === 'En panne' || m.etat === 'Détérioré').length;
-  const totalAssetsValue = materiels.reduce((sum, m) => sum + (m.valeurEstimee || 0), 0);
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide">
+            {isEdit ? 'Modifier le matériel' : 'Inscrire un équipement'}
+          </h3>
+          <button onClick={onClose}><X className="h-4 w-4 text-slate-400" /></button>
+        </div>
 
-  // Filters items
-  const filteredMateriels = materiels.filter(m => {
-    const matchesCategory = filterCategory === 'all' || m.categorie === filterCategory;
-    const matchesEtat = filterEtat === 'all' || m.etat === filterEtat;
-    const matchesSearch = m.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          m.responsable.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          m.lieuStockage.toLowerCase().includes(searchQuery.toLowerCase());
+        <form onSubmit={handleSave} className="p-5 space-y-3 text-xs">
+          {/* Nom */}
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Désignation *</label>
+            <input
+              autoFocus
+              value={nom}
+              onChange={e => setNom(e.target.value)}
+              required
+              placeholder="Ex: Chaises vertes, Mégaphone…"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-400"
+            />
+          </div>
 
-    return matchesCategory && matchesEtat && matchesSearch;
-  });
+          <div className="grid grid-cols-2 gap-3">
+            {/* Catégorie */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Catégorie</label>
+              <select value={categorie} onChange={e => setCategorie(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400 bg-white">
+                {['Mobilier','Informatique','Logistique','Événementiel','Sécurité','Autre'].map(c =>
+                  <option key={c} value={c}>{c}</option>
+                )}
+              </select>
+            </div>
+            {/* État */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">État</label>
+              <select value={etat} onChange={e => setEtat(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400 bg-white">
+                {['Excellent','Bon','Moyen','Détérioré','En panne'].map(e =>
+                  <option key={e} value={e}>{e}</option>
+                )}
+              </select>
+            </div>
+          </div>
 
-  const handleCreateAsset = (e: React.FormEvent) => {
+          <div className="grid grid-cols-3 gap-3">
+            {/* Quantité */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Quantité totale</label>
+              <input type="number" min={isEdit ? (materiel!.quantite_total - materiel!.quantite_disponible) : 1} value={qty}
+                onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400 font-mono" />
+            </div>
+            {/* Valeur unitaire */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Valeur unitaire (Ar)</label>
+              <input type="number" min={0} value={valeurUnitaire || ''}
+                onChange={e => setValeurUnitaire(parseInt(e.target.value) || 0)}
+                placeholder="0"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400 font-mono" />
+            </div>
+            {/* Prix location */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Loyer/unité/jour (Ar)</label>
+              <input type="number" min={0} value={prixLocation || ''}
+                onChange={e => setPrixLocation(parseInt(e.target.value) || 0)}
+                placeholder="0 = gratuit"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400 font-mono" />
+            </div>
+          </div>
+
+          {/* Aperçu valeur globale */}
+          {valeurUnitaire > 0 && (
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex items-center gap-3">
+              <TrendingUp className="h-4 w-4 text-indigo-500 flex-shrink-0" />
+              <div>
+                <p className="text-[10px] text-indigo-500 font-semibold uppercase">Valeur globale estimée</p>
+                <p className="font-mono font-black text-indigo-900 text-sm">{fmt(valeurGlobale)} Ar</p>
+                <p className="text-[10px] text-indigo-400">{fmt(valeurUnitaire)} Ar × {qty} unités</p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Lieu de stockage</label>
+              <input value={stockage} onChange={e => setStockage(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Responsable</label>
+              <input value={responsable} onChange={e => setResponsable(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400" />
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex gap-3">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">
+              Annuler
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {isEdit ? 'Mettre à jour' : 'Inscrire'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Formulaire prêt ───────────────────────────────────────────────────────────
+function FormPret({
+  materiel,
+  foyers,
+  onSave,
+  onClose,
+}: {
+  materiel: Materiel;
+  foyers: Foyer[];
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
+
+  const [emprunteur, setEmprunteur] = useState('');
+  const [foyerId, setFoyerId] = useState('');
+  const [qty, setQty] = useState(1);
+  const [dateRetour, setDateRetour] = useState(tomorrowStr);
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const jours = joursEntre(today, dateRetour);
+  const tarifTotal = materiel.prix_location * qty * jours;
+  const estPayant = tarifTotal > 0;
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formNom.trim()) {
-      alert("Le nom de l'équipement est requis.");
-      return;
-    }
-    if (formQtyTotal <= 0) {
-      alert("La quantité doit être supérieure à zéro.");
-      return;
+    if (!emprunteur.trim()) return;
+    setSaving(true);
+
+    let finance_id: string | undefined;
+
+    // Si payant → créer une recette dans finances
+    if (estPayant) {
+      const recette = {
+        date: today,
+        type: 'Recette',
+        categorie: 'Location matériel',
+        description: `Location ${materiel.nom} × ${qty} — ${emprunteur} (${jours} j)`,
+        montant: tarifTotal,
+        statut: 'En attente',
+        reference: `LOC-${Date.now()}`,
+        foyer_id: foyerId || null,
+      };
+      const { data: fin } = await supabase.from('finances').insert(recette).select('id').single();
+      finance_id = fin?.id;
     }
 
-    onAddMateriel({
-      nom: formNom,
-      categorie: formCategorie,
-      quantiteTotal: formQtyTotal,
-      quantiteDisponible: formQtyTotal, // Initial available is equals to total
-      etat: formEtat,
-      dateAcquisition: new Date().toISOString().split('T')[0],
-      valeurEstimee: formValeur,
-      responsable: formResponsable,
-      lieuStockage: formStockage
+    // Créer le prêt
+    await supabase.from('materiels_prets').insert({
+      materiel_id: materiel.id,
+      emprunteur: emprunteur.trim(),
+      foyer_id: foyerId || null,
+      quantite: qty,
+      date_emprunt: today,
+      date_retour_prevue: dateRetour,
+      tarif_total: tarifTotal,
+      statut: 'En cours',
+      notes: notes.trim() || null,
+      finance_id: finance_id || null,
     });
 
-    setIsFormOpen(false);
-    // Reset Form
-    setFormNom('');
-    setFormQtyTotal(1);
-    setFormValeur(0);
-  };
+    // Décrémenter le stock disponible
+    await supabase.from('materiels')
+      .update({ quantite_disponible: materiel.quantite_disponible - qty, updated_at: new Date().toISOString() })
+      .eq('id', materiel.id);
 
-  // Handle reporting a broken status on equipment
-  const handleQuickStatusChange = (materiel: Materiel, newEtat: Materiel['etat']) => {
-    const updated = {
-      ...materiel,
-      etat: newEtat
-    };
-    onUpdateMateriel(updated);
-  };
-
-  // Handle Loans & Hire Out
-  const handleOpenLoanDialog = (mat: Materiel) => {
-    setSelectedMatForLoan(mat);
-    setLoanQty(1);
-    setLoanBorrower('');
-    // default tomorrow as return date
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 2);
-    setLoanReturnDate(tomorrow.toISOString().split('T')[0]);
-    setIsLoanOpen(true);
-  };
-
-  const handleRegisterLoan = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedMatForLoan) return;
-    if (loanQty <= 0 || loanQty > selectedMatForLoan.quantiteDisponible) {
-      alert(`La quantité à emprunter doit être comprise entre 1 et ${selectedMatForLoan.quantiteDisponible}`);
-      return;
-    }
-    if (!loanBorrower.trim()) {
-      alert("Le nom de l'emprunteur est requis.");
-      return;
-    }
-
-    // Decrement available quantity in original material
-    const updatedMaterial: Materiel = {
-      ...selectedMatForLoan,
-      quantiteDisponible: selectedMatForLoan.quantiteDisponible - loanQty
-    };
-    onUpdateMateriel(updatedMaterial);
-
-    // Register active loan record
-    const newLoan: LoanRecord = {
-      id: `loan-${Date.now()}`,
-      materielId: selectedMatForLoan.id,
-      borrowerName: loanBorrower,
-      dateEmprunt: new Date().toISOString().split('T')[0],
-      dateRetourPrevue: loanReturnDate,
-      quantite: loanQty,
-      statut: 'En cours'
-    };
-
-    syncLoans([...loans, newLoan]);
-    setIsLoanOpen(false);
-    setSelectedMatForLoan(null);
-  };
-
-  const handleReturnLoan = (loan: LoanRecord) => {
-    const mat = materiels.find(m => m.id === loan.materielId);
-    if (!mat) {
-      alert("Matériel introuvable.");
-      return;
-    }
-
-    // Increment back quantity of available
-    const updatedMaterial: Materiel = {
-      ...mat,
-      quantiteDisponible: Math.min(mat.quantiteTotal, mat.quantiteDisponible + loan.quantite)
-    };
-    onUpdateMateriel(updatedMaterial);
-
-    // Set loan as returned
-    const updatedLoans = loans.map(l => {
-      if (l.id === loan.id) return { ...l, statut: 'Retourné' as const };
-      return l;
-    });
-    syncLoans(updatedLoans);
-  };
-
-  const handleDeleteLoanRecord = (id: string) => {
-    if (confirm("Supprimer l'archivage de ce prêt de matériel ?")) {
-      syncLoans(loans.filter(l => l.id !== id));
-    }
+    setSaving(false);
+    onSave();
   };
 
   return (
-    <div className="space-y-6">
-      
-      {/* 1. SECTOR METRICS MODULES */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        
-        {/* Metric 1: Total catalog items */}
-        <div className="p-4 bg-white border border-slate-205 rounded-xl shadow-3xs flex items-center space-x-3.5">
-          <div className="w-10 h-10 bg-indigo-50 border border-indigo-150 rounded-lg flex items-center justify-center shrink-0 text-indigo-700 font-bold">
-            <Package className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block font-mono">Volume Équipements</span>
-            <div className="flex items-baseline space-x-1">
-              <strong className="text-lg font-black text-slate-900 leading-none">{totalQuantity}</strong>
-              <span className="text-[10px] text-slate-500">unités recensées</span>
-            </div>
-          </div>
+    <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-bold text-slate-900 text-sm">Prêt de matériel</h3>
+          <button onClick={onClose}><X className="h-4 w-4 text-slate-400" /></button>
         </div>
 
-        {/* Metric 2: Available Stock */}
-        <div className="p-4 bg-white border border-slate-205 rounded-xl shadow-3xs flex items-center space-x-3.5">
-          <div className="w-10 h-10 bg-emerald-50 border border-emerald-150 rounded-lg flex items-center justify-center shrink-0 text-emerald-700">
-            <CheckCircle className="h-5 w-5" />
+        <form onSubmit={handleSave} className="p-5 space-y-3 text-xs">
+          {/* Info matériel */}
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
+            <p className="font-bold text-indigo-900 text-sm">{materiel.nom}</p>
+            <p className="text-indigo-500 text-[10px]">
+              Dispo : <strong>{materiel.quantite_disponible}</strong> unités
+              {materiel.prix_location > 0 && (
+                <span> · <strong>{fmt(materiel.prix_location)} Ar</strong>/unité/jour</span>
+              )}
+              {materiel.prix_location === 0 && <span> · Prêt gratuit</span>}
+            </p>
           </div>
+
+          {/* Emprunteur */}
           <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block font-mono">Disponibles Stocks</span>
-            <div className="flex items-baseline space-x-1">
-              <strong className="text-lg font-black text-emerald-800 leading-none">{availableQuantity}</strong>
-              <span className="text-[10px] text-slate-500">en réserve locale</span>
+            <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Emprunteur *</label>
+            <input autoFocus value={emprunteur} onChange={e => setEmprunteur(e.target.value)} required
+              placeholder="Nom de l'emprunteur"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:border-indigo-400" />
+          </div>
+
+          {/* Foyer lié (optionnel) */}
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Foyer lié (optionnel)</label>
+            <select value={foyerId} onChange={e => setFoyerId(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-400 bg-white">
+              <option value="">— Aucun —</option>
+              {foyers.map(f => <option key={f.id} value={f.id}>{f.code_menage}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Quantité */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Quantité</label>
+              <input type="number" min={1} max={materiel.quantite_disponible} value={qty}
+                onChange={e => setQty(Math.min(materiel.quantite_disponible, Math.max(1, parseInt(e.target.value) || 1)))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-400 font-mono" />
+            </div>
+            {/* Date retour */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Retour prévu</label>
+              <input type="date" min={today} value={dateRetour} onChange={e => setDateRetour(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-400 font-mono" />
             </div>
           </div>
-        </div>
 
-        {/* Metric 3: Broken Equipment and repairs needed */}
-        <div className="p-4 bg-white border border-slate-205 rounded-xl shadow-3xs flex items-center space-x-3.5">
-          <div className="w-10 h-10 bg-amber-50 border border-amber-150 rounded-lg flex items-center justify-center shrink-0 text-amber-700">
-            <Wrench className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block font-mono">Avaries / En maintenance</span>
-            <div className="flex items-baseline space-x-1">
-              <strong className="text-lg font-black text-amber-800 leading-none">{totalDamagedItems}</strong>
-              <span className="text-[10px] text-slate-500">postes d'assistance</span>
+          {/* Calcul tarif */}
+          <div className={`rounded-xl p-3 border ${estPayant ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Durée</span>
+              <span className="font-mono font-bold text-slate-700">{jours} jour{jours > 1 ? 's' : ''}</span>
             </div>
-          </div>
-        </div>
-
-        {/* Metric 4: Asset monetary Value */}
-        <div className="p-4 bg-gradient-to-br from-indigo-950 to-slate-900 border border-slate-800 rounded-xl shadow-3xs flex items-center space-x-3.5 text-white">
-          <div className="w-10 h-10 bg-indigo-900/50 border border-indigo-700/50 rounded-lg flex items-center justify-center shrink-0 text-indigo-300">
-            <Landmark className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-indigo-300 block font-mono">Valeur Globale Estimée</span>
-            <div className="flex items-baseline space-x-1">
-              <strong className="text-sm font-black font-mono leading-none">{totalAssetsValue.toLocaleString('fr-FR')}</strong>
-              <span className="text-[9px] uppercase font-semibold text-indigo-300">Ariary</span>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px] font-bold uppercase">{estPayant ? 'Tarif à facturer' : 'Prêt gratuit'}</span>
+              <span className={`font-mono font-black text-sm ${estPayant ? 'text-amber-800' : 'text-emerald-700'}`}>
+                {estPayant ? `${fmt(tarifTotal)} Ar` : '0 Ar'}
+              </span>
             </div>
+            {estPayant && (
+              <p className="text-[10px] text-amber-600 mt-1">
+                Une recette sera créée automatiquement dans Finances.
+              </p>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Notes (optionnel)</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-400 resize-none" />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">
+              Annuler
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
+              Confirmer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Module principal ──────────────────────────────────────────────────────────
+export default function MaterialsModule({ foyers }: { foyers: Foyer[] }) {
+  const [materiels, setMateriels] = useState<Materiel[]>([]);
+  const [prets, setPrets] = useState<MaterielPret[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategorie, setFilterCategorie] = useState('all');
+  const [filterEtat, setFilterEtat] = useState('all');
+
+  const [showForm, setShowForm] = useState(false);
+  const [editingMat, setEditingMat] = useState<Materiel | undefined>();
+  const [showPret, setShowPret] = useState(false);
+  const [selectedMat, setSelectedMat] = useState<Materiel | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: m }, { data: p }] = await Promise.all([
+      supabase.from('materiels').select('*').order('created_at', { ascending: false }),
+      supabase.from('materiels_prets').select('*').order('created_at', { ascending: false }),
+    ]);
+    setMateriels((m || []) as Materiel[]);
+    setPrets((p || []) as MaterielPret[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const totalQty = materiels.reduce((s, m) => s + m.quantite_total, 0);
+  const dispoQty = materiels.reduce((s, m) => s + m.quantite_disponible, 0);
+  const enPanne = materiels.filter(m => m.etat === 'En panne' || m.etat === 'Détérioré').length;
+  // Valeur globale = valeur_unitaire × quantite_total (pas la dispo)
+  const valeurGlobale = materiels.reduce((s, m) => s + (m.valeur_unitaire * m.quantite_total), 0);
+  const pretsActifs = prets.filter(p => p.statut === 'En cours').length;
+
+  // ── Filtres ───────────────────────────────────────────────────────────────
+  const filtered = materiels.filter(m => {
+    const q = searchQuery.toLowerCase();
+    const matchSearch = !q || m.nom.toLowerCase().includes(q) || m.responsable.toLowerCase().includes(q) || m.lieu_stockage.toLowerCase().includes(q);
+    const matchCat = filterCategorie === 'all' || m.categorie === filterCategorie;
+    const matchEtat = filterEtat === 'all' || m.etat === filterEtat;
+    return matchSearch && matchCat && matchEtat;
+  });
+
+  // ── Retour d'un prêt ──────────────────────────────────────────────────────
+  const handleRetour = async (pret: MaterielPret) => {
+    const mat = materiels.find(m => m.id === pret.materiel_id);
+    if (!mat) return;
+
+    await Promise.all([
+      supabase.from('materiels_prets').update({
+        statut: 'Retourné',
+        date_retour_reel: new Date().toISOString().split('T')[0],
+      }).eq('id', pret.id),
+      supabase.from('materiels').update({
+        quantite_disponible: Math.min(mat.quantite_total, mat.quantite_disponible + pret.quantite),
+        updated_at: new Date().toISOString(),
+      }).eq('id', mat.id),
+    ]);
+
+    // Si payant → marquer la recette comme encaissée
+    if (pret.finance_id && pret.tarif_total > 0) {
+      await supabase.from('finances').update({ statut: 'Encaissé' }).eq('id', pret.finance_id);
+    }
+
+    await load();
+  };
+
+  const handleDeletePret = async (id: string) => {
+    if (!confirm('Supprimer cet enregistrement de prêt ?')) return;
+    await supabase.from('materiels_prets').delete().eq('id', id);
+    await load();
+  };
+
+  const handleDeleteMat = async (mat: Materiel) => {
+    if (!confirm(`Supprimer "${mat.nom}" du registre ?`)) return;
+    await supabase.from('materiels').delete().eq('id', mat.id);
+    await load();
+  };
+
+  const handleEtatChange = async (mat: Materiel, newEtat: Materiel['etat']) => {
+    await supabase.from('materiels').update({ etat: newEtat, updated_at: new Date().toISOString() }).eq('id', mat.id);
+    setMateriels(prev => prev.map(m => m.id === mat.id ? { ...m, etat: newEtat } : m));
+  };
+
+  if (loading) return (
+    <div className="flex items-center gap-2 p-8 text-slate-400 text-sm">
+      <Loader2 className="h-5 w-5 animate-spin" />Chargement des matériels…
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── KPIs ─────────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+          <div className="w-9 h-9 bg-indigo-50 rounded-lg flex items-center justify-center"><Package className="h-4 w-4 text-indigo-600" /></div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Total</p>
+            <p className="text-lg font-black text-slate-900">{totalQty} <span className="text-xs font-normal text-slate-400">unités</span></p>
           </div>
         </div>
-
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+          <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center"><CheckCircle className="h-4 w-4 text-emerald-600" /></div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Disponibles</p>
+            <p className="text-lg font-black text-emerald-700">{dispoQty} <span className="text-xs font-normal text-slate-400">en stock</span></p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+          <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center"><Wrench className="h-4 w-4 text-amber-600" /></div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Avaries</p>
+            <p className="text-lg font-black text-amber-700">{enPanne} <span className="text-xs font-normal text-slate-400">articles</span></p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+          <div className="w-9 h-9 bg-violet-50 rounded-lg flex items-center justify-center"><ArrowRightLeft className="h-4 w-4 text-violet-600" /></div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Prêts actifs</p>
+            <p className="text-lg font-black text-violet-700">{pretsActifs} <span className="text-xs font-normal text-slate-400">en cours</span></p>
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-indigo-950 to-slate-900 rounded-xl border border-slate-800 p-4 flex items-center gap-3 col-span-2 md:col-span-1">
+          <div className="w-9 h-9 bg-indigo-800/50 rounded-lg flex items-center justify-center"><Landmark className="h-4 w-4 text-indigo-300" /></div>
+          <div>
+            <p className="text-[10px] font-bold text-indigo-300 uppercase">Valeur globale</p>
+            <p className="text-sm font-black text-white font-mono">{fmt(valeurGlobale)}</p>
+            <p className="text-[10px] text-indigo-400">Ariary</p>
+          </div>
+        </div>
       </div>
 
-      {/* 2. EQUIPMENT MATRIX CATALOG */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* MAIN EQUIPMENT INVENTORY TABLE */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col">
-          
-          {/* Filtering row */}
-          <div className="p-4 bg-slate-50 border-b border-slate-150 flex flex-col sm:flex-row gap-3 items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Package className="h-4 w-4 text-indigo-600" />
-              <h3 className="font-sans font-bold text-slate-900 text-xs uppercase tracking-wider">
-                Registre Général des Équipements Communs
-              </h3>
-            </div>
+      {/* ── Corps principal ───────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-            <button
-              onClick={() => setIsFormOpen(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              <span>Inscrire un Matériel</span>
+        {/* Table matériels */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+          {/* En-tête */}
+          <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-indigo-600" />
+              <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide">Registre des équipements</h3>
+            </div>
+            <button onClick={() => { setEditingMat(undefined); setShowForm(true); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg">
+              <Plus className="h-3.5 w-3.5" />Inscrire
             </button>
           </div>
 
-          <div className="p-3 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between">
-            {/* search and categories */}
-            <div className="relative flex-1 min-w-[200px]">
+          {/* Filtres */}
+          <div className="p-3 border-b border-slate-100 flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-[180px]">
               <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-              <input 
-                type="text"
-                placeholder="Rechercher mobilier, mégaphone, responsable..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full text-xs pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg bg-slate-50/50 outline-hidden"
-              />
+              <input type="text" placeholder="Rechercher…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                className="w-full text-xs pl-8 pr-3 py-2 border border-slate-200 rounded-lg outline-none bg-slate-50" />
             </div>
-
-            <div className="flex gap-1.5">
-              <select
-                value={filterCategory}
-                onChange={e => setFilterCategory(e.target.value)}
-                className="text-xs border border-slate-200 bg-white rounded-md p-1 font-medium"
-              >
-                <option value="all">Toutes Catégories</option>
-                <option value="Mobilier">Mobilier</option>
-                <option value="Informatique">Informatique</option>
-                <option value="Logistique">Logistique</option>
-                <option value="Événementiel">Événementiel</option>
-                <option value="Sécurité">Sécurité</option>
-                <option value="Autre">Autre</option>
-              </select>
-
-              <select
-                value={filterEtat}
-                onChange={e => setFilterEtat(e.target.value)}
-                className="text-xs border border-slate-200 bg-white rounded-md p-1 font-medium"
-              >
-                <option value="all">Tous États</option>
-                <option value="Excellent">Excellent</option>
-                <option value="Bon">Bon</option>
-                <option value="Moyen">Moyen</option>
-                <option value="Détérioré">Détérioré</option>
-                <option value="En panne">En panne</option>
-              </select>
-            </div>
+            <select value={filterCategorie} onChange={e => setFilterCategorie(e.target.value)}
+              className="text-xs border border-slate-200 bg-white rounded-lg px-2 py-1.5">
+              <option value="all">Toutes catégories</option>
+              {['Mobilier','Informatique','Logistique','Événementiel','Sécurité','Autre'].map(c =>
+                <option key={c} value={c}>{c}</option>
+              )}
+            </select>
+            <select value={filterEtat} onChange={e => setFilterEtat(e.target.value)}
+              className="text-xs border border-slate-200 bg-white rounded-lg px-2 py-1.5">
+              <option value="all">Tous états</option>
+              {['Excellent','Bon','Moyen','Détérioré','En panne'].map(e =>
+                <option key={e} value={e}>{e}</option>
+              )}
+            </select>
+            {(searchQuery || filterCategorie !== 'all' || filterEtat !== 'all') && (
+              <button onClick={() => { setSearchQuery(''); setFilterCategorie('all'); setFilterEtat('all'); }}
+                className="text-xs text-indigo-600 flex items-center gap-1 hover:underline">
+                <RotateCcw className="h-3 w-3" />Réinitialiser
+              </button>
+            )}
           </div>
 
-          {/* Table List of equipment */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+          {/* Table */}
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-xs text-left">
               <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-150 text-slate-450 uppercase font-mono text-[9px]">
+                <tr className="bg-slate-50 border-b border-slate-100 text-[10px] uppercase text-slate-400 font-mono">
                   <th className="p-3">Désignation</th>
-                  <th className="p-3">Catégorie</th>
-                  <th className="p-3 text-center">Quantité (Dispo / Total)</th>
-                  <th className="p-3">État actuel</th>
-                  <th className="p-3">Lieu Stockage</th>
-                  <th className="p-3">Responsable</th>
-                  <th className="p-3 text-right">Valeur (Ar)</th>
-                  <th className="p-2 w-28 text-center">Actions</th>
+                  <th className="p-3 text-center">Dispo / Total</th>
+                  <th className="p-3">État</th>
+                  <th className="p-3 text-right">Val. unitaire</th>
+                  <th className="p-3 text-right">Val. globale</th>
+                  <th className="p-3 text-right">Loyer/u/j</th>
+                  <th className="p-3 text-center w-24">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-sans text-slate-755">
-                {filteredMateriels.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400 italic">
-                      Aucun équipement enregistré d'après vos critères de recherche.
+              <tbody className="divide-y divide-slate-50">
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={7} className="py-10 text-center text-slate-400 italic">Aucun matériel enregistré.</td></tr>
+                ) : filtered.map(mat => (
+                  <tr key={mat.id} className="hover:bg-slate-50/50 transition">
+                    <td className="p-3">
+                      <p className="font-semibold text-slate-900">{mat.nom}</p>
+                      <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <MapPin className="h-2.5 w-2.5" />{mat.lieu_stockage}
+                      </p>
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-semibold">{mat.categorie}</span>
+                    </td>
+                    <td className="p-3 text-center font-mono">
+                      <span className={`font-black ${mat.quantite_disponible === 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                        {mat.quantite_disponible}
+                      </span>
+                      <span className="text-slate-400"> / {mat.quantite_total}</span>
+                    </td>
+                    <td className="p-3">
+                      <select value={mat.etat} onChange={e => handleEtatChange(mat, e.target.value as any)}
+                        className={`text-[10px] font-bold px-2 py-1 rounded border ${etatColor(mat.etat)} cursor-pointer`}>
+                        {['Excellent','Bon','Moyen','Détérioré','En panne'].map(e =>
+                          <option key={e} value={e}>{e}</option>
+                        )}
+                      </select>
+                    </td>
+                    <td className="p-3 text-right font-mono text-slate-600">
+                      {fmt(mat.valeur_unitaire)} Ar
+                    </td>
+                    <td className="p-3 text-right font-mono font-bold text-indigo-700">
+                      {fmt(mat.valeur_unitaire * mat.quantite_total)} Ar
+                    </td>
+                    <td className="p-3 text-right font-mono">
+                      {mat.prix_location > 0
+                        ? <span className="text-amber-700 font-bold">{fmt(mat.prix_location)} Ar</span>
+                        : <span className="text-slate-400 text-[10px]">Gratuit</span>
+                      }
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => { setSelectedMat(mat); setShowPret(true); }}
+                          disabled={mat.quantite_disponible <= 0}
+                          title="Prêter"
+                          className="text-[10px] font-bold px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-100">
+                          Prêter
+                        </button>
+                        <button onClick={() => { setEditingMat(mat); setShowForm(true); }}
+                          title="Modifier" className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => handleDeleteMat(mat)}
+                          title="Supprimer" className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ) : (
-                  filteredMateriels.map(mat => {
-                    const getEtatColor = (et: Materiel['etat']) => {
-                      switch (et) {
-                        case 'Excellent': return 'bg-emerald-50 text-emerald-800 border-emerald-200';
-                        case 'Bon': return 'bg-cyan-50 text-cyan-800 border-cyan-250';
-                        case 'Moyen': return 'bg-blue-50 text-blue-800 border-blue-200';
-                        case 'Détérioré': return 'bg-amber-50 text-amber-800 border-amber-200';
-                        case 'En panne': return 'bg-rose-50 text-rose-800 border-rose-200';
-                        default: return 'bg-slate-50 text-slate-700';
-                      }
-                    };
-
-                    return (
-                      <tr key={mat.id} className="hover:bg-slate-50/40 transition">
-                        <td className="p-3 font-semibold text-slate-900 block pt-4">
-                          {mat.nom}
-                        </td>
-                        <td className="p-3 text-slate-500">
-                          <span className="bg-slate-100 border p-0.5 px-2 rounded-sm text-[10px] font-bold text-slate-600">
-                            {mat.categorie}
-                          </span>
-                        </td>
-                        <td className="p-3 text-center font-mono">
-                          <span className={`font-bold ${mat.quantiteDisponible === 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                            {mat.quantiteDisponible}
-                          </span> 
-                          <span className="text-slate-400 font-normal"> / {mat.quantiteTotal}</span>
-                        </td>
-                        <td className="p-3">
-                          <select
-                            value={mat.etat}
-                            onChange={e => handleQuickStatusChange(mat, e.target.value as any)}
-                            className={`p-1 px-1.5 border hover:border-slate-400 rounded-sm text-[10px] font-extrabold ${getEtatColor(mat.etat)}`}
-                          >
-                            <option value="Excellent">Excellent</option>
-                            <option value="Bon">Bon</option>
-                            <option value="Moyen">Moyen</option>
-                            <option value="Détérioré">Détérioré</option>
-                            <option value="En panne">En panne</option>
-                          </select>
-                        </td>
-                        <td className="p-3 text-[11px] text-slate-600">
-                          <div className="flex items-center">
-                            <MapPin className="h-3 w-3 mr-1 text-slate-400 shrink-0" />
-                            <span className="truncate">{mat.lieuStockage}</span>
-                          </div>
-                        </td>
-                        <td className="p-3 font-semibold text-slate-700">
-                          {mat.responsable}
-                        </td>
-                        <td className="p-3 font-mono text-right font-medium text-slate-800">
-                          {mat.valeurEstimee ? mat.valeurEstimee.toLocaleString('fr-FR') : '0'} Ar
-                        </td>
-                        <td className="p-2">
-                          <div className="flex items-center justify-center space-x-1">
-                            <button
-                              onClick={() => handleOpenLoanDialog(mat)}
-                              disabled={mat.quantiteDisponible <= 0}
-                              className="text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-150 px-2 py-1 rounded-sm disabled:bg-slate-50 disabled:border-slate-100 disabled:text-slate-400 cursor-pointer disabled:cursor-not-allowed"
-                              title="Prêter cet équipement"
-                            >
-                              Prêter
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm("Supprimer définitivement cet équipement du registre Fokontany ?")) {
-                                  onDeleteMateriel(mat.id);
-                                }
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
-                              title="Supprimer la fiche matériel"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-
         </div>
 
-        {/* SIDEBAR: LOAN AND HIRE CITIZENS STATUS LIST */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden flex flex-col">
-          
-          <div className="p-4 bg-slate-50 border-b border-slate-150 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <ArrowRightLeft className="h-4 w-4 text-emerald-600" />
-              <h3 className="font-sans font-extrabold text-slate-900 text-xs uppercase tracking-wider">
-                Registre Prêts & Emprunts Actifs
-              </h3>
+        {/* Panneau prêts */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+          <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4 text-violet-600" />
+              <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide">Prêts & Retours</h3>
             </div>
-            <span className="bg-emerald-100 text-emerald-800 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold">
-              {loans.filter(l => l.statut === 'En cours').length} actifs
+            <span className="text-[10px] font-bold bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full">
+              {pretsActifs} actif{pretsActifs > 1 ? 's' : ''}
             </span>
           </div>
 
-          <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-            <p className="text-[11px] text-slate-400 italic">
-              Registre pour tracer les biens municipaux (chaises, mégaphones, bâches pour événements) accordés en prêt temporaire gratuit aux habitants.
-            </p>
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+            {prets.length === 0 ? (
+              <p className="text-center text-slate-400 text-xs italic py-10">Aucun prêt enregistré.</p>
+            ) : prets.map(pret => {
+              const mat = materiels.find(m => m.id === pret.materiel_id);
+              const isActif = pret.statut === 'En cours';
+              const retourDate = new Date(pret.date_retour_prevue);
+              const estEnRetard = isActif && retourDate < new Date();
 
-            <div className="divide-y divide-slate-150">
-              {loans.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 italic text-[11px]">
-                  Aucun prêt actif enregistré dans le fokontany.
-                </div>
-              ) : (
-                loans.map(loan => {
-                  const targetMat = materiels.find(m => m.id === loan.materielId);
-                  const isReturned = loan.statut === 'Retourné';
-
-                  return (
-                    <div key={loan.id} className="py-3 text-xs space-y-1.5">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <strong className="text-slate-900 font-semibold">{loan.borrowerName}</strong>
-                          <span className="text-[10px] text-slate-400 block">
-                            Bien : {targetMat ? targetMat.nom : 'Inconnu'} • Quantité : <strong className="font-mono text-indigo-700">{loan.quantite}</strong>
-                          </span>
-                        </div>
-                        <span className={`text-[9px] font-black font-mono uppercase px-1.5 py-0.5 rounded ${
-                          isReturned 
-                            ? 'bg-slate-100 text-slate-600' 
-                            : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {isReturned ? 'RECONSTITUÉ' : 'EN COURS'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-slate-400">
-                        <span className="flex items-center">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          Restitution : {new Date(loan.dateRetourPrevue).toLocaleDateString('fr-FR')}
-                        </span>
-
-                        {!isReturned ? (
-                          <button
-                            onClick={() => handleReturnLoan(loan)}
-                            className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-150 px-2 py-0.5 rounded-sm transition"
-                          >
-                            ✓ Rapprocher (Retour)
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleDeleteLoanRecord(loan.id)}
-                            className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition"
-                            title="Effacer l'historique"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
+              return (
+                <div key={pret.id} className={`p-3 text-xs space-y-1.5 ${!isActif ? 'opacity-60' : ''}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-slate-800">{pret.emprunteur}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {mat?.nom || '—'} × <strong>{pret.quantite}</strong>
+                      </p>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${
+                        !isActif ? 'bg-slate-100 text-slate-500' :
+                        estEnRetard ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {!isActif ? 'Retourné' : estEnRetard ? 'En retard' : 'En cours'}
+                      </span>
+                      {pret.tarif_total > 0 && (
+                        <span className="text-[10px] font-mono font-bold text-amber-700 flex items-center gap-0.5">
+                          <DollarSign className="h-3 w-3" />{fmt(pret.tarif_total)} Ar
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span className="flex items-center gap-0.5">
+                      <Calendar className="h-3 w-3" />
+                      Retour prévu : {new Date(pret.date_retour_prevue).toLocaleDateString('fr-FR')}
+                    </span>
+                    {isActif ? (
+                      <button onClick={() => handleRetour(pret)}
+                        className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded transition">
+                        ✓ Retour
+                      </button>
+                    ) : (
+                      <button onClick={() => handleDeletePret(pret.id)}
+                        className="p-1 hover:bg-red-50 rounded text-slate-400 hover:text-red-600">
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {pret.notes && <p className="text-[10px] text-slate-400 italic">{pret.notes}</p>}
+                </div>
+              );
+            })}
           </div>
-
         </div>
-
       </div>
 
-      {/* 3. NEW ASSET INLINE REGISTRATION PROCESS POPUP */}
-      {isFormOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md border border-slate-200 overflow-hidden shadow-2xl animate-scaleUp">
-            
-            <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-extrabold text-slate-950 uppercase text-xs tracking-wider">
-                Inscrire un Équipement au Patrimoine Fokontany
-              </h3>
-              <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateAsset} className="p-5 space-y-4 text-xs">
-              
-              <div className="space-y-1">
-                <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Désignation / Nom du matériel</label>
-                <input
-                  type="text"
-                  required
-                  value={formNom}
-                  onChange={e => setFormNom(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 focus:bg-white text-slate-900 border border-slate-205 rounded-lg focus:border-indigo-500 text-sm"
-                  placeholder="Ex: Mégaphone rechargeable, Chaises vertes..."
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Catégories de biens</label>
-                  <select
-                    value={formCategorie}
-                    onChange={e => setFormCategorie(e.target.value as any)}
-                    className="w-full p-2 bg-slate-50 border border-slate-205 rounded-lg focus:border-indigo-500"
-                  >
-                    <option value="Mobilier">Mobilier Fokontany</option>
-                    <option value="Informatique">Matériel Informatique</option>
-                    <option value="Logistique">Service Logistique général</option>
-                    <option value="Événementiel">Kit Événementiel public</option>
-                    <option value="Sécurité">Sécurité & Vigilance quartier</option>
-                    <option value="Autre">Autre catégorie</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Quantité Acquise</label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={formQtyTotal}
-                    onChange={e => setFormQtyTotal(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full p-2 bg-slate-50 focus:bg-white border border-slate-205 rounded-lg focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">État de conservation</label>
-                  <select
-                    value={formEtat}
-                    onChange={e => setFormEtat(e.target.value as any)}
-                    className="w-full p-2 bg-slate-50 border border-slate-205 rounded-lg focus:border-indigo-500"
-                  >
-                    <option value="Excellent">Excellent</option>
-                    <option value="Bon">Bon</option>
-                    <option value="Moyen">Moyen</option>
-                    <option value="Détérioré">Détérioré / Abimé</option>
-                    <option value="En panne">En panne / À réparer</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Valeur unitaire estimée (Ar)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={formValeur || ''}
-                    onChange={e => setFormValeur(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full p-2 bg-slate-50 focus:bg-white border border-slate-205 rounded-lg focus:border-indigo-500 font-mono"
-                    placeholder="Ex: 150000"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Lieu de Stockage officiel</label>
-                <input
-                  type="text"
-                  required
-                  value={formStockage}
-                  onChange={e => setFormStockage(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-250 rounded-lg text-slate-800"
-                  placeholder="Ex: Grand placard du Fokontany..."
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Responsable du visa gardien</label>
-                <input
-                  type="text"
-                  required
-                  value={formResponsable}
-                  onChange={e => setFormResponsable(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-250 rounded-lg text-slate-800"
-                  placeholder="Ex: Secrétaire Fokontany"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-100 rounded-lg font-semibold"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition"
-                >
-                  Déclarer cet équipement
-                </button>
-              </div>
-
-            </form>
-
-          </div>
-        </div>
+      {/* Modals */}
+      {showForm && (
+        <FormMateriel
+          materiel={editingMat}
+          onSave={() => { setShowForm(false); setEditingMat(undefined); load(); }}
+          onClose={() => { setShowForm(false); setEditingMat(undefined); }}
+        />
       )}
 
-      {/* 4. LOAN BOOKING DIALOG FOR A DÉSIGNATED ASSET */}
-      {isLoanOpen && selectedMatForLoan && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm border border-slate-200 overflow-hidden shadow-2xl animate-scaleUp">
-            
-            <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-extrabold text-slate-950 uppercase text-xs tracking-wider">
-                Accorder un prêt de matériel
-              </h3>
-              <button onClick={() => { setIsLoanOpen(false); setSelectedMatForLoan(null); }} className="text-slate-400 hover:text-slate-600 font-bold">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleRegisterLoan} className="p-5 space-y-4 text-xs">
-              
-              <div className="p-3 bg-indigo-50 border border-indigo-150 rounded-lg text-slate-950 space-y-1">
-                <span className="text-[10px] uppercase text-indigo-700 tracking-wider block font-bold">ÉQUIPEMENT SÉLECTIONNÉ :</span>
-                <p className="font-semibold text-xs font-sans text-indigo-950">{selectedMatForLoan.nom}</p>
-                <p className="font-mono text-[10px]">Quantité utilisable disponible : <strong className="text-indigo-800 font-extrabold">{selectedMatForLoan.quantiteDisponible}</strong> unités</p>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Quantité à prêter</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={selectedMatForLoan.quantiteDisponible}
-                  required
-                  value={loanQty}
-                  onChange={e => setLoanQty(Math.min(selectedMatForLoan.quantiteDisponible, Math.max(1, parseInt(e.target.value) || 1)))}
-                  className="w-full p-2 bg-slate-50 text-slate-900 border border-slate-205 focus:border-indigo-500 focus:bg-white rounded-lg text-sm font-mono font-bold"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Bénéficiaire / Habitant Emprunteur (Réf)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: RAMANANJARA Jean (Volontaire quartier)"
-                  value={loanBorrower}
-                  onChange={e => setLoanBorrower(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 text-slate-900 border border-slate-205 rounded-lg text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-500 uppercase tracking-wide font-black text-[10px]">Date de Retour Prévue</label>
-                <input
-                  type="date"
-                  required
-                  value={loanReturnDate}
-                  onChange={e => setLoanReturnDate(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-205 rounded-lg text-xs font-mono"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => { setIsLoanOpen(false); setSelectedMatForLoan(null); }}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-100 rounded-lg font-semibold"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition"
-                >
-                  Confirmer le prêt
-                </button>
-              </div>
-
-            </form>
-
-          </div>
-        </div>
+      {showPret && selectedMat && (
+        <FormPret
+          materiel={selectedMat}
+          foyers={foyers}
+          onSave={() => { setShowPret(false); setSelectedMat(null); load(); }}
+          onClose={() => { setShowPret(false); setSelectedMat(null); }}
+        />
       )}
-
     </div>
   );
 }

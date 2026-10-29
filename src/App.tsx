@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { Foyer, Membre, Log } from './types';
-import { Habitant, HistoriqueLog, Transaction, Materiel, CotisationAdidy } from './types';
+import { Habitant, HistoriqueLog, Transaction, CotisationAdidy } from './types';
 import FoyerCard from './components/FoyerCard';
 import FoyerForm from './components/FoyerForm';
 import FoyerDetail from './components/FoyerDetail';
@@ -89,7 +89,6 @@ function AppContent({
   const [membres, setMembres] = useState<Membre[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [materiels, setMateriels] = useState<Materiel[]>([]);
   const [cotisations, setCotisations] = useState<CotisationAdidy[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -530,13 +529,7 @@ function AppContent({
         {activeTab === 'craad' && <CRAADModule foyers={foyers} membres={membres} />}
         {activeTab === 'vie_comm' && <VieCommunautaireModule foyers={foyers} membres={membres} />}
         {activeTab === 'finances' && <FinancesModule foyers={foyers} membres={membres} />}
-        {activeTab === 'materials' && (
-          <MaterialsModule materiels={materiels}
-            onAddMateriel={async (m) => setMateriels(p => [...p, { id: `mat-${Date.now()}`, ...m }])}
-            onUpdateMateriel={async (m) => setMateriels(p => p.map(x => x.id === m.id ? m : x))}
-            onDeleteMateriel={async (id) => setMateriels(p => p.filter(x => x.id !== id))}
-          />
-        )}
+        {activeTab === 'materials' && <MaterialsModule foyers={foyers} />}
         {activeTab === 'land' && <FoncierModule foyers={foyers} membres={membres} />}
         {activeTab === 'patrimoine' && <PatrimoineModule foyers={foyers} />}
         {activeTab === 'collecte' && <CollecteModule />}
