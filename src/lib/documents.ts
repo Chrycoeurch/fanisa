@@ -151,25 +151,37 @@ function drawHeaderA5L(page: PDFPage, config: ConfigFokontany, bold: PDFFont, re
   page.drawLine({ start: { x: m, y: tY - 4 }, end: { x: W - m, y: tY - 4 }, thickness: 0.5, color: C.dark });
 }
 
-function drawFooterA5L(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string, validite?: string) {
-  const { W, H } = A5L;
-  const m = 28;
+// Helper : génère un vrai QR code PNG embarqué dans le PDF
+async function embedQR(pdf: PDFDocument, reference: string): Promise<import('pdf-lib').PDFImage | null> {
+  try {
+    const qrUrl = `https://fanisa.pages.dev/verifier?ref=${encodeURIComponent(reference)}`;
+    const qrDU  = await QRCode.toDataURL(qrUrl, { width: 80, margin: 1, color: { dark: '#111133', light: '#FFFFFF' } });
+    return await pdf.embedPng(b64ToUint8(qrDU.split(',')[1]));
+  } catch(_) { return null; }
+}
+
+function drawFooterA5L(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string, validite?: string, qrImg?: import('pdf-lib').PDFImage) {
+  const { W } = A5L;
+  const m  = 28;
   const fY = 46;
 
   page.drawLine({ start: { x: m, y: fY + 12 }, end: { x: W - m, y: fY + 12 }, thickness: 0.4, color: C.border });
 
-  // ── QR code bas-gauche ───────────────────────────────────────
-  const qx = m, qy = fY - 38;
-  page.drawRectangle({ x: qx, y: qy, width: 40, height: 40, color: C.bg, borderColor: C.dark, borderWidth: 0.7 });
-  // 3 blocs d'angle QR
-  for (const [ox, oy] of [[0,28],[0,0],[28,28]] as [number,number][]) {
-    page.drawRectangle({ x: qx+2+ox, y: qy+2+oy, width: 10, height: 10, color: C.dark });
-    page.drawRectangle({ x: qx+3+ox, y: qy+3+oy, width: 8, height: 8, color: C.white });
-    page.drawRectangle({ x: qx+5+ox, y: qy+5+oy, width: 4, height: 4, color: C.dark });
-  }
-  // Pixels internes
-  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
-    if ((r*2+c)%3 !== 1) page.drawRectangle({ x: qx+14+c*5, y: qy+2+r*5, width: 3.5, height: 3.5, color: C.dark });
+  // ── QR code bas-gauche (réel si disponible) ──────────────────
+  const qx = m, qy = fY - 42;
+  if (qrImg) {
+    page.drawImage(qrImg, { x: qx, y: qy, width: 42, height: 42 });
+  } else {
+    // Fallback vectoriel
+    page.drawRectangle({ x: qx, y: qy, width: 42, height: 42, color: C.bg, borderColor: C.dark, borderWidth: 0.7 });
+    for (const [ox, oy] of [[0,30],[0,0],[30,30]] as [number,number][]) {
+      page.drawRectangle({ x: qx+2+ox, y: qy+2+oy, width: 10, height: 10, color: C.dark });
+      page.drawRectangle({ x: qx+3+ox, y: qy+3+oy, width: 8,  height: 8,  color: C.white });
+      page.drawRectangle({ x: qx+5+ox, y: qy+5+oy, width: 4,  height: 4,  color: C.dark });
+    }
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+      if ((r*2+c)%3 !== 1) page.drawRectangle({ x: qx+14+c*5, y: qy+2+r*5, width: 3.5, height: 3.5, color: C.dark });
+    }
   }
   dt(page, reference, qx, qy - 8, reg, 5, C.light);
   if (validite) dt(page, `Valide jusqu au : ${validite}`, qx, qy - 15, reg, 5.5, C.mid);
@@ -182,7 +194,7 @@ function drawFooterA5L(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bol
   page.drawLine({ start: { x: sx, y: fY - 28 }, end: { x: W - m, y: fY - 28 }, thickness: 0.5, color: C.border });
   dt(page, '(Signature et cachet officiel)', sx + 18, fY - 36, reg, 5.5, C.light);
 
-  // ── Centre : ref FANISA ──────────────────────────────────────
+  // ── Ref FANISA centre ─────────────────────────────────────────
   dt(page, `Genere par FANISA v2.0`, m + 50, fY - 10, reg, 5, C.light);
 }
 
@@ -226,24 +238,26 @@ function drawHeaderA4P(page: PDFPage, config: ConfigFokontany, bold: PDFFont, re
   dt(page, reference, W - m - 130, tY + 3, reg, 7, C.mid);
 }
 
-function drawFooterA4P(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string, W = 595, H = 842) {
+function drawFooterA4P(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string, W = 595, _H = 842, qrImg?: import('pdf-lib').PDFImage) {
   const m = 36;
   const fY = 72;
 
   page.drawLine({ start: { x: m, y: fY + 15 }, end: { x: W - m, y: fY + 15 }, thickness: 0.4, color: C.border });
 
-  // ── QR code bas-gauche ───────────────────────────────────────
-  const qx = m, qy = fY - 46;
-  page.drawRectangle({ x: qx, y: qy, width: 52, height: 52, color: C.bg, borderColor: C.dark, borderWidth: 0.8 });
-  // Coins QR (3 blocs d'angle)
-  for (const [ox, oy] of [[0,36],[0,0],[36,36]]) {
-    page.drawRectangle({ x: qx+3+ox, y: qy+3+oy, width: 13, height: 13, color: C.dark });
-    page.drawRectangle({ x: qx+5+ox, y: qy+5+oy, width: 9, height: 9, color: C.white });
-    page.drawRectangle({ x: qx+7+ox, y: qy+7+oy, width: 5, height: 5, color: C.dark });
-  }
-  // Pixels internes
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
-    if ((r+c+r*c)%3 !== 0) page.drawRectangle({ x: qx+18+c*7, y: qy+3+r*7, width: 5, height: 5, color: C.dark });
+  // ── QR code bas-gauche (réel si disponible) ──────────────────
+  const qx = m, qy = fY - 50;
+  if (qrImg) {
+    page.drawImage(qrImg, { x: qx, y: qy, width: 52, height: 52 });
+  } else {
+    page.drawRectangle({ x: qx, y: qy, width: 52, height: 52, color: C.bg, borderColor: C.dark, borderWidth: 0.8 });
+    for (const [ox, oy] of [[0,36],[0,0],[36,36]]) {
+      page.drawRectangle({ x: qx+3+ox, y: qy+3+oy, width: 13, height: 13, color: C.dark });
+      page.drawRectangle({ x: qx+5+ox, y: qy+5+oy, width: 9,  height: 9,  color: C.white });
+      page.drawRectangle({ x: qx+7+ox, y: qy+7+oy, width: 5,  height: 5,  color: C.dark });
+    }
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      if ((r+c+r*c)%3 !== 0) page.drawRectangle({ x: qx+18+c*7, y: qy+3+r*7, width: 5, height: 5, color: C.dark });
+    }
   }
   dt(page, reference, qx, qy - 10, reg, 5.5, C.light);
   dt(page, `Genere le ${new Date().toLocaleDateString('fr-FR')} par FANISA v2.0`, qx, qy - 18, reg, 5, C.light);
@@ -291,23 +305,27 @@ function drawHeaderA4L(page: PDFPage, config: ConfigFokontany, bold: PDFFont, re
   dt(page, reference, W - m - 120, tY + 2, reg, 7, C.mid);
 }
 
-function drawFooterA4L(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string) {
+function drawFooterA4L(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string, qrImg?: import('pdf-lib').PDFImage) {
   const { W } = A4L;
   const m = 36;
   const fY = 62;
 
   page.drawLine({ start: { x: m, y: fY + 12 }, end: { x: W - m, y: fY + 12 }, thickness: 0.4, color: C.border });
 
-  // ── QR code bas-gauche ───────────────────────────────────────
-  const qx = m, qy = fY - 42;
-  page.drawRectangle({ x: qx, y: qy, width: 46, height: 46, color: C.bg, borderColor: C.dark, borderWidth: 0.8 });
-  for (const [ox, oy] of [[0,32],[0,0],[32,32]] as [number,number][]) {
-    page.drawRectangle({ x: qx+2+ox, y: qy+2+oy, width: 12, height: 12, color: C.dark });
-    page.drawRectangle({ x: qx+4+ox, y: qy+4+oy, width: 8, height: 8, color: C.white });
-    page.drawRectangle({ x: qx+6+ox, y: qy+6+oy, width: 4, height: 4, color: C.dark });
-  }
-  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
-    if ((r+c+r*c)%2 !== 0) page.drawRectangle({ x: qx+16+c*6, y: qy+2+r*6, width: 4, height: 4, color: C.dark });
+  // ── QR code bas-gauche (réel si disponible) ──────────────────
+  const qx = m, qy = fY - 46;
+  if (qrImg) {
+    page.drawImage(qrImg, { x: qx, y: qy, width: 46, height: 46 });
+  } else {
+    page.drawRectangle({ x: qx, y: qy, width: 46, height: 46, color: C.bg, borderColor: C.dark, borderWidth: 0.8 });
+    for (const [ox, oy] of [[0,32],[0,0],[32,32]] as [number,number][]) {
+      page.drawRectangle({ x: qx+2+ox, y: qy+2+oy, width: 12, height: 12, color: C.dark });
+      page.drawRectangle({ x: qx+4+ox, y: qy+4+oy, width: 8,  height: 8,  color: C.white });
+      page.drawRectangle({ x: qx+6+ox, y: qy+6+oy, width: 4,  height: 4,  color: C.dark });
+    }
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+      if ((r+c+r*c)%2 !== 0) page.drawRectangle({ x: qx+16+c*6, y: qy+2+r*6, width: 4, height: 4, color: C.dark });
+    }
   }
   dt(page, reference, qx, qy - 8, reg, 5.5, C.light);
   dt(page, `Genere le ${new Date().toLocaleDateString('fr-FR')} par FANISA v2.0`, qx, qy - 16, reg, 5, C.light);
@@ -370,139 +388,137 @@ async function genererCertificatA5(
   validite?: string
 ): Promise<void> {
   const { W, H } = A5P;
-  const m = 16;
+  const mL = 22;
   const page = pdf.addPage([W, H]);
+  const today = new Date().toLocaleDateString('fr-FR');
+  const noir  = rgb(0.05, 0.05, 0.05);
+  const bleu  = rgb(0.10, 0.10, 0.65);
+  const sep   = rgb(0.60, 0.60, 0.65);
 
-  // ── Fond blanc ──────────────────────────────────────────────
-  page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: C.white });
-
-  // ── Logos ───────────────────────────────────────────────────
+  // ── 0. FILIGRANE commune sur le corps ────────────────────────
   try {
     const imgCommune = await pdf.embedPng(b64ToUint8(LOGO_COMMUNE_B64));
-    page.drawImage(imgCommune, { x: m, y: H - 68, width: 48, height: 56 });
-  } catch(e) {}
+    page.drawImage(imgCommune, { x: W/2 - 90, y: H/2 - 110, width: 180, height: 180, opacity: 0.12 });
+  } catch(_) {}
+
+  // ── 1. EN-TÊTE GAUCHE — hiérarchie administrative ────────────
+  const hTop = H - 18;
+  const lh   = 10;
+  page.drawText(`REGION ${clean(config.nom_region || 'ANTSINANANA').toUpperCase()}`,                          { x: mL, y: hTop,        size: 6.5, font: bold, color: noir });
+  page.drawText(`PREFECTURE ${clean(config.nom_district).toUpperCase()}`,                                     { x: mL, y: hTop - lh,   size: 6.5, font: bold, color: noir });
+  page.drawText(`DISTRICT ${clean(config.nom_district).toUpperCase()}`,                                       { x: mL, y: hTop - lh*2, size: 6.5, font: bold, color: noir });
+  page.drawText(`COMMUNE ${clean(config.nom_commune).toUpperCase()}`,                                         { x: mL, y: hTop - lh*3, size: 6.5, font: bold, color: noir });
+  page.drawText(`FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,                                     { x: mL, y: hTop - lh*4, size: 7,   font: bold, color: noir });
+  page.drawText(`QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`,        { x: mL, y: hTop - lh*5, size: 5.5, font: bold, color: noir });
+
+  // ── 2. LOGO REPUBLIQUE centré ─────────────────────────────────
+  const lgH = 60, lgW = 78;
+  const lgY = H - lgH - 10;
   try {
     const imgRepub = await pdf.embedPng(b64ToUint8(LOGO_REPUB_B64));
-    page.drawImage(imgRepub, { x: W/2 - 55, y: H - 62, width: 110, height: 50 });
-  } catch(e) {}
-
-  // ── Hiérarchie admin gauche (en-tête) ───────────────────────
-  const adminLines = [
-    'REGION ANTSINANANA',
-    `PREFECTURE TOAMASINA`,
-    `DISTRICT ${clean(config.nom_district || 'TOAMASINA II')}`,
-    `COMMUNE TAMATAVE SUBURBAINE`,
-    `FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`,
-    `QUARTIER ${clean(config.nom_quartier).toUpperCase()} CARREAU ${config.code_carreau}`,
-  ];
-  let ay = H - 14;
-  adminLines.forEach(l => { dt(page, l, m, ay, bold, 5.5, C.dark); ay -= 8; });
-
-  // ── Date et ville droite ─────────────────────────────────────
-  const dateStr = `${clean(config.nom_fokontany)}, le ${new Date().toLocaleDateString('fr-FR')}`;
-  dt(page, dateStr, W - m - 130, H - 14, reg, 6, C.dark);
-
-  // ── Ligne séparatrice sous les logos ────────────────────────
-  const sepY = H - 72;
-  page.drawLine({ start: { x: m, y: sepY }, end: { x: W - m, y: sepY }, thickness: 0.8, color: C.dark });
-
-  // ── Titre document ───────────────────────────────────────────
-  const titleY = sepY - 14;
-  dt(page, `[${codeDoc}] ${titreDoc.toUpperCase()}`, W/2 - titreDoc.length * 2.8, titleY, bold, 9, C.dark);
-  page.drawLine({ start: { x: W/2 - 60, y: titleY - 3 }, end: { x: W/2 + 60, y: titleY - 3 }, thickness: 0.5, color: C.dark });
-
-  // ── Ref + Date validité ──────────────────────────────────────
-  const refY = titleY - 14;
-  dt(page, 'Ref.:', m, refY, reg, 6, C.dark);
-  dt(page, reference, m, refY - 8, bold, 6, C.indigo);
-  dt(page, `Date: ${new Date().toLocaleDateString('fr-FR')}`, m, refY - 16, reg, 6, C.dark);
-  if (validite) {
-    dt(page, `Date de validite : ${validite}`, W - m - 120, refY, bold, 6, C.dark);
+    page.drawImage(imgRepub, { x: W/2 - lgW/2, y: lgY, width: lgW, height: lgH });
+  } catch(_) {
+    // Fallback vectoriel si image échoue
+    drawLogoRepoblika(page, bold, reg, W/2, lgY + lgH/2, lgH/2.2);
   }
-  dt(page, 'Exemplaire : 1/1', W - m - 80, refY - 8, reg, 6, C.dark);
+  page.drawText("REPOBLIKAN'I MADAGASIKARA", { x: W/2 - bold.widthOfTextAtSize("REPOBLIKAN'I MADAGASIKARA", 6)/2, y: lgY - 8,  size: 6, font: bold, color: noir });
+  page.drawText('Tanindrazana - Fahafahana - Fandrosoana',  { x: W/2 - reg.widthOfTextAtSize('Tanindrazana - Fahafahana - Fandrosoana', 5.5)/2,  y: lgY - 15, size: 5.5, font: reg,  color: noir });
 
-  // ── Texte intro ──────────────────────────────────────────────
-  let y = refY - 30;
-  const introLines = wrap(introText, 80);
-  introLines.forEach(l => { dt(page, l, m, y, reg, 7, C.dark); y -= 10; });
+  // ── 3. TITRE du document (centré, sous le logo) ───────────────
+  const titleTxt = `[${codeDoc}] ${titreDoc.toUpperCase()}`;
+  const titleSz  = 10;
+  const titleW   = bold.widthOfTextAtSize(titleTxt, titleSz);
+  const titleY   = lgY - 28;
+  page.drawText(titleTxt, { x: W/2 - titleW/2, y: titleY, size: titleSz, font: bold, color: noir });
+  // Ligne de tirets sous le titre
+  for (let dx = W/2 - titleW/2; dx < W/2 + titleW/2; dx += 5) {
+    page.drawLine({ start: { x: dx, y: titleY - 4 }, end: { x: Math.min(dx+3, W/2 + titleW/2), y: titleY - 4 }, thickness: 0.5, color: noir });
+  }
+
+  // ── 4. REF / DATE / VALIDITÉ ──────────────────────────────────
+  const refY = titleY - 18;
+  page.drawText('Ref.:',     { x: mL, y: refY,      size: 6.5, font: reg,  color: noir });
+  page.drawText(reference,   { x: mL, y: refY - 10, size: 7,   font: bold, color: bleu });
+  page.drawText(`Date: ${today}`, { x: mL, y: refY - 20, size: 6.5, font: reg, color: noir });
+  if (validite) page.drawText(`Date de validite : ${validite}`, { x: W - mL - 138, y: refY,      size: 6.5, font: bold, color: noir });
+  page.drawText('Exemplaire : 1/1',                              { x: W - mL - 100, y: refY - 10, size: 6.5, font: reg,  color: noir });
+
+  // ── 5. TEXTE INTRO ────────────────────────────────────────────
+  let y = refY - 36;
+  const introLines = wrap(introText, 72);
+  introLines.forEach(l => { page.drawText(l, { x: mL, y, size: 8, font: reg, color: noir }); y -= 11; });
   y -= 6;
 
-  // ── Tableau de données (style template) ──────────────────────
+  // ── 6. GRILLE IDENTITÉ ────────────────────────────────────────
   const age = membre.date_naissance
-    ? Math.abs(new Date(Date.now() - new Date(membre.date_naissance).getTime()).getUTCFullYear() - 1970)
+    ? Math.floor((Date.now() - new Date(membre.date_naissance).getTime()) / (365.25*24*3600*1000))
     : null;
-  const pere_mere = membre.pere_nom || membre.mere_nom
-    ? `${membre.pere_nom || ''} / ${membre.mere_nom || ''}`.trim()
-    : '-';
 
   const allBoxes = [
-    { l: 'NOM:', v: (membre.nom || '-').toUpperCase() },
-    { l: 'PRENOM(S):', v: membre.prenom || '-' },
-    { l: 'AGE(S):', v: age ? `${age} ans` : '-' },
-    { l: 'SEXE:', v: membre.sexe === 'M' ? 'Masculin' : membre.sexe === 'F' ? 'Feminin' : '-' },
+    { l: 'NOM:',              v: (membre.nom || '-').toUpperCase() },
+    { l: 'PRENOM(S):',        v: membre.prenom || '-' },
+    { l: 'AGE(S):',           v: age ? `${age} ans` : '-' },
+    { l: 'SEXE:',             v: membre.sexe === 'M' ? 'Masculin' : membre.sexe === 'F' ? 'Feminin' : '-' },
     { l: 'DATE DE NAISSANCE:', v: membre.date_naissance ? new Date(membre.date_naissance).toLocaleDateString('fr-FR') : '-' },
     { l: 'LIEU DE NAISSANCE:', v: membre.lieu_naissance || '-' },
     { l: 'FILS OU FILLE DE:', v: membre.pere_nom || '-' },
-    { l: 'ET DE:', v: membre.mere_nom || '-' },
+    { l: 'ET DE:',            v: membre.mere_nom || '-' },
     ...extraBoxes,
-    { l: 'NUMERO CIN:', v: membre.cin || '-' },
-    { l: 'DATE DU CIN:', v: membre.date_cin ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '-' },
+    { l: 'NUMERO CIN:',       v: membre.cin || '-' },
+    { l: 'DATE DU CIN:',      v: membre.date_cin ? new Date(membre.date_cin).toLocaleDateString('fr-FR') : '-' },
   ];
-  if (motif) allBoxes.push({ l: 'MOTIF:', v: motif });
+  if (motif)            allBoxes.push({ l: 'MOTIF:',               v: motif });
   if (adresseResidence) allBoxes.push({ l: 'ADRESSE DE RESIDENCE:', v: adresseResidence });
 
-  // Fond du tableau avec couleur légère
-  const rowH = 18;
-  const col1W = 110;
-  const tableH = allBoxes.length * rowH + 8;
-  page.drawRectangle({ x: m, y: y - tableH, width: W - m*2, height: tableH, color: rgb(0.97, 0.97, 0.88), borderColor: rgb(0.7, 0.6, 0.2), borderWidth: 0.5, borderRadius: 2 });
-
+  const rowH   = 22;
+  const col1W  = 118;
+  const tableH = allBoxes.length * rowH + 6;
+  // Fond tableau gris neutre (sans jaune)
+  page.drawRectangle({ x: mL, y: y - tableH, width: W - mL*2, height: tableH, color: rgb(0.97, 0.97, 0.97), borderColor: sep, borderWidth: 0.4, borderRadius: 2 });
   allBoxes.forEach((box, i) => {
-    const rowY = y - i * rowH - 6;
-    const isOdd = i % 2 === 1;
-    if (isOdd) page.drawRectangle({ x: m + 1, y: rowY - rowH + 2, width: W - m*2 - 2, height: rowH, color: rgb(0.95, 0.94, 0.82) });
-    dt(page, box.l, m + 4, rowY, reg, 6.5, C.mid);
-    dt(page, clean(box.v), m + col1W, rowY, bold, 7.5, C.dark);
+    const rowY = y - i * rowH - 5;
+    if (i % 2 === 1) page.drawRectangle({ x: mL+1, y: rowY - rowH + 3, width: W - mL*2 - 2, height: rowH, color: rgb(0.93, 0.93, 0.95) });
+    page.drawLine({ start: { x: mL, y: rowY - rowH + 3 }, end: { x: W - mL, y: rowY - rowH + 3 }, thickness: 0.3, color: sep });
+    page.drawText(box.l, { x: mL + 3, y: rowY, size: 6.5, font: reg, color: sep });
+    page.drawText(clean(box.v), { x: mL + col1W, y: rowY, size: 8, font: bold, color: noir });
   });
   y -= tableH + 10;
 
-  // ── Code ménage ──────────────────────────────────────────────
-  const menageText = `Jusqu'a ce jour et inscrit(e) au registre de recensement de population code menage ${foyer.code_menage}`;
-  wrap(menageText, 78).forEach(l => { dt(page, l, m, y, reg, 7, C.dark); y -= 10; });
-  y -= 4;
-  dt(page, 'En foi de quoi, le present certificat est delivre pour servir et valoir ce que de droit.', m, y, reg, 7, C.dark);
-  y -= 16;
+  // ── 7. CLÔTURE ────────────────────────────────────────────────
+  wrap(`Jusqu'a ce jour et inscrit(e) au registre de recensement code menage ${foyer.code_menage || '-'}`, 70)
+    .forEach(l => { page.drawText(l, { x: mL, y, size: 7.5, font: reg, color: noir }); y -= 11; });
+  y -= 2;
+  page.drawText('En foi de quoi, le present certificat est delivre pour servir et valoir ce que de droit.', { x: mL, y, size: 7.5, font: reg, color: noir });
 
-  // ── Filigrane blason ──────────────────────────────────────────
+  // ── 8. SIGNATURE + QR code réel ──────────────────────────────
+  const sigBase = 115;
+  // QR code réel bas-gauche
   try {
-    const imgCommune2 = await pdf.embedPng(b64ToUint8(LOGO_COMMUNE_B64));
-    page.drawImage(imgCommune2, { x: W/2 - 50, y: y - 40, width: 100, height: 80, opacity: 0.12 });
-  } catch(e) {}
-
-  // ── Zone signature ───────────────────────────────────────────
-  const sigX = W - m - 120;
-  const sigY = y - 8;
-  dt(page, `${clean(config.nom_fokontany)}, le ${new Date().toLocaleDateString('fr-FR')}`, sigX - 10, sigY, reg, 6.5, C.dark);
-  dt(page, 'Le Chef du Fokontany', sigX, sigY - 12, bold, 7, C.dark);
-  dt(page, '', sigX, sigY - 24, reg, 7, C.dark);
-  page.drawLine({ start: { x: sigX - 5, y: sigY - 38 }, end: { x: W - m, y: sigY - 38 }, thickness: 0.5, color: C.border });
-  dt(page, '(Signature et cachet)', sigX + 10, sigY - 46, reg, 6, C.light);
-
-  // ── QR code (simulé) ─────────────────────────────────────────
-  const qrX = m, qrY = sigY - 48;
-  page.drawRectangle({ x: qrX, y: qrY - 36, width: 38, height: 38, color: C.white, borderColor: C.dark, borderWidth: 1 });
-  for (let r = 0; r < 5; r++) for (let c2 = 0; c2 < 5; c2++) {
-    if ((r+c2)%2===0||r===0||r===4||c2===0||c2===4) page.drawRectangle({ x: qrX+3+c2*6.5, y: qrY-33+r*6.5, width: 5.5, height: 5.5, color: C.dark });
+    const qrUrl = `https://fanisa.pages.dev/verifier?ref=${encodeURIComponent(reference)}`;
+    const qrDU  = await QRCode.toDataURL(qrUrl, { width: 72, margin: 1, color: { dark: '#111133', light: '#FFFFFF' } });
+    const qrImg = await pdf.embedPng(b64ToUint8(qrDU.split(',')[1]));
+    page.drawImage(qrImg, { x: mL, y: sigBase - 72, width: 72, height: 72 });
+    page.drawText('Authentification du document', { x: mL, y: sigBase - 80, size: 5.5, font: reg, color: sep });
+  } catch(_) {
+    page.drawRectangle({ x: mL, y: sigBase - 72, width: 72, height: 72, borderColor: sep, borderWidth: 0.8, color: rgb(0.96,0.96,0.96) });
   }
-  dt(page, 'Authentification du document', qrX + 42, qrY - 8, reg, 5.5, C.mid);
-  dt(page, reference, qrX + 42, qrY - 18, reg, 5.5, C.indigo);
+  // Signature chef droite
+  const sX = W - mL - 148;
+  page.drawText(`${clean(config.nom_fokontany)}, le ${today}`, { x: sX, y: sigBase + 8,  size: 7,   font: reg,  color: noir });
+  page.drawText('Le Chef du Fokontany',                         { x: sX + 8, y: sigBase - 6, size: 8, font: bold, color: noir });
+  page.drawLine({ start: { x: sX - 4, y: sigBase - 44 }, end: { x: W - mL, y: sigBase - 44 }, thickness: 0.5, color: sep });
+  page.drawText('(Signature et cachet officiel)', { x: sX + 18, y: sigBase - 53, size: 6, font: reg, color: sep });
 
-  // ── Ligne de découpe + Reçu ───────────────────────────────────
-  const cutY = 32;
-  page.drawLine({ start: { x: m - 5, y: cutY }, end: { x: W - m + 5, y: cutY }, thickness: 0.5, color: C.dark, dashArray: [3, 3], dashPhase: 0 });
-  dt(page, '>>>', m - 8, cutY - 4, reg, 6, C.dark);
-  dt(page, `RECU  |  N°${(config.prefixe_recu || 'REC').toUpperCase()}-${String(numero).padStart(4,'0')}-${new Date().getFullYear()}  REF DOC : ${reference}  DATE: ${new Date().toLocaleDateString('fr-FR')}  |  Montant : 2000 Ariary  |`, m + 10, cutY - 14, reg, 6, C.dark);
-  dt(page, 'Merci pour votre visite !!!', W/2 - 30, cutY - 24, bold, 6, C.dark);
+  // ── 9. LIGNE DE DÉCOUPE + REÇU ────────────────────────────────
+  const cutY = 36;
+  page.drawText('- -', { x: mL - 6, y: cutY - 2, size: 7, font: reg, color: sep });
+  for (let dx = mL + 8; dx < W - mL - 4; dx += 5) {
+    page.drawLine({ start: { x: dx, y: cutY }, end: { x: dx+3, y: cutY }, thickness: 0.5, color: rgb(0.5,0.5,0.5) });
+  }
+  const numRec = String(numero).padStart(4,'0');
+  const recTxt = `RECU  |  N°REC-${numRec}-${new Date().getFullYear()}  REF: ${reference}  DATE: ${today}  |  Montant : 2000 Ariary  |`;
+  page.drawText(recTxt, { x: W/2 - bold.widthOfTextAtSize(recTxt, 6.5)/2, y: 24, size: 6.5, font: bold, color: noir });
+  page.drawText('Merci pour votre visite !!!', { x: W/2 - 40, y: 13, size: 7, font: reg, color: sep });
 }
 
 // CR — Certificat de Résidence (A5 Portrait officiel)
@@ -996,7 +1012,8 @@ export async function genererFAS(membre: Membre, foyer: Foyer, config: ConfigFok
   boxes.forEach((b,i) => boxA5(page, b.l, b.v, m+(i%2)*col2+4, y-Math.floor(i/2)*22-4, col2-8, reg, bold));
   y -= Math.ceil(boxes.length/2)*22+14;
   dt(page, 'En foi de quoi, la presente attestation est delivree pour servir et valoir ce que de droit.', m, y-4, reg, 7, C.dark);
-  drawFooterA5L(page, config, reg, bold, reference);
+  const qrFAS = await embedQR(pdf, reference);
+  drawFooterA5L(page, config, reg, bold, reference, undefined, qrFAS ?? undefined);
   await enregistrerDocument('FAS', reference, numero, membre.id, foyer.id);
   return await pdf.save();
 }
@@ -1024,7 +1041,8 @@ export async function genererCOT(parcelle: Parcelle, detenteur: Detenteur, confi
   oBoxes.forEach((b,i) => boxA5(page, b.l, b.v, m+(i%3)*col3+4, y-Math.floor(i/3)*22-4, col3-8, reg, bold));
   y -= Math.ceil(oBoxes.length/3)*22+14;
   dt(page, 'En foi de quoi, le present certificat est delivre pour servir et valoir ce que de droit.', m, y-4, reg, 7, C.dark);
-  drawFooterA5L(page, config, reg, bold, reference);
+  const qrCOT = await embedQR(pdf, reference);
+  drawFooterA5L(page, config, reg, bold, reference, undefined, qrCOT ?? undefined);
   await enregistrerDocument('COT', reference, numero);
   return await pdf.save();
 }
@@ -1050,7 +1068,8 @@ export async function genererADF(parcelle: Parcelle, detenteur: Detenteur, confi
   page.drawRectangle({ x: m, y: y-2*22-10, width: W-m*2, height: 2*22+14, color: rgb(0.93,0.97,1), borderColor: C.indigo, borderWidth: 0.4, borderRadius: 3 });
   y -= 2*22+18;
   dt(page, 'En foi de quoi, la presente attestation est delivree pour servir et valoir ce que de droit.', m, y-4, reg, 7, C.dark);
-  drawFooterA5L(page, config, reg, bold, reference);
+  const qrADF = await embedQR(pdf, reference);
+  drawFooterA5L(page, config, reg, bold, reference, undefined, qrADF ?? undefined);
   await enregistrerDocument('ADF', reference, numero);
   return await pdf.save();
 }
@@ -1081,7 +1100,8 @@ export async function genererAPB(parcelle: Parcelle, batiment: Batiment, proprie
   dt(page, 'Note : Ce document atteste la propriete declaree du batiment uniquement — la propriete fonciere peut etre differente.', m+4, y-4, reg, 6, C.gold);
   y -= 20;
   dt(page, 'En foi de quoi, la presente attestation est delivree pour servir et valoir ce que de droit.', m, y-4, reg, 7, C.dark);
-  drawFooterA5L(page, config, reg, bold, reference);
+  const qrAPB = await embedQR(pdf, reference);
+  drawFooterA5L(page, config, reg, bold, reference, undefined, qrAPB ?? undefined);
   await enregistrerDocument('APB', reference, numero);
   return await pdf.save();
 }
@@ -1116,7 +1136,8 @@ export async function genererAMV(parcelle: Parcelle, valeur: MiseEnValeur, deten
   y -= Math.ceil(elems.length/2)*18+8;
   if (valeur.annee_debut) { dt(page, `Debut des investissements : ${valeur.annee_debut}`, m, y-4, reg, 7, C.mid); y -= 12; }
   dt(page, 'En foi de quoi, la presente attestation est delivree pour servir et valoir ce que de droit.', m, y-4, reg, 7, C.dark);
-  drawFooterA5L(page, config, reg, bold, reference);
+  const qrAMV = await embedQR(pdf, reference);
+  drawFooterA5L(page, config, reg, bold, reference, undefined, qrAMV ?? undefined);
   await enregistrerDocument('AMV', reference, numero);
   return await pdf.save();
 }
@@ -1155,7 +1176,8 @@ export async function genererCVC(foyer: Foyer, membres: Membre[], config: Config
   dt(page, `Total : ${membres.length} membre(s)`, m+8, tableY-4, bold, 8.5, C.indigo);
   y = tableY - 30;
   dt(page, 'En foi de quoi, le present certificat est delivre pour servir et valoir ce que de droit.', m, y, reg, 9, C.dark);
-  drawFooterA4P(page, config, reg, bold, reference);
+  const qrCVC = await embedQR(pdf, reference);
+  drawFooterA4P(page, config, reg, bold, reference, W, H, qrCVC ?? undefined);
   await enregistrerDocument('CVC', reference, numero, chef?.id, foyer.id);
   return await pdf.save();
 }
@@ -1184,7 +1206,8 @@ export async function genererCM(foyer: Foyer, membres: Membre[], config: ConfigF
   });
   page.drawRectangle({ x: m, y: tableY-14, width: W-m*2, height: 16, color: rgb(0.93,0.97,1) });
   dt(page, `Total membres : ${membres.length}  |  Hommes : ${membres.filter(mb=>mb.sexe==='M').length}  |  Femmes : ${membres.filter(mb=>mb.sexe==='F').length}`, m+8, tableY-4, bold, 8, C.indigo);
-  drawFooterA4P(page, config, reg, bold, reference);
+  const qrCM = await embedQR(pdf, reference);
+  drawFooterA4P(page, config, reg, bold, reference, W, H, qrCM ?? undefined);
   await enregistrerDocument('CM', reference, numero, chef?.id, foyer.id);
   return await pdf.save();
 }
@@ -1224,7 +1247,8 @@ export async function genererFM(foyer: Foyer, membres: Membre[], config: ConfigF
     if (tableY < 100) return;
     tableY = tableRow(page,[String(idx+1),`${mb.nom} ${mb.prenom}`,mb.date_naissance?new Date(mb.date_naissance).toLocaleDateString('fr-FR'):'-',mb.relation_chef,mb.statut,mb.profession||'-'],cols,tableY,reg,bold,idx===0,idx%2===0?C.bg:C.white,W,m);
   });
-  drawFooterA4P(page, config, reg, bold, reference);
+  const qrFM = await embedQR(pdf, reference);
+  drawFooterA4P(page, config, reg, bold, reference, W, H, qrFM ?? undefined);
   await enregistrerDocument('FM', reference, numero, chef?.id, foyer.id);
   return await pdf.save();
 }
@@ -1496,7 +1520,8 @@ export async function genererPCG(membre: Membre, foyer: Foyer, config: ConfigFok
     y -= Math.ceil(boxes.length/2)*32+16;
   }
   dt(page, 'En foi de quoi, le present acte est delivre pour servir et valoir ce que de droit.', m, y, reg, 9, C.dark);
-  drawFooterA4P(page, config, reg, bold, reference);
+  const qrPCG = await embedQR(pdf, reference);
+  drawFooterA4P(page, config, reg, bold, reference, W, H, qrPCG ?? undefined);
   await enregistrerDocument('PCG', reference, numero, membre.id, foyer.id);
   return await pdf.save();
 }
@@ -1537,7 +1562,8 @@ export async function genererJOR(parcelle: Parcelle, detenteur: Detenteur, confi
     y -= 34;
   }
   dt(page, 'En foi de quoi, le present JOROLAVA est delivre pour servir et valoir ce que de droit.', m, y, reg, 9, C.dark);
-  drawFooterA4P(page, config, reg, bold, reference);
+  const qrJOR = await embedQR(pdf, reference);
+  drawFooterA4P(page, config, reg, bold, reference, W, H, qrJOR ?? undefined);
   await enregistrerDocument('JOR', reference, numero);
   return await pdf.save();
 }
@@ -1581,7 +1607,8 @@ export async function genererDRF(parcelle: Parcelle, detenteur: Detenteur|null, 
     if (mvItems.length>0) { dt(page, `Mise en valeur : ${mvItems.join(', ')}${valeur.annee_debut?` (depuis ${valeur.annee_debut})`:''}`, m, y-10, reg, 8.5, C.dark); y-=20; }
   }
   dt(page, 'Je certifie l\'exactitude des informations ci-dessus et appuie la presente demande de regularisation.', m, y-8, reg, 9, C.dark);
-  drawFooterA4P(page, config, reg, bold, reference);
+  const qrDRF = await embedQR(pdf, reference);
+  drawFooterA4P(page, config, reg, bold, reference, W, H, qrDRF ?? undefined);
   await enregistrerDocument('DRF', reference, numero);
   return await pdf.save();
 }
@@ -1640,7 +1667,8 @@ export async function genererFP(parcelle: Parcelle, titulaire: TitulaireFoncier|
     });
     y = tableY - 10;
   }
-  drawFooterA4L(page, config, reg, bold, reference);
+  const qrFP = await embedQR(pdf, reference);
+  drawFooterA4L(page, config, reg, bold, reference, qrFP ?? undefined);
   await enregistrerDocument('FP', reference, numero);
   return await pdf.save();
 }
@@ -1677,7 +1705,8 @@ export async function genererFB(parcelle: Parcelle, batiment: Batiment, config: 
     y -= 16;
     wrap(batiment.notes, 80).forEach(l=>{dt(page,l,m,y,reg,8.5,C.dark);y-=12;});
   }
-  drawFooterA4L(page, config, reg, bold, reference);
+  const qrFB = await embedQR(pdf, reference);
+  drawFooterA4L(page, config, reg, bold, reference, qrFB ?? undefined);
   await enregistrerDocument('FB', reference, numero);
   return await pdf.save();
 }
@@ -1717,7 +1746,8 @@ export async function genererIFT(parcelle: Parcelle, batiment: Batiment|null, ti
     page.drawRectangle({ x: m+190, y: y-18, width: W-m*2-190, height: 20, color: C.bg, borderColor: C.border, borderWidth: 0.4, borderRadius: 3 });
     dt(page, `Bat: ${batiment.reference_batiment}  |  ${batiment.type_batiment}  |  ${batiment.etat}`, m+194, y-6, reg, 7.5, C.dark);
   }
-  drawFooterA5L(page, config, reg, bold, reference);
+  const qrIFT = await embedQR(pdf, reference);
+  drawFooterA5L(page, config, reg, bold, reference, undefined, qrIFT ?? undefined);
   await enregistrerDocument('IFT', reference, numero);
   return await pdf.save();
 }
