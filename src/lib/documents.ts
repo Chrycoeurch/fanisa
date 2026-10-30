@@ -88,6 +88,38 @@ function dt(page: PDFPage, text: string, x: number, y: number, font: PDFFont, si
 }
 
 // ════════════════════════════════════════════════════════════
+// LOGO VECTORIEL REPOBLIKAN'I MADAGASIKARA
+// Reproduit le logo officiel : cercle vert bordé rouge, zébu blanc, devise
+// ════════════════════════════════════════════════════════════
+function drawLogoRepoblika(page: PDFPage, bold: PDFFont, reg: PDFFont, cx: number, cy: number, r: number) {
+  // Cercle extérieur rouge (bordure)
+  page.drawCircle({ x: cx, y: cy, size: r, color: rgb(0.78, 0.08, 0.08) });
+  // Couronne blanche
+  page.drawCircle({ x: cx, y: cy, size: r * 0.87, color: C.white });
+  // Disque vert central
+  page.drawCircle({ x: cx, y: cy, size: r * 0.73, color: rgb(0.02, 0.50, 0.22) });
+
+  // Zébu blanc stylisé (corps + tête + cornes)
+  const sc = r / 22;
+  // Corps
+  page.drawRectangle({ x: cx - 7 * sc, y: cy - 4 * sc, width: 14 * sc, height: 9 * sc, color: C.white, borderRadius: 2 * sc });
+  // Cou + tête
+  page.drawRectangle({ x: cx - 3 * sc, y: cy + 4 * sc, width: 6 * sc, height: 7 * sc, color: C.white, borderRadius: 1.5 * sc });
+  // Cornes (deux arcs simulés par lignes)
+  page.drawLine({ start: { x: cx - 3 * sc, y: cy + 10 * sc }, end: { x: cx - 7 * sc, y: cy + 15 * sc }, thickness: 1.5 * sc, color: C.white });
+  page.drawLine({ start: { x: cx + 3 * sc, y: cy + 10 * sc }, end: { x: cx + 7 * sc, y: cy + 15 * sc }, thickness: 1.5 * sc, color: C.white });
+  // Pattes (4 lignes)
+  for (let i = 0; i < 4; i++) {
+    const px = cx - 5 * sc + i * 3.5 * sc;
+    page.drawLine({ start: { x: px, y: cy - 4 * sc }, end: { x: px, y: cy - 10 * sc }, thickness: 1.8 * sc, color: C.white });
+  }
+
+  // Texte "REPOBLIKAN'I MADAGASIKARA" en arc simulé (2 lignes sous logo)
+  dt(page, "REPOBLIKAN'I MADAGASIKARA", cx - r * 0.95, cy - r - 9, bold, r * 0.38, C.dark);
+  dt(page, 'Tanindrazana - Fahafahana - Fandrosoana', cx - r * 0.92, cy - r - 16, reg, r * 0.30, C.mid);
+}
+
+// ════════════════════════════════════════════════════════════
 // FORMAT 1 : A5 PAYSAGE (210×148mm) — Certificats principaux
 // ════════════════════════════════════════════════════════════
 // A5 paysage en points PDF : 595 × 420
@@ -95,62 +127,63 @@ const A5L = { W: 595, H: 420 };
 
 function drawHeaderA5L(page: PDFPage, config: ConfigFokontany, bold: PDFFont, reg: PDFFont, codeDoc: string, nomDoc: string, reference: string) {
   const { W, H } = A5L;
-  const m = 20;
-
-  // Bande supérieure indigo
-  page.drawRectangle({ x: 0, y: H - 28, width: W, height: 28, color: C.indigo });
-
-  // Colonne gauche — Fokontany (haut gauche obligatoire)
-  dt(page, `FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`, m, H - 11, bold, 7, C.white);
-  dt(page, `Qrt. ${clean(config.nom_quartier)} - Carreau ${config.code_carreau}`, m, H - 19, reg, 6, rgb(0.8,0.8,1));
-
-  // Centre — Logo simplifié République
+  const m = 28;
   const cx = W / 2;
-  page.drawRectangle({ x: cx - 18, y: H - 25, width: 36, height: 22, color: rgb(0.35,0.30,0.82), borderRadius: 2 });
-  dt(page, 'F', cx - 4, H - 15, bold, 14, C.white);
 
-  // Colonne droite — Référence (haut droit obligatoire)
-  dt(page, reference, W - m - 110, H - 11, bold, 6.5, C.white);
-  dt(page, `${config.nom_commune} - ${config.nom_district}`, W - m - 110, H - 19, reg, 5.5, rgb(0.8,0.8,1));
+  // ── GAUCHE : Hiérarchie administrative (reproduit le vrai doc) ──
+  let ly = H - 14;
+  const lx = m;
+  const lh = 10; // interligne
+  dt(page, `REGION ${(config.nom_region || 'ATSINANANA').toUpperCase()}`, lx, ly, bold, 6.5, C.dark); ly -= lh;
+  dt(page, `PREFECTURE ${clean(config.nom_district).toUpperCase()}`, lx, ly, bold, 6.5, C.dark); ly -= lh;
+  dt(page, `DISTRICT ${clean(config.nom_district).toUpperCase()}`, lx, ly, bold, 6.5, C.dark); ly -= lh;
+  dt(page, `COMMUNE ${clean(config.nom_commune).toUpperCase()}`, lx, ly, bold, 6.5, C.dark); ly -= lh;
+  dt(page, `FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`, lx, ly, bold, 7, C.dark); ly -= lh;
+  dt(page, `QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau} CAREAU ${config.code_carreau}`, lx, ly, bold, 5.5, C.dark);
 
-  // Titre document
-  const tY = H - 42;
-  page.drawRectangle({ x: m, y: tY - 2, width: W - m * 2, height: 18, color: rgb(0.95,0.96,1.0), borderColor: C.indigo, borderWidth: 0.5, borderRadius: 2 });
-  dt(page, `[${codeDoc}]  ${nomDoc.toUpperCase()}`, cx - nomDoc.length * 3.2, tY + 3, bold, 8.5, C.indigo);
+  // ── CENTRE : Logo Repoblika ──────────────────────────────────
+  drawLogoRepoblika(page, bold, reg, cx, H - 50, 28);
 
-  // Ligne séparatrice
-  page.drawLine({ start: { x: m, y: tY - 4 }, end: { x: W - m, y: tY - 4 }, thickness: 0.4, color: C.border });
+  // ── TITRE du document (centré, sous le logo) ─────────────────
+  const tY = H - 100;
+  page.drawLine({ start: { x: m, y: tY + 10 }, end: { x: W - m, y: tY + 10 }, thickness: 0.5, color: C.dark });
+  dt(page, `[${codeDoc}] ${nomDoc.toUpperCase()}`, cx - (nomDoc.length + codeDoc.length + 3) * 3.6, tY + 2, bold, 10, C.dark);
+  page.drawLine({ start: { x: m, y: tY - 4 }, end: { x: W - m, y: tY - 4 }, thickness: 0.5, color: C.dark });
 }
 
 function drawFooterA5L(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string, validite?: string) {
   const { W, H } = A5L;
-  const m = 20;
-  const fY = 42;
+  const m = 28;
+  const fY = 46;
 
   page.drawLine({ start: { x: m, y: fY + 12 }, end: { x: W - m, y: fY + 12 }, thickness: 0.4, color: C.border });
 
-  // QR code placeholder
-  page.drawRectangle({ x: m, y: fY - 32, width: 40, height: 40, color: C.bg, borderColor: C.border, borderWidth: 0.8 });
-  // Simuler QR code avec petits carrés
-  for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) {
-    if ((r + c) % 2 === 0 || r === 0 || r === 4 || c === 0 || c === 4) {
-      page.drawRectangle({ x: m + 3 + c * 6.5, y: fY - 28 + r * 6.5, width: 5.5, height: 5.5, color: C.dark });
-    }
+  // ── QR code bas-gauche ───────────────────────────────────────
+  const qx = m, qy = fY - 38;
+  page.drawRectangle({ x: qx, y: qy, width: 40, height: 40, color: C.bg, borderColor: C.dark, borderWidth: 0.7 });
+  // 3 blocs d'angle QR
+  for (const [ox, oy] of [[0,28],[0,0],[28,28]] as [number,number][]) {
+    page.drawRectangle({ x: qx+2+ox, y: qy+2+oy, width: 10, height: 10, color: C.dark });
+    page.drawRectangle({ x: qx+3+ox, y: qy+3+oy, width: 8, height: 8, color: C.white });
+    page.drawRectangle({ x: qx+5+ox, y: qy+5+oy, width: 4, height: 4, color: C.dark });
   }
-  dt(page, 'QR', m + 12, fY - 38, reg, 5, C.mid);
+  // Pixels internes
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    if ((r*2+c)%3 !== 1) page.drawRectangle({ x: qx+14+c*5, y: qy+2+r*5, width: 3.5, height: 3.5, color: C.dark });
+  }
+  dt(page, reference, qx, qy - 8, reg, 5, C.light);
+  if (validite) dt(page, `Valide jusqu au : ${validite}`, qx, qy - 15, reg, 5.5, C.mid);
 
-  // Zone signature droite
-  const sx = W - 180;
-  dt(page, `Ambodisaina, le ${new Date().toLocaleDateString('fr-FR')}`, sx, fY + 8, reg, 6.5, C.mid);
-  dt(page, 'Le Chef du Fokontany', sx + 10, fY - 4, bold, 7, C.dark);
-  dt(page, clean(config.chef_fokontany), sx + 10, fY - 13, reg, 7, C.mid);
-  page.drawLine({ start: { x: sx, y: fY - 26 }, end: { x: W - m, y: fY - 26 }, thickness: 0.5, color: C.border });
-  dt(page, '(Signature et cachet officiel)', sx + 20, fY - 34, reg, 5.5, C.light);
+  // ── Bloc signature bas-droit ─────────────────────────────────
+  const sx = W - 182;
+  dt(page, `${clean(config.nom_fokontany)}, le ${new Date().toLocaleDateString('fr-FR')}`, sx, fY + 6, reg, 6.5, C.mid);
+  dt(page, 'Le Chef du Fokontany', sx + 10, fY - 6, bold, 7, C.dark);
+  dt(page, clean(config.chef_fokontany), sx + 10, fY - 15, reg, 7, C.mid);
+  page.drawLine({ start: { x: sx, y: fY - 28 }, end: { x: W - m, y: fY - 28 }, thickness: 0.5, color: C.border });
+  dt(page, '(Signature et cachet officiel)', sx + 18, fY - 36, reg, 5.5, C.light);
 
-  // Centre footer
-  dt(page, validite ? `Valide jusqu\'au : ${validite}` : '', m + 55, fY + 2, reg, 6, C.mid);
-  dt(page, `Genere automatiquement par FANISA v2.0`, m + 55, fY - 8, reg, 5.5, C.light);
-  dt(page, `${reference}`, m + 55, fY - 18, reg, 5.5, C.light);
+  // ── Centre : ref FANISA ──────────────────────────────────────
+  dt(page, `Genere par FANISA v2.0`, m + 50, fY - 10, reg, 5, C.light);
 }
 
 function boxA5(page: PDFPage, label: string, value: string, x: number, y: number, w: number, reg: PDFFont, bold: PDFFont) {
@@ -167,51 +200,61 @@ const A4P = { W: 595, H: 842 };
 function drawHeaderA4P(page: PDFPage, config: ConfigFokontany, bold: PDFFont, reg: PDFFont, codeDoc: string, nomDoc: string, reference: string) {
   const { W, H } = A4P;
   const m = 36;
+  const cx = W / 2;
 
-  // Bande supérieure
-  page.drawRectangle({ x: 0, y: H - 32, width: W, height: 32, color: C.indigo });
-  dt(page, `FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`, m, H - 13, bold, 9, C.white);
-  dt(page, `Qrt. ${clean(config.nom_quartier)} - Carreau ${config.code_carreau} - ${config.nom_commune}`, m, H - 22, reg, 7, rgb(0.8,0.8,1));
+  // ── GAUCHE : Hiérarchie administrative ──────────────────────
+  let ly = H - 16;
+  const lx = m;
+  const lh = 12;
+  dt(page, `REGION ${(config.nom_region || 'ATSINANANA').toUpperCase()}`, lx, ly, bold, 7.5, C.dark); ly -= lh;
+  dt(page, `PREFECTURE ${clean(config.nom_district).toUpperCase()}`, lx, ly, bold, 7.5, C.dark); ly -= lh;
+  dt(page, `DISTRICT ${clean(config.nom_district).toUpperCase()}`, lx, ly, bold, 7.5, C.dark); ly -= lh;
+  dt(page, `COMMUNE ${clean(config.nom_commune).toUpperCase()}`, lx, ly, bold, 7.5, C.dark); ly -= lh;
+  dt(page, `FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`, lx, ly, bold, 8.5, C.dark); ly -= lh;
+  dt(page, `QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`, lx, ly, bold, 6.5, C.dark);
 
-  // Logo centre
-  page.drawRectangle({ x: W/2 - 22, y: H - 28, width: 44, height: 24, color: rgb(0.35,0.30,0.82), borderRadius: 3 });
-  dt(page, 'F', W/2 - 5, H - 17, bold, 16, C.white);
+  // ── CENTRE : Logo Repoblika + titre ─────────────────────────
+  drawLogoRepoblika(page, bold, reg, cx, H - 55, 34);
 
-  // Référence droite
-  dt(page, reference, W - m - 130, H - 13, bold, 7, C.white);
-  dt(page, `${config.nom_district} - ${config.nom_region || 'Atsinanana'}`, W - m - 130, H - 22, reg, 6.5, rgb(0.8,0.8,1));
+  // Titre centré sous le logo
+  const tY = H - 108;
+  page.drawLine({ start: { x: m, y: tY + 12 }, end: { x: W - m, y: tY + 12 }, thickness: 0.5, color: C.dark });
+  dt(page, `[${codeDoc}] ${nomDoc.toUpperCase()}`, cx - (nomDoc.length + codeDoc.length + 3) * 4.2, tY + 3, bold, 11, C.dark);
+  page.drawLine({ start: { x: m, y: tY - 4 }, end: { x: W - m, y: tY - 4 }, thickness: 0.5, color: C.dark });
 
-  // Titre
-  page.drawRectangle({ x: m, y: H - 62, width: W - m*2, height: 24, color: C.indigo, borderRadius: 3 });
-  dt(page, `[${codeDoc}]  ${nomDoc.toUpperCase()}`, W/2 - nomDoc.length * 3.8, H - 49, bold, 10, C.white);
-
-  page.drawLine({ start: { x: m, y: H - 68 }, end: { x: W - m, y: H - 68 }, thickness: 0.4, color: C.border });
+  // Référence sous le titre (droite)
+  dt(page, reference, W - m - 130, tY + 3, reg, 7, C.mid);
 }
 
 function drawFooterA4P(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string, W = 595, H = 842) {
   const m = 36;
-  const fY = 60;
+  const fY = 72;
 
   page.drawLine({ start: { x: m, y: fY + 15 }, end: { x: W - m, y: fY + 15 }, thickness: 0.4, color: C.border });
 
-  // QR code placeholder
-  page.drawRectangle({ x: m, y: fY - 40, width: 48, height: 48, color: C.bg, borderColor: C.border, borderWidth: 0.8 });
-  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) {
-    if ((r+c)%2===0 || r===0 || r===5 || c===0 || c===5) page.drawRectangle({ x: m+3+c*7, y: fY-36+r*7, width: 6, height: 6, color: C.dark });
+  // ── QR code bas-gauche ───────────────────────────────────────
+  const qx = m, qy = fY - 46;
+  page.drawRectangle({ x: qx, y: qy, width: 52, height: 52, color: C.bg, borderColor: C.dark, borderWidth: 0.8 });
+  // Coins QR (3 blocs d'angle)
+  for (const [ox, oy] of [[0,36],[0,0],[36,36]]) {
+    page.drawRectangle({ x: qx+3+ox, y: qy+3+oy, width: 13, height: 13, color: C.dark });
+    page.drawRectangle({ x: qx+5+ox, y: qy+5+oy, width: 9, height: 9, color: C.white });
+    page.drawRectangle({ x: qx+7+ox, y: qy+7+oy, width: 5, height: 5, color: C.dark });
   }
-  dt(page, 'QR FANISA', m + 8, fY - 48, reg, 5, C.mid);
+  // Pixels internes
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+    if ((r+c+r*c)%3 !== 0) page.drawRectangle({ x: qx+18+c*7, y: qy+3+r*7, width: 5, height: 5, color: C.dark });
+  }
+  dt(page, reference, qx, qy - 10, reg, 5.5, C.light);
+  dt(page, `Genere le ${new Date().toLocaleDateString('fr-FR')} par FANISA v2.0`, qx, qy - 18, reg, 5, C.light);
 
-  // Signatures
-  const sig1x = m + 60, sig2x = W/2 + 10;
-  dt(page, 'Le declarant', sig1x, fY + 10, bold, 7.5, C.dark);
-  page.drawLine({ start: { x: sig1x, y: fY - 8 }, end: { x: sig1x + 130, y: fY - 8 }, thickness: 0.5, color: C.border });
-  dt(page, 'Le Chef du Fokontany', sig2x, fY + 10, bold, 7.5, C.dark);
-  dt(page, clean(config.chef_fokontany), sig2x, fY - 2, reg, 7, C.mid);
-  page.drawLine({ start: { x: sig2x, y: fY - 14 }, end: { x: W - m, y: fY - 14 }, thickness: 0.5, color: C.border });
-  dt(page, '(Signature et cachet)', sig2x + 25, fY - 24, reg, 6, C.light);
-
-  // Bas de page
-  dt(page, `Genere automatiquement par FANISA v2.0  |  ${reference}  |  ${new Date().toLocaleDateString('fr-FR')}`, m + 60, 12, reg, 6, C.light);
+  // ── Bloc signature bas-droit ─────────────────────────────────
+  const sx = W - m - 180;
+  dt(page, `${clean(config.nom_fokontany)}, le ${new Date().toLocaleDateString('fr-FR')}`, sx, fY + 8, reg, 7, C.mid);
+  dt(page, 'Le Chef du Fokontany', sx + 20, fY - 6, bold, 8, C.dark);
+  dt(page, clean(config.chef_fokontany), sx + 20, fY - 17, reg, 7.5, C.mid);
+  page.drawLine({ start: { x: sx, y: fY - 34 }, end: { x: W - m, y: fY - 34 }, thickness: 0.5, color: C.border });
+  dt(page, '(Signature et cachet officiel)', sx + 28, fY - 44, reg, 6, C.light);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -221,20 +264,61 @@ const A4L = { W: 842, H: 595 };
 
 function drawHeaderA4L(page: PDFPage, config: ConfigFokontany, bold: PDFFont, reg: PDFFont, codeDoc: string, nomDoc: string, reference: string) {
   const { W, H } = A4L;
-  const m = 30;
-  page.drawRectangle({ x: 0, y: H - 30, width: W, height: 30, color: C.indigo });
-  dt(page, `FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`, m, H - 12, bold, 9, C.white);
-  dt(page, `${config.nom_quartier} - ${config.nom_commune}`, m, H - 21, reg, 7, rgb(0.8,0.8,1));
-  page.drawRectangle({ x: W/2 - 22, y: H - 26, width: 44, height: 22, color: rgb(0.35,0.30,0.82), borderRadius: 3 });
-  dt(page, 'F', W/2 - 5, H - 17, bold, 14, C.white);
-  dt(page, reference, W - m - 130, H - 12, bold, 7, C.white);
-  dt(page, `[${codeDoc}] ${nomDoc.toUpperCase()}`, W - m - 130, H - 21, reg, 6.5, rgb(0.8,0.8,1));
-  page.drawLine({ start: { x: m, y: H - 34 }, end: { x: W - m, y: H - 34 }, thickness: 0.4, color: C.border });
+  const m = 36;
+  const cx = W / 2;
+
+  // ── GAUCHE : Hiérarchie administrative ──────────────────────
+  let ly = H - 14;
+  const lx = m;
+  const lh = 10;
+  dt(page, `REGION ${(config.nom_region || 'ATSINANANA').toUpperCase()}`, lx, ly, bold, 7, C.dark); ly -= lh;
+  dt(page, `PREFECTURE ${clean(config.nom_district).toUpperCase()}`, lx, ly, bold, 7, C.dark); ly -= lh;
+  dt(page, `DISTRICT ${clean(config.nom_district).toUpperCase()}`, lx, ly, bold, 7, C.dark); ly -= lh;
+  dt(page, `COMMUNE ${clean(config.nom_commune).toUpperCase()}`, lx, ly, bold, 7, C.dark); ly -= lh;
+  dt(page, `FOKONTANY ${clean(config.nom_fokontany).toUpperCase()}`, lx, ly, bold, 8, C.dark); ly -= lh;
+  dt(page, `QUARTIER ${clean(config.nom_quartier).toUpperCase()} CAREAU N${config.code_carreau}`, lx, ly, bold, 6, C.dark);
+
+  // ── CENTRE : Logo Repoblika ──────────────────────────────────
+  drawLogoRepoblika(page, bold, reg, cx, H - 44, 28);
+
+  // Titre centré sous le logo
+  const tY = H - 92;
+  page.drawLine({ start: { x: m, y: tY + 10 }, end: { x: W - m, y: tY + 10 }, thickness: 0.5, color: C.dark });
+  dt(page, `[${codeDoc}] ${nomDoc.toUpperCase()}`, cx - (nomDoc.length + codeDoc.length + 3) * 3.8, tY + 2, bold, 10, C.dark);
+  page.drawLine({ start: { x: m, y: tY - 4 }, end: { x: W - m, y: tY - 4 }, thickness: 0.5, color: C.dark });
+
+  // Référence (droite, sous titre)
+  dt(page, reference, W - m - 120, tY + 2, reg, 7, C.mid);
 }
 
-function drawFooterA4L(page: PDFPage, reg: PDFFont, reference: string) {
+function drawFooterA4L(page: PDFPage, config: ConfigFokontany, reg: PDFFont, bold: PDFFont, reference: string) {
   const { W } = A4L;
-  dt(page, `Genere automatiquement par FANISA v2.0  |  ${reference}  |  ${new Date().toLocaleDateString('fr-FR')}`, 30, 10, reg, 6, C.light);
+  const m = 36;
+  const fY = 62;
+
+  page.drawLine({ start: { x: m, y: fY + 12 }, end: { x: W - m, y: fY + 12 }, thickness: 0.4, color: C.border });
+
+  // ── QR code bas-gauche ───────────────────────────────────────
+  const qx = m, qy = fY - 42;
+  page.drawRectangle({ x: qx, y: qy, width: 46, height: 46, color: C.bg, borderColor: C.dark, borderWidth: 0.8 });
+  for (const [ox, oy] of [[0,32],[0,0],[32,32]] as [number,number][]) {
+    page.drawRectangle({ x: qx+2+ox, y: qy+2+oy, width: 12, height: 12, color: C.dark });
+    page.drawRectangle({ x: qx+4+ox, y: qy+4+oy, width: 8, height: 8, color: C.white });
+    page.drawRectangle({ x: qx+6+ox, y: qy+6+oy, width: 4, height: 4, color: C.dark });
+  }
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    if ((r+c+r*c)%2 !== 0) page.drawRectangle({ x: qx+16+c*6, y: qy+2+r*6, width: 4, height: 4, color: C.dark });
+  }
+  dt(page, reference, qx, qy - 8, reg, 5.5, C.light);
+  dt(page, `Genere le ${new Date().toLocaleDateString('fr-FR')} par FANISA v2.0`, qx, qy - 16, reg, 5, C.light);
+
+  // ── Bloc signature bas-droit ─────────────────────────────────
+  const sx = W - m - 200;
+  dt(page, `${clean(config.nom_fokontany)}, le ${new Date().toLocaleDateString('fr-FR')}`, sx, fY + 6, reg, 7, C.mid);
+  dt(page, 'Le Chef du Fokontany', sx + 20, fY - 6, bold, 8, C.dark);
+  dt(page, clean(config.chef_fokontany), sx + 20, fY - 17, reg, 7.5, C.mid);
+  page.drawLine({ start: { x: sx, y: fY - 30 }, end: { x: W - m, y: fY - 30 }, thickness: 0.5, color: C.border });
+  dt(page, '(Signature et cachet officiel)', sx + 28, fY - 40, reg, 6, C.light);
 }
 
 // Helpers tableaux
@@ -1556,7 +1640,7 @@ export async function genererFP(parcelle: Parcelle, titulaire: TitulaireFoncier|
     });
     y = tableY - 10;
   }
-  drawFooterA4L(page, reg, reference);
+  drawFooterA4L(page, config, reg, bold, reference);
   await enregistrerDocument('FP', reference, numero);
   return await pdf.save();
 }
@@ -1593,7 +1677,7 @@ export async function genererFB(parcelle: Parcelle, batiment: Batiment, config: 
     y -= 16;
     wrap(batiment.notes, 80).forEach(l=>{dt(page,l,m,y,reg,8.5,C.dark);y-=12;});
   }
-  drawFooterA4L(page, reg, reference);
+  drawFooterA4L(page, config, reg, bold, reference);
   await enregistrerDocument('FB', reference, numero);
   return await pdf.save();
 }
